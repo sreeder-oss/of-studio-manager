@@ -16,7 +16,7 @@ const Dashboard: React.FC = () => {
     <div className="animate-fade-in max-w-4xl mx-auto space-y-6">
       <div>
         <h2 className="text-2xl font-serif text-foreground tracking-tight">Dashboard</h2>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-semibold mt-1">Organic Finishes Studio</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-semibold mt-1">OF Studio : Manager</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

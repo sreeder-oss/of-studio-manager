@@ -26,8 +26,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <header className="px-4 pt-4 pb-2 flex items-center gap-3">
         <img src={monogramSrc} alt="OF" className="h-9 w-9 rounded-full" />
         <div>
-          <h1 className="font-serif text-foreground text-sm tracking-wide leading-none">ORGANIC FINISHES</h1>
-          <p className="text-[8px] text-muted-foreground uppercase tracking-[0.2em] font-medium">manager</p>
+          <h1 className="font-serif text-foreground text-sm tracking-wide leading-none">OF STUDIO</h1>
+          <p className="text-[8px] text-primary uppercase tracking-[0.2em] font-semibold">manager</p>
         </div>
       </header>
 
