@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Search, Trash2, ChevronRight, X } from 'lucide-react';
+import { Plus, Search, Trash2, ChevronRight, X, Phone, Mail, MapPin, ShieldCheck } from 'lucide-react';
 import { Contact } from '@/types';
 import { getContacts, saveContact, deleteContact } from '@/services/storage';
+import { PRIVACY_NOTICE } from '@/lib/legal';
 
 const Contacts: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>(getContacts());
@@ -9,6 +10,7 @@ const Contacts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'client' | 'lead' | 'vendor'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [formData, setFormData] = useState<Partial<Contact>>({
     name: '', email: '', phone: '', address: '', notes: '', category: 'client', status: 'active'
   });
@@ -20,6 +22,13 @@ const Contacts: React.FC = () => {
     const matchesFilter = activeFilter === 'all' || c.category === activeFilter;
     return matchesSearch && matchesFilter;
   });
+
+  const contactCounts = {
+    all: contacts.length,
+    client: contacts.filter(c => c.category === 'client').length,
+    lead: contacts.filter(c => c.category === 'lead').length,
+    vendor: contacts.filter(c => c.category === 'vendor').length,
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +47,9 @@ const Contacts: React.FC = () => {
     saveContact(contact);
     refresh();
     handleCloseModal();
+    if (selectedContact && editingId === selectedContact.id) {
+      setSelectedContact(contact);
+    }
   };
 
   const handleEdit = (contact: Contact) => {
@@ -50,6 +62,7 @@ const Contacts: React.FC = () => {
     if (confirm('Delete this contact?')) {
       deleteContact(id);
       refresh();
+      if (selectedContact?.id === id) setSelectedContact(null);
     }
   };
 
@@ -73,12 +86,98 @@ const Contacts: React.FC = () => {
     );
   };
 
+  const CategoryBadge = ({ category }: { category: string }) => {
+    const styles: Record<string, string> = {
+      client: 'bg-primary/5 text-primary',
+      lead: 'bg-amber-500/10 text-amber-400',
+      vendor: 'bg-blue-500/10 text-blue-400',
+    };
+    return (
+      <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${styles[category] || ''}`}>
+        {category}
+      </span>
+    );
+  };
+
+  // Detail View
+  if (selectedContact) {
+    return (
+      <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
+        <button onClick={() => setSelectedContact(null)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[10px] font-bold uppercase tracking-widest">
+          <ChevronRight size={14} className="rotate-180" /> All Contacts
+        </button>
+
+        <div className="bg-card rounded-2xl border border-border p-5">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-serif text-xl border border-primary/20">
+                {selectedContact.name.charAt(0)}
+              </div>
+              <div>
+                <h2 className="font-serif text-foreground text-lg">{selectedContact.name}</h2>
+                <div className="flex gap-1.5 mt-1">
+                  <CategoryBadge category={selectedContact.category} />
+                  <StatusBadge status={selectedContact.status} />
+                </div>
+              </div>
+            </div>
+            <button onClick={() => handleEdit(selectedContact)} className="text-[10px] text-primary font-bold uppercase tracking-widest hover:underline">
+              Edit
+            </button>
+          </div>
+
+          <div className="space-y-3 mt-5">
+            {selectedContact.phone && (
+              <a href={`tel:${selectedContact.phone}`} className="flex items-center gap-3 p-3 bg-accent rounded-xl hover:bg-accent/80 transition-all group">
+                <Phone size={16} className="text-primary" />
+                <span className="text-foreground text-sm group-hover:text-primary transition-colors">{selectedContact.phone}</span>
+              </a>
+            )}
+            {selectedContact.email && (
+              <a href={`mailto:${selectedContact.email}`} className="flex items-center gap-3 p-3 bg-accent rounded-xl hover:bg-accent/80 transition-all group">
+                <Mail size={16} className="text-primary" />
+                <span className="text-foreground text-sm group-hover:text-primary transition-colors">{selectedContact.email}</span>
+              </a>
+            )}
+            {selectedContact.address && (
+              <div className="flex items-center gap-3 p-3 bg-accent rounded-xl">
+                <MapPin size={16} className="text-muted-foreground" />
+                <span className="text-foreground text-sm">{selectedContact.address}</span>
+              </div>
+            )}
+          </div>
+
+          {selectedContact.notes && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Notes</p>
+              <p className="text-foreground text-sm leading-relaxed">{selectedContact.notes}</p>
+            </div>
+          )}
+
+          <div className="mt-4 pt-4 border-t border-border flex justify-between items-center">
+            <p className="text-[9px] text-muted-foreground">Added {new Date(selectedContact.createdAt).toLocaleDateString()}</p>
+            <button onClick={() => handleDelete(selectedContact.id)} className="text-[10px] text-destructive/60 hover:text-destructive font-bold uppercase tracking-widest">
+              Delete
+            </button>
+          </div>
+        </div>
+
+        {/* Privacy Notice */}
+        <div className="flex items-start gap-2.5 p-3 bg-card/50 rounded-xl border border-border">
+          <ShieldCheck size={14} className="text-primary mt-0.5 flex-shrink-0" />
+          <p className="text-[9px] text-muted-foreground leading-relaxed">{PRIVACY_NOTICE}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // List View
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
       <header className="flex justify-between items-center">
         <div>
           <h2 className="text-xl font-serif text-foreground tracking-tight">Contacts</h2>
-          <p className="text-muted-foreground text-[9px] uppercase tracking-widest mt-0.5 font-bold">Studio Database</p>
+          <p className="text-muted-foreground text-[9px] uppercase tracking-widest mt-0.5 font-bold">{contacts.length} Total</p>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-primary hover:bg-accent hover:scale-105 transition-all shadow-glow">
           <Plus size={20} />
@@ -87,17 +186,20 @@ const Contacts: React.FC = () => {
 
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-        <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+        <input type="text" placeholder="Search contacts..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-card border border-border rounded-xl py-2.5 pl-12 pr-4 text-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-muted-foreground text-[12px]" />
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
         {(['all', 'client', 'lead', 'vendor'] as const).map(filter => (
           <button key={filter} onClick={() => setActiveFilter(filter)}
-            className={`px-4 py-1.5 rounded-full text-[9px] font-bold tracking-widest uppercase whitespace-nowrap transition-all ${
+            className={`px-4 py-1.5 rounded-full text-[9px] font-bold tracking-widest uppercase whitespace-nowrap transition-all flex items-center gap-1.5 ${
               activeFilter === filter ? 'bg-primary text-primary-foreground shadow-glow' : 'bg-card border border-border text-muted-foreground hover:text-foreground'
             }`}>
             {filter}
+            <span className={`text-[8px] ${activeFilter === filter ? 'text-primary-foreground/70' : 'text-muted-foreground/50'}`}>
+              {contactCounts[filter]}
+            </span>
           </button>
         ))}
       </div>
@@ -109,19 +211,22 @@ const Contacts: React.FC = () => {
           </div>
         ) : (
           filteredContacts.map(contact => (
-            <div key={contact.id} onClick={() => handleEdit(contact)}
-              className="bg-card/60 border border-border rounded-lg p-2.5 flex items-center gap-3 hover:bg-card transition-all cursor-pointer group">
-              <div className="h-7 w-7 rounded-full bg-accent flex items-center justify-center text-muted-foreground group-hover:text-primary font-serif font-bold text-xs border border-border">
+            <div key={contact.id} onClick={() => setSelectedContact(contact)}
+              className="bg-card/60 border border-border rounded-lg p-3 flex items-center gap-3 hover:bg-card hover:border-primary/20 transition-all cursor-pointer group">
+              <div className="h-9 w-9 rounded-full bg-accent flex items-center justify-center text-muted-foreground group-hover:text-primary font-serif font-bold text-sm border border-border transition-colors">
                 {contact.name.charAt(0)}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-foreground font-semibold text-[12px] group-hover:text-primary truncate">{contact.name}</h3>
+                  <h3 className="text-foreground font-semibold text-[13px] group-hover:text-primary truncate transition-colors">{contact.name}</h3>
                   <StatusBadge status={contact.status} />
                 </div>
-                <p className="text-[9px] text-muted-foreground uppercase tracking-widest">{contact.category} • {contact.email || 'No email'}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <CategoryBadge category={contact.category} />
+                  <span className="text-[9px] text-muted-foreground truncate">{contact.email || contact.phone || 'No info'}</span>
+                </div>
               </div>
-              <ChevronRight size={14} className="text-muted-foreground/30 group-hover:text-primary transition-colors" />
+              <ChevronRight size={14} className="text-muted-foreground/30 group-hover:text-primary transition-colors flex-shrink-0" />
             </div>
           ))
         )}
@@ -132,7 +237,7 @@ const Contacts: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-2xl w-full max-w-md overflow-hidden shadow-soft">
             <div className="p-4 border-b border-border flex justify-between items-center">
-              <h3 className="text-lg font-serif text-foreground">{editingId ? 'Edit Profile' : 'New Contact'}</h3>
+              <h3 className="text-lg font-serif text-foreground">{editingId ? 'Edit Contact' : 'New Contact'}</h3>
               <button onClick={handleCloseModal} className="text-muted-foreground hover:text-foreground p-1.5 hover:bg-accent rounded-full"><X size={18} /></button>
             </div>
             <form onSubmit={handleSubmit} className="p-5 space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar">
@@ -173,6 +278,11 @@ const Contacts: React.FC = () => {
                   <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
                     className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Address</label>
+                <input type="text" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none" />
               </div>
               <div>
                 <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Notes</label>

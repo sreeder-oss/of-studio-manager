@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Search, Plus, ChevronRight, FileSpreadsheet, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Search, Plus, ChevronRight, FileSpreadsheet, CheckCircle, Clock, AlertCircle, Shield } from 'lucide-react';
 import { Invoice, Contact } from '@/types';
 import { getInvoices, getContacts } from '@/services/storage';
+import { LEGAL_TERMS, PRIVACY_NOTICE } from '@/lib/legal';
 
 const Invoices: React.FC = () => {
   const [invoices] = useState<Invoice[]>(getInvoices());
@@ -99,6 +100,16 @@ const Invoices: React.FC = () => {
             );
           })
         )}
+      </div>
+
+      {/* Legal Footer */}
+      <div className="bg-card/50 border border-border rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2 mb-2">
+          <Shield size={12} className="text-primary" />
+          <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Terms & Privacy</span>
+        </div>
+        <p className="text-[9px] text-muted-foreground leading-relaxed">{LEGAL_TERMS.paymentTerms}</p>
+        <p className="text-[9px] text-muted-foreground/60 leading-relaxed italic">{PRIVACY_NOTICE}</p>
       </div>
     </div>
   );
