@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Users, FileText, FileSpreadsheet, Receipt } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import monogramSrc from '@/assets/of-monogram.svg';
 
 const navItems = [
   { path: '/', label: 'Home', icon: LayoutDashboard },
@@ -23,12 +24,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="px-4 pt-4 pb-2 flex items-center gap-3">
-        <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center">
-          <span className="text-primary font-serif text-sm font-bold">OF</span>
-        </div>
+        <img src={monogramSrc} alt="OF" className="h-9 w-9 rounded-full" />
         <div>
           <h1 className="font-serif text-foreground text-sm tracking-wide leading-none">ORGANIC FINISHES</h1>
-          <p className="text-[8px] text-muted-foreground uppercase tracking-[0.2em] font-medium">paint & plaster</p>
+          <p className="text-[8px] text-muted-foreground uppercase tracking-[0.2em] font-medium">manager</p>
         </div>
       </header>
 
