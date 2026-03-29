@@ -1,10 +1,11 @@
-import { Contact, Estimate, Invoice, Receipt } from '@/types';
+import { Contact, Estimate, Invoice, Receipt, Project } from '@/types';
 
 const KEYS = {
   contacts: 'of_contacts',
   estimates: 'of_estimates',
   invoices: 'of_invoices',
   receipts: 'of_receipts',
+  projects: 'of_projects',
 };
 
 function getItems<T>(key: string): T[] {
