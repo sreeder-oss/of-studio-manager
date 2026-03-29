@@ -1,44 +1,48 @@
 
 
-# OF Studio — Business App Suite
+# Receipts Organized by Project
 
-Suite of business management tools for Organic Finishes LLC. Each app shares the same dark plum brand base with distinct accent identity.
+## What Changes
 
----
+Currently, receipts are categorized by expense type (Materials, Labor, etc.) but have no project association. You want to snap a photo on your phone and file it under a specific project/job.
 
-## OF Studio: Manager (this app)
+## Plan
 
-### Completed
-- [x] Design system: #362f3d bg, #49a33d primary, #e8e3d6 beige text, #46794e/#5a5a36 accents
-- [x] Fonts: DM Serif Display (headings) + Outfit (body)
-- [x] App layout with bottom nav (Dashboard, Contacts, Estimates, Invoices, Receipts)
-- [x] Dashboard with navigation cards
-- [x] Contacts: list, detail view, search, filters, CRUD, privacy notice
-- [x] Estimates: create with line items, client selection, totals, legal terms
-- [x] Invoices: list with paid/unpaid/overdue, summary cards, legal footer
-- [x] Receipts: camera capture, upload, categorization, search/filter
-- [x] Legal inserts: payment terms, scope & changes, liability & warranty, cancellation
-- [x] Privacy notice: no banking/payment data stored
+### 1. Add Project concept to types
+- Add a `Project` interface with id, name, contactId, status, color
+- Add `projectId` field to the `Receipt` type
+- Add project CRUD to storage service
 
-### Remaining
-- [ ] Tax export (CSV/Excel, QBO, PDF report) with date range filtering
-- [ ] Lovable Cloud backend (database, file storage, auth)
-- [ ] Client portal / digital estimate approval (future add-on)
-- [ ] Recurring expense tracking (future add-on)
+### 2. Create a Projects management section
+- Simple project list derived from your existing estimates/contacts (e.g., "Sarah Mitchell — Kitchen Renovation")
+- Quick-add project from the receipt form
+- Projects stored in localStorage alongside other data
 
----
+### 3. Update Receipt form with project picker
+- Add a "Project" dropdown to the Add Receipt modal (above category)
+- Camera and Upload buttons remain — these already use `capture="environment"` which opens the phone camera natively
+- Each receipt gets tagged to a project
 
-## OF Studio: Scheduler (future app)
+### 4. Reorganize Receipts view by project
+- Default view groups receipts under project headers (collapsible)
+- Each project section shows its total spend
+- Keep the existing category filter chips — they filter within/across projects
+- Add a "By Category" / "By Project" toggle for the list view
+- Unassigned receipts appear under a "General" section
 
-- Project timeline / Kanban view
-- Job status: Scheduled → In Progress → Complete
-- Calendar integration
-- Same brand base, different accent color
+### 5. Update exports
+- Export filters by project so you can pull all receipts for one job
+- CSV/PDF include project name column
 
----
+## Technical Details
 
-## OF Studio: Portal (future app)
+**Files modified:**
+- `src/types/index.ts` — add `Project` interface, update `Receipt` with optional `projectId`
+- `src/services/storage.ts` — add project CRUD, seed sample projects from existing estimates
+- `src/pages/Receipts.tsx` — add project picker in form, grouped list view, project filter
 
-- Client-facing portal for estimate approval
-- Digital signatures
-- Project status updates for clients
+**Files created:**
+- None needed; all changes fit in existing files
+
+**Camera behavior:** The existing `<input capture="environment">` already triggers the phone camera. No additional camera API needed — this works on both iOS and Android PWAs.
+
