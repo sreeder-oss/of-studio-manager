@@ -1,10 +1,11 @@
-import { Contact, Estimate, Invoice, Receipt } from '@/types';
+import { Contact, Estimate, Invoice, Receipt, Project } from '@/types';
 
 const KEYS = {
   contacts: 'of_contacts',
   estimates: 'of_estimates',
   invoices: 'of_invoices',
   receipts: 'of_receipts',
+  projects: 'of_projects',
 };
 
 function getItems<T>(key: string): T[] {
@@ -55,6 +56,19 @@ export const saveInvoice = (invoice: Invoice): void => {
   setItems(KEYS.invoices, invoices);
 };
 
+// Projects
+export const getProjects = (): Project[] => getItems<Project>(KEYS.projects);
+export const saveProject = (project: Project): void => {
+  const projects = getProjects();
+  const idx = projects.findIndex(p => p.id === project.id);
+  if (idx >= 0) projects[idx] = project;
+  else projects.push(project);
+  setItems(KEYS.projects, projects);
+};
+export const deleteProject = (id: string): void => {
+  setItems(KEYS.projects, getProjects().filter(p => p.id !== id));
+};
+
 // Receipts
 export const getReceipts = (): Receipt[] => getItems<Receipt>(KEYS.receipts);
 export const saveReceipt = (receipt: Receipt): void => {
@@ -87,7 +101,13 @@ export const seedData = (): void => {
     { id: 'i-1', estimateId: 'e-1', contactId: 'c-1', number: 'INV-2025-001', items: [{ id: '1', description: 'Lime wash kitchen walls', amount: 2800 }], notes: '', status: 'paid', date: '2025-01-20', dueDate: '2025-02-20', taxRate: 0 },
   ];
 
+  const projects: Project[] = [
+    { id: 'p-1', name: 'Mitchell Kitchen Renovation', contactId: 'c-1', status: 'active', color: '#49a33d', createdAt: new Date().toISOString() },
+    { id: 'p-2', name: 'Porter Home Repaint', contactId: 'c-2', status: 'active', color: '#3d7ea3', createdAt: new Date().toISOString() },
+  ];
+
   setItems(KEYS.contacts, contacts);
   setItems(KEYS.estimates, estimates);
   setItems(KEYS.invoices, invoices);
+  setItems(KEYS.projects, projects);
 };

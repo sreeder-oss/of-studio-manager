@@ -42,6 +42,15 @@ export interface Invoice {
   taxRate?: number;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  contactId?: string;
+  status: 'active' | 'completed' | 'archived';
+  color: string;
+  createdAt: string;
+}
+
 export interface Receipt {
   id: string;
   imageUrl?: string;
@@ -49,6 +58,7 @@ export interface Receipt {
   amount: number;
   date: string;
   category: ReceiptCategory;
+  projectId?: string;
   notes: string;
   createdAt: string;
 }
