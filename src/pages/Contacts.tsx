@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { Plus, Search, Trash2, ChevronRight, X, Phone, Mail, MapPin, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Search, ChevronRight, X, Trash2, ShieldCheck } from 'lucide-react';
 import { Contact } from '@/types';
 import { getContacts, saveContact, deleteContact } from '@/services/storage';
 import { PRIVACY_NOTICE } from '@/lib/legal';
 
 const Contacts: React.FC = () => {
+  const navigate = useNavigate();
   const [contacts, setContacts] = useState<Contact[]>(getContacts());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'client' | 'lead' | 'vendor'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [formData, setFormData] = useState<Partial<Contact>>({
     name: '', email: '', phone: '', address: '', notes: '', category: 'client', status: 'active'
   });
@@ -47,9 +48,6 @@ const Contacts: React.FC = () => {
     saveContact(contact);
     refresh();
     handleCloseModal();
-    if (selectedContact && editingId === selectedContact.id) {
-      setSelectedContact(contact);
-    }
   };
 
   const handleEdit = (contact: Contact) => {
@@ -62,7 +60,6 @@ const Contacts: React.FC = () => {
     if (confirm('Delete this contact?')) {
       deleteContact(id);
       refresh();
-      if (selectedContact?.id === id) setSelectedContact(null);
     }
   };
 
@@ -99,79 +96,6 @@ const Contacts: React.FC = () => {
     );
   };
 
-  // Detail View
-  if (selectedContact) {
-    return (
-      <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
-        <button onClick={() => setSelectedContact(null)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[10px] font-bold uppercase tracking-widest">
-          <ChevronRight size={14} className="rotate-180" /> All Contacts
-        </button>
-
-        <div className="bg-card rounded-2xl border border-border p-5">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-serif text-xl border border-primary/20">
-                {selectedContact.name.charAt(0)}
-              </div>
-              <div>
-                <h2 className="font-serif text-foreground text-lg">{selectedContact.name}</h2>
-                <div className="flex gap-1.5 mt-1">
-                  <CategoryBadge category={selectedContact.category} />
-                  <StatusBadge status={selectedContact.status} />
-                </div>
-              </div>
-            </div>
-            <button onClick={() => handleEdit(selectedContact)} className="text-[10px] text-primary font-bold uppercase tracking-widest hover:underline">
-              Edit
-            </button>
-          </div>
-
-          <div className="space-y-3 mt-5">
-            {selectedContact.phone && (
-              <a href={`tel:${selectedContact.phone}`} className="flex items-center gap-3 p-3 bg-accent rounded-xl hover:bg-accent/80 transition-all group">
-                <Phone size={16} className="text-primary" />
-                <span className="text-foreground text-sm group-hover:text-primary transition-colors">{selectedContact.phone}</span>
-              </a>
-            )}
-            {selectedContact.email && (
-              <a href={`mailto:${selectedContact.email}`} className="flex items-center gap-3 p-3 bg-accent rounded-xl hover:bg-accent/80 transition-all group">
-                <Mail size={16} className="text-primary" />
-                <span className="text-foreground text-sm group-hover:text-primary transition-colors">{selectedContact.email}</span>
-              </a>
-            )}
-            {selectedContact.address && (
-              <div className="flex items-center gap-3 p-3 bg-accent rounded-xl">
-                <MapPin size={16} className="text-muted-foreground" />
-                <span className="text-foreground text-sm">{selectedContact.address}</span>
-              </div>
-            )}
-          </div>
-
-          {selectedContact.notes && (
-            <div className="mt-4 pt-4 border-t border-border">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Notes</p>
-              <p className="text-foreground text-sm leading-relaxed">{selectedContact.notes}</p>
-            </div>
-          )}
-
-          <div className="mt-4 pt-4 border-t border-border flex justify-between items-center">
-            <p className="text-[9px] text-muted-foreground">Added {new Date(selectedContact.createdAt).toLocaleDateString()}</p>
-            <button onClick={() => handleDelete(selectedContact.id)} className="text-[10px] text-destructive/60 hover:text-destructive font-bold uppercase tracking-widest">
-              Delete
-            </button>
-          </div>
-        </div>
-
-        {/* Privacy Notice */}
-        <div className="flex items-start gap-2.5 p-3 bg-card/50 rounded-xl border border-border">
-          <ShieldCheck size={14} className="text-primary mt-0.5 flex-shrink-0" />
-          <p className="text-[9px] text-muted-foreground leading-relaxed">{PRIVACY_NOTICE}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // List View
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
       <header className="flex justify-between items-center">
@@ -211,7 +135,7 @@ const Contacts: React.FC = () => {
           </div>
         ) : (
           filteredContacts.map(contact => (
-            <div key={contact.id} onClick={() => setSelectedContact(contact)}
+            <div key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)}
               className="bg-card/60 border border-border rounded-lg p-3 flex items-center gap-3 hover:bg-card hover:border-primary/20 transition-all cursor-pointer group">
               <div className="h-9 w-9 rounded-full bg-accent flex items-center justify-center text-muted-foreground group-hover:text-primary font-serif font-bold text-sm border border-border transition-colors">
                 {contact.name.charAt(0)}
