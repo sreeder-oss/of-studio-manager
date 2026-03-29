@@ -10,14 +10,9 @@ import Estimates from "./pages/Estimates";
 import Invoices from "./pages/Invoices";
 import Receipts from "./pages/Receipts";
 import NotFound from "./pages/NotFound";
-import { useEffect } from "react";
-import { seedData } from "./services/storage";
-
 const queryClient = new QueryClient();
 
 const AppContent = () => {
-  useEffect(() => { seedData(); }, []);
-  
   return (
     <AppLayout>
       <Routes>
