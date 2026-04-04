@@ -1,32 +1,47 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, Search, X, Trash2, ChevronDown, ChevronRight, FolderOpen, LayoutGrid, Layers } from 'lucide-react';
-import { Receipt, ReceiptCategory, RECEIPT_CATEGORIES, Project } from '@/types';
-import { getReceipts, saveReceipt, deleteReceipt, getProjects, saveProject } from '@/services/storage';
+import { Camera, Upload, Search, X, Trash2, ChevronDown, ChevronRight, FolderOpen, Layers } from 'lucide-react';
+import { useReceipts, useSaveReceipt, useDeleteReceipt, uploadReceiptImage } from '@/hooks/useReceipts';
+import { useProjects, useSaveProject } from '@/hooks/useProjects';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+
+const RECEIPT_CATEGORIES = [
+  { value: 'Materials', label: 'Materials' },
+  { value: 'Labor', label: 'Labor' },
+  { value: 'Equipment', label: 'Equipment' },
+  { value: 'Travel', label: 'Travel' },
+  { value: 'Supplies', label: 'Supplies' },
+  { value: 'Miscellaneous', label: 'Miscellaneous' },
+];
 
 type ViewMode = 'project' | 'category';
 
 const Receipts: React.FC = () => {
-  const [receipts, setReceipts] = useState<Receipt[]>(getReceipts());
-  const [projects, setProjects] = useState<Project[]>(getProjects());
+  const { user } = useAuth();
+  const { data: receipts = [], isLoading } = useReceipts();
+  const { data: projects = [] } = useProjects();
+  const saveReceipt = useSaveReceipt();
+  const deleteReceiptMut = useDeleteReceipt();
+  const saveProject = useSaveProject();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<ReceiptCategory | 'all'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('project');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     vendor: '', amount: '', date: new Date().toISOString().split('T')[0],
-    category: 'materials' as ReceiptCategory, projectId: '', notes: '', imageUrl: ''
+    category: 'Materials', projectId: '', notes: ''
   });
 
-  const refresh = () => { setReceipts(getReceipts()); setProjects(getProjects()); };
-
   const filteredReceipts = receipts.filter(r => {
-    const matchesSearch = r.vendor.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (r.vendor || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || r.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
@@ -42,67 +57,82 @@ const Receipts: React.FC = () => {
   const handleImageCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setImageFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => setFormData(prev => ({ ...prev, imageUrl: reader.result as string }));
+      reader.onloadend = () => setImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
-  const handleAddProject = () => {
+  const handleAddProject = async () => {
     if (!newProjectName.trim()) return;
-    const project: Project = {
-      id: `p-${Date.now()}`, name: newProjectName.trim(), status: 'active',
-      color: '#49a33d', createdAt: new Date().toISOString()
-    };
-    saveProject(project);
-    setFormData(prev => ({ ...prev, projectId: project.id }));
-    setNewProjectName('');
-    setShowNewProject(false);
-    refresh();
+    try {
+      const result = await saveProject.mutateAsync({ name: newProjectName.trim(), status: 'Active' });
+      if (result) setFormData(prev => ({ ...prev, projectId: result.id }));
+      setNewProjectName('');
+      setShowNewProject(false);
+      toast.success('Project created');
+    } catch { toast.error('Failed to create project'); }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.vendor || !formData.amount) return;
-    saveReceipt({
-      id: `r-${Date.now()}`, vendor: formData.vendor, amount: parseFloat(formData.amount),
-      date: formData.date, category: formData.category, projectId: formData.projectId || undefined,
-      notes: formData.notes, imageUrl: formData.imageUrl, createdAt: new Date().toISOString()
-    });
-    refresh();
-    handleClose();
+    try {
+      let imageUrl: string | undefined;
+      if (imageFile && user) {
+        imageUrl = await uploadReceiptImage(user.id, imageFile);
+      }
+      await saveReceipt.mutateAsync({
+        vendor: formData.vendor,
+        amount: parseFloat(formData.amount),
+        receipt_date: formData.date,
+        category: formData.category,
+        project_id: formData.projectId || null,
+        notes: formData.notes || null,
+        image_url: imageUrl || null,
+        tax_deductible: true,
+      });
+      toast.success('Receipt saved');
+      handleClose();
+    } catch { toast.error('Failed to save receipt'); }
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Delete this receipt?')) { deleteReceipt(id); refresh(); }
+  const handleDelete = async (id: string) => {
+    if (confirm('Delete this receipt?')) {
+      await deleteReceiptMut.mutateAsync(id);
+      toast.success('Receipt deleted');
+    }
   };
 
   const handleClose = () => {
     setIsModalOpen(false);
     setShowNewProject(false);
     setNewProjectName('');
-    setFormData({ vendor: '', amount: '', date: new Date().toISOString().split('T')[0], category: 'materials', projectId: '', notes: '', imageUrl: '' });
+    setImageFile(null);
+    setImagePreview('');
+    setFormData({ vendor: '', amount: '', date: new Date().toISOString().split('T')[0], category: 'Materials', projectId: '', notes: '' });
   };
 
   const categoryColors: Record<string, string> = {
-    materials: 'bg-primary/10 text-primary border-primary/20',
-    labor: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    equipment: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-    travel: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    supplies: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
-    miscellaneous: 'bg-muted text-muted-foreground border-border',
+    Materials: 'bg-primary/10 text-primary border-primary/20',
+    Labor: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    Equipment: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+    Travel: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    Supplies: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
+    Miscellaneous: 'bg-muted text-muted-foreground border-border',
   };
 
-  const getProjectName = (projectId?: string) => {
+  const getProjectName = (projectId?: string | null) => {
     if (!projectId) return 'General';
     return projects.find(p => p.id === projectId)?.name || 'Unknown Project';
   };
 
   const groupedByProject = () => {
-    const groups: Record<string, Receipt[]> = { '': [] };
+    const groups: Record<string, typeof receipts> = { '': [] };
     projects.forEach(p => { groups[p.id] = []; });
     filteredReceipts.forEach(r => {
-      const key = r.projectId || '';
+      const key = r.project_id || '';
       if (!groups[key]) groups[key] = [];
       groups[key].push(r);
     });
@@ -110,37 +140,38 @@ const Receipts: React.FC = () => {
   };
 
   const groupedByCategory = () => {
-    const groups: Record<string, Receipt[]> = {};
+    const groups: Record<string, typeof receipts> = {};
     RECEIPT_CATEGORIES.forEach(c => { groups[c.value] = []; });
     filteredReceipts.forEach(r => {
-      if (!groups[r.category]) groups[r.category] = [];
-      groups[r.category].push(r);
+      const cat = r.category || 'Miscellaneous';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(r);
     });
     return groups;
   };
 
-  const renderReceiptCard = (receipt: Receipt) => (
+  const renderReceiptCard = (receipt: typeof receipts[0]) => (
     <div key={receipt.id} className="bg-card p-3 rounded-xl border border-border flex items-center gap-3 group">
-      {receipt.imageUrl && (
+      {receipt.image_url && (
         <div className="w-12 h-12 rounded-lg overflow-hidden border border-border flex-shrink-0">
-          <img src={receipt.imageUrl} alt="Receipt" className="w-full h-full object-cover" />
+          <img src={receipt.image_url} alt="Receipt" className="w-full h-full object-cover" />
         </div>
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <h3 className="text-foreground font-semibold text-sm truncate">{receipt.vendor}</h3>
-          <span className={`text-[8px] px-1.5 py-0.5 rounded border uppercase font-bold tracking-wider ${categoryColors[receipt.category]}`}>
+          <span className={`text-[8px] px-1.5 py-0.5 rounded border uppercase font-bold tracking-wider ${categoryColors[receipt.category || 'Miscellaneous']}`}>
             {receipt.category}
           </span>
         </div>
         <p className="text-[10px] text-muted-foreground mt-0.5">
-          {new Date(receipt.date).toLocaleDateString()}
-          {viewMode === 'category' && receipt.projectId && ` • ${getProjectName(receipt.projectId)}`}
+          {new Date(receipt.receipt_date).toLocaleDateString()}
+          {viewMode === 'category' && receipt.project_id && ` • ${getProjectName(receipt.project_id)}`}
           {receipt.notes && ` • ${receipt.notes}`}
         </p>
       </div>
       <div className="text-right flex-shrink-0">
-        <p className="font-serif text-foreground font-bold">${receipt.amount.toFixed(2)}</p>
+        <p className="font-serif text-foreground font-bold">${Number(receipt.amount).toFixed(2)}</p>
         <button onClick={() => handleDelete(receipt.id)} className="text-destructive/50 hover:text-destructive text-[10px] mt-1">
           <Trash2 size={12} />
         </button>
@@ -163,7 +194,7 @@ const Receipts: React.FC = () => {
 
     return entries.map(([key, items]) => {
       const isCollapsed = collapsedGroups.has(key);
-      const total = items.reduce((sum, r) => sum + r.amount, 0);
+      const total = items.reduce((sum, r) => sum + Number(r.amount), 0);
       const label = viewMode === 'project'
         ? (key === '' ? 'General' : getProjectName(key))
         : RECEIPT_CATEGORIES.find(c => c.value === key)?.label || key;
@@ -189,6 +220,8 @@ const Receipts: React.FC = () => {
     });
   };
 
+  if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading receipts...</div>;
+
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
       <header className="flex justify-between items-center">
@@ -202,12 +235,11 @@ const Receipts: React.FC = () => {
         </button>
       </header>
 
-      {/* Summary cards */}
       {receipts.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           <div className="bg-card p-3 rounded-xl border border-border text-center">
             <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">Total</p>
-            <p className="font-serif text-foreground text-lg mt-1">${receipts.reduce((s, r) => s + r.amount, 0).toLocaleString()}</p>
+            <p className="font-serif text-foreground text-lg mt-1">${receipts.reduce((s, r) => s + Number(r.amount), 0).toLocaleString()}</p>
           </div>
           <div className="bg-card p-3 rounded-xl border border-border text-center">
             <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">Receipts</p>
@@ -215,19 +247,17 @@ const Receipts: React.FC = () => {
           </div>
           <div className="bg-card p-3 rounded-xl border border-border text-center">
             <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">Projects</p>
-            <p className="font-serif text-foreground text-lg mt-1">{new Set(receipts.map(r => r.projectId).filter(Boolean)).size}</p>
+            <p className="font-serif text-foreground text-lg mt-1">{new Set(receipts.map(r => r.project_id).filter(Boolean)).size}</p>
           </div>
         </div>
       )}
 
-      {/* Search */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
         <input type="text" placeholder="Search vendors..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
           className="w-full bg-card border border-border rounded-xl py-2.5 pl-12 pr-4 text-foreground focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground text-[12px]" />
       </div>
 
-      {/* View toggle + category filters */}
       <div className="flex items-center gap-2">
         <div className="flex bg-card border border-border rounded-lg overflow-hidden">
           <button onClick={() => setViewMode('project')}
@@ -253,12 +283,10 @@ const Receipts: React.FC = () => {
         </div>
       </div>
 
-      {/* Grouped receipt list */}
       <div className="space-y-3">
         {renderGroupedView()}
       </div>
 
-      {/* Add Receipt Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-2xl w-full max-w-md overflow-hidden shadow-soft">
@@ -268,7 +296,6 @@ const Receipts: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="p-5 space-y-3 max-h-[70vh] overflow-y-auto no-scrollbar">
-              {/* Image capture */}
               <div className="flex gap-2">
                 <button type="button" onClick={() => cameraInputRef.current?.click()}
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-accent border border-border rounded-xl text-foreground text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-all">
@@ -282,15 +309,14 @@ const Receipts: React.FC = () => {
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageCapture} />
               </div>
 
-              {formData.imageUrl && (
+              {imagePreview && (
                 <div className="relative rounded-xl overflow-hidden border border-border">
-                  <img src={formData.imageUrl} alt="Receipt preview" className="w-full h-40 object-cover" />
-                  <button type="button" onClick={() => setFormData(prev => ({ ...prev, imageUrl: '' }))}
+                  <img src={imagePreview} alt="Receipt preview" className="w-full h-40 object-cover" />
+                  <button type="button" onClick={() => { setImageFile(null); setImagePreview(''); }}
                     className="absolute top-2 right-2 bg-background/80 p-1 rounded-full text-destructive"><X size={14} /></button>
                 </div>
               )}
 
-              {/* Project picker */}
               <div>
                 <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Project</label>
                 {!showNewProject ? (
@@ -298,7 +324,7 @@ const Receipts: React.FC = () => {
                     <select value={formData.projectId} onChange={e => setFormData({ ...formData, projectId: e.target.value })}
                       className="flex-1 bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none">
                       <option value="">General (No Project)</option>
-                      {projects.filter(p => p.status === 'active').map(p => (
+                      {projects.filter(p => p.status === 'Active').map(p => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
@@ -310,8 +336,8 @@ const Receipts: React.FC = () => {
                     <input type="text" placeholder="Project name..." value={newProjectName}
                       onChange={e => setNewProjectName(e.target.value)}
                       className="flex-1 bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
-                    <button type="button" onClick={handleAddProject}
-                      className="px-3 bg-primary text-primary-foreground rounded-lg text-[10px] font-bold uppercase tracking-widest">Add</button>
+                    <button type="button" onClick={handleAddProject} disabled={saveProject.isPending}
+                      className="px-3 bg-primary text-primary-foreground rounded-lg text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">Add</button>
                     <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }}
                       className="px-2 text-muted-foreground hover:text-foreground"><X size={14} /></button>
                   </div>
@@ -339,7 +365,7 @@ const Receipts: React.FC = () => {
 
               <div>
                 <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Category</label>
-                <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value as ReceiptCategory })}
+                <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}
                   className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none">
                   {RECEIPT_CATEGORIES.map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>)}
                 </select>
@@ -353,7 +379,10 @@ const Receipts: React.FC = () => {
 
               <div className="pt-2 flex gap-2 justify-end">
                 <button type="button" onClick={handleClose} className="px-4 py-2 rounded-lg text-muted-foreground font-bold text-[10px] uppercase tracking-widest">Cancel</button>
-                <button type="submit" className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-bold text-[10px] uppercase tracking-widest shadow-glow">Save</button>
+                <button type="submit" disabled={saveReceipt.isPending}
+                  className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-bold text-[10px] uppercase tracking-widest shadow-glow disabled:opacity-50">
+                  {saveReceipt.isPending ? 'Saving...' : 'Save'}
+                </button>
               </div>
             </form>
           </div>
