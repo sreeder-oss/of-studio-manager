@@ -7,6 +7,8 @@ import AppLayout from "./components/AppLayout";
 import Index from "./pages/Index";
 import Contacts from "./pages/Contacts";
 import ContactDetail from "./pages/ContactDetail";
+import Projects from "./pages/Projects";
+import ProjectDetail from "./pages/ProjectDetail";
 import Estimates from "./pages/Estimates";
 import EstimateDetail from "./pages/EstimateDetail";
 import EstimateCreate from "./pages/EstimateCreate";
