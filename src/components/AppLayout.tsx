@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, FileSpreadsheet, Receipt, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, FolderKanban, FileText, FileSpreadsheet, Receipt, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import monogramSrc from '@/assets/of-monogram.svg';
@@ -8,6 +8,7 @@ import monogramSrc from '@/assets/of-monogram.svg';
 const navItems = [
   { path: '/', label: 'Home', icon: LayoutDashboard },
   { path: '/contacts', label: 'Contacts', icon: Users },
+  { path: '/projects', label: 'Projects', icon: FolderKanban },
   { path: '/estimates', label: 'Estimates', icon: FileText },
   { path: '/invoices', label: 'Invoices', icon: FileSpreadsheet },
   { path: '/receipts', label: 'Receipts', icon: Receipt },
