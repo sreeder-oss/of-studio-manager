@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, FolderKanban, FileText, FileSpreadsheet, Receipt, ArrowRight } from 'lucide-react';
+import { Users, FolderKanban, FileText, FileSpreadsheet, Receipt, ArrowRight, PieChart } from 'lucide-react';
 
 const navCards = [
   { title: 'Contacts', description: 'Manage client relationships and directories.', icon: Users, path: '/contacts', color: 'from-primary/20' },
@@ -8,6 +8,7 @@ const navCards = [
   { title: 'Estimates', description: 'Draft high-end project proposals.', icon: FileText, path: '/estimates', color: 'from-emerald-500/20' },
   { title: 'Invoices', description: 'Track balances and project payments.', icon: FileSpreadsheet, path: '/invoices', color: 'from-teal-500/20' },
   { title: 'Receipts', description: 'Scan & organize expense receipts.', icon: Receipt, path: '/receipts', color: 'from-amber-500/20' },
+  { title: 'Tax Summary', description: 'View deductible expenses by year & category.', icon: PieChart, path: '/reports/tax', color: 'from-rose-500/20' },
 ];
 
 const Dashboard: React.FC = () => {

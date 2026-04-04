@@ -15,6 +15,7 @@ import EstimateCreate from "./pages/EstimateCreate";
 import Invoices from "./pages/Invoices";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Receipts from "./pages/Receipts";
+import TaxSummary from "./pages/TaxSummary";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
@@ -47,6 +48,7 @@ const ProtectedRoutes = () => {
         <Route path="/invoices" element={<Invoices />} />
         <Route path="/invoices/:id" element={<InvoiceDetail />} />
         <Route path="/receipts" element={<Receipts />} />
+        <Route path="/reports/tax" element={<TaxSummary />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
