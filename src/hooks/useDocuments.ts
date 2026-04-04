@@ -1,0 +1,65 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+
+export type DbDocument = {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  label: string;
+  type: string | null;
+  file_url: string | null;
+  uploaded_at: string | null;
+};
+
+export const useDocuments = (projectId?: string) => {
+  return useQuery({
+    queryKey: ['documents', projectId],
+    queryFn: async () => {
+      let q = supabase.from('documents').select('*').order('uploaded_at', { ascending: false });
+      if (projectId) q = q.eq('project_id', projectId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data as DbDocument[];
+    },
+  });
+};
+
+export const useSaveDocument = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (doc: Partial<DbDocument> & { label: string }) => {
+      if (doc.id) {
+        const { error } = await supabase.from('documents').update({
+          label: doc.label, type: doc.type, file_url: doc.file_url, project_id: doc.project_id,
+        }).eq('id', doc.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('documents').insert({
+          label: doc.label, type: doc.type, file_url: doc.file_url, project_id: doc.project_id,
+        });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['documents'] }),
+  });
+};
+
+export const useDeleteDocument = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('documents').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['documents'] }),
+  });
+};
+
+export const uploadDocumentFile = async (userId: string, file: File): Promise<string> => {
+  const ext = file.name.split('.').pop();
+  const path = `${userId}/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from('of-documents').upload(path, file);
+  if (error) throw error;
+  const { data } = supabase.storage.from('of-documents').getPublicUrl(path);
+  return data.publicUrl;
+};

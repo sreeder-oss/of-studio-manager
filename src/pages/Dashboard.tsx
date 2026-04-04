@@ -1,9 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, FileText, FileSpreadsheet, Receipt, ArrowRight } from 'lucide-react';
+import { Users, FolderKanban, FileText, FileSpreadsheet, Receipt, ArrowRight } from 'lucide-react';
 
 const navCards = [
   { title: 'Contacts', description: 'Manage client relationships and directories.', icon: Users, path: '/contacts', color: 'from-primary/20' },
+  { title: 'Projects', description: 'Track jobs, documents, and photos.', icon: FolderKanban, path: '/projects', color: 'from-violet-500/20' },
   { title: 'Estimates', description: 'Draft high-end project proposals.', icon: FileText, path: '/estimates', color: 'from-emerald-500/20' },
   { title: 'Invoices', description: 'Track balances and project payments.', icon: FileSpreadsheet, path: '/invoices', color: 'from-teal-500/20' },
   { title: 'Receipts', description: 'Scan & organize expense receipts.', icon: Receipt, path: '/receipts', color: 'from-amber-500/20' },

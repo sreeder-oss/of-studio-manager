@@ -7,6 +7,8 @@ import AppLayout from "./components/AppLayout";
 import Index from "./pages/Index";
 import Contacts from "./pages/Contacts";
 import ContactDetail from "./pages/ContactDetail";
+import Projects from "./pages/Projects";
+import ProjectDetail from "./pages/ProjectDetail";
 import Estimates from "./pages/Estimates";
 import EstimateDetail from "./pages/EstimateDetail";
 import EstimateCreate from "./pages/EstimateCreate";
@@ -37,6 +39,8 @@ const ProtectedRoutes = () => {
         <Route path="/" element={<Index />} />
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/contacts/:id" element={<ContactDetail />} />
+        <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/estimates" element={<Estimates />} />
         <Route path="/estimates/new" element={<EstimateCreate />} />
         <Route path="/estimates/:id" element={<EstimateDetail />} />

@@ -40,7 +40,8 @@ export const useSaveProject = () => {
       } else {
         const { data, error } = await supabase.from('projects').insert({
           name: project.name, contact_id: project.contact_id, status: project.status || 'Active',
-          address: project.address, notes: project.notes,
+          address: project.address, start_date: project.start_date, end_date: project.end_date,
+          contract_value: project.contract_value, notes: project.notes,
         }).select().single();
         if (error) throw error;
         return data;
