@@ -9,10 +9,16 @@ const Login: React.FC = () => {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
-    const result = await lovable.auth.signInWithOAuth('google');
+    const result = await lovable.auth.signInWithOAuth('google', {
+      redirect_uri: window.location.origin,
+    });
     if (result.error) {
       setError('Sign in failed. Please try again.');
       setLoading(false);
+      return;
+    }
+    if (result.redirected) {
+      return;
     }
   };
 
