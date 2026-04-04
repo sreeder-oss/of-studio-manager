@@ -49,7 +49,7 @@ const Login: React.FC = () => {
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-8 text-center">
         <div>
-          <img src={monogramSrc} alt="OF Studio" className="w-24 h-24 mx-auto mb-4 rounded-full" />
+          <img src={logoSrc} alt="OF Studio" className="h-20 mx-auto mb-4" />
           <h1 className="text-2xl font-serif text-foreground">OF Studio</h1>
           <p className="text-[10px] text-primary uppercase tracking-[0.2em] font-semibold mt-1">Manager</p>
         </div>

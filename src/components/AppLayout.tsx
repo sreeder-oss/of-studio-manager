@@ -31,7 +31,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="px-4 pt-4 pb-2 flex items-center gap-3">
-        <img src={monogramSrc} alt="OF" className="h-9 w-9 rounded-full" />
+        <img src={logoSrc} alt="OF" className="h-8" />
         <div className="flex-1">
           <h1 className="font-serif text-foreground text-sm tracking-wide leading-none">OF STUDIO</h1>
           <p className="text-[8px] text-primary uppercase tracking-[0.2em] font-semibold">manager</p>
