@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
+import { useAuthReady } from '@/hooks/useAuthReady';
 
 export type DbEstimate = {
   id: string;
@@ -17,25 +18,30 @@ export type DbEstimate = {
 };
 
 export const useEstimates = () => {
+  const { user, isReady } = useAuthReady();
+
   return useQuery({
-    queryKey: ['estimates'],
+    queryKey: ['estimates', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase.from('estimates').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return data as DbEstimate[];
     },
+    enabled: isReady && !!user,
   });
 };
 
 export const useEstimate = (id: string) => {
+  const { user, isReady } = useAuthReady();
+
   return useQuery({
-    queryKey: ['estimates', id],
+    queryKey: ['estimates', id, user?.id],
     queryFn: async () => {
       const { data, error } = await supabase.from('estimates').select('*').eq('id', id).single();
       if (error) throw error;
       return data as DbEstimate;
     },
-    enabled: !!id,
+    enabled: isReady && !!user && !!id,
   });
 };
 
