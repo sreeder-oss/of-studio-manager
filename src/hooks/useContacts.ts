@@ -40,7 +40,7 @@ export const useContact = (id: string) => {
 export const useSaveContact = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (contact: Omit<DbContact, 'user_id'> & { id?: string }) => {
+    mutationFn: async (contact: Partial<DbContact> & { name: string }) => {
       if (contact.id) {
         const { error } = await supabase.from('contacts').update({
           name: contact.name, type: contact.type, status: contact.status,
