@@ -1,100 +1,95 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, ChevronRight, X, Trash2, ShieldCheck } from 'lucide-react';
-import { Contact } from '@/types';
-import { getContacts, saveContact, deleteContact } from '@/services/storage';
+import { useContacts, useSaveContact, useDeleteContact } from '@/hooks/useContacts';
 import { PRIVACY_NOTICE } from '@/lib/legal';
+import { toast } from 'sonner';
 
 const Contacts: React.FC = () => {
   const navigate = useNavigate();
-  const [contacts, setContacts] = useState<Contact[]>(getContacts());
+  const { data: contacts = [], isLoading } = useContacts();
+  const saveContact = useSaveContact();
+  const deleteContactMut = useDeleteContact();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'client' | 'lead' | 'vendor'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'Client' | 'Lead' | 'Vendor'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<Partial<Contact>>({
-    name: '', email: '', phone: '', address: '', notes: '', category: 'client', status: 'active'
+  const [formData, setFormData] = useState({
+    name: '', email: '', phone: '', address: '', notes: '', type: 'Client', status: 'Active'
   });
 
-  const refresh = () => setContacts(getContacts());
-
   const filteredContacts = contacts.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = activeFilter === 'all' || c.category === activeFilter;
+    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || (c.email || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = activeFilter === 'all' || c.type === activeFilter;
     return matchesSearch && matchesFilter;
   });
 
   const contactCounts = {
     all: contacts.length,
-    client: contacts.filter(c => c.category === 'client').length,
-    lead: contacts.filter(c => c.category === 'lead').length,
-    vendor: contacts.filter(c => c.category === 'vendor').length,
+    Client: contacts.filter(c => c.type === 'Client').length,
+    Lead: contacts.filter(c => c.type === 'Lead').length,
+    Vendor: contacts.filter(c => c.type === 'Vendor').length,
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
-    const contact: Contact = {
-      id: editingId || `c-${Date.now()}`,
-      name: formData.name!,
-      email: formData.email || '',
-      phone: formData.phone || '',
-      address: formData.address || '',
-      notes: formData.notes || '',
-      category: (formData.category as Contact['category']) || 'client',
-      status: (formData.status as Contact['status']) || 'active',
-      createdAt: editingId ? (contacts.find(c => c.id === editingId)?.createdAt || new Date().toISOString()) : new Date().toISOString()
-    };
-    saveContact(contact);
-    refresh();
-    handleCloseModal();
+    try {
+      await saveContact.mutateAsync({
+        ...(editingId ? { id: editingId } : {}),
+        name: formData.name, email: formData.email || null, phone: formData.phone || null,
+        address: formData.address || null, notes: formData.notes || null,
+        type: formData.type, status: formData.status,
+        created_at: null,
+      });
+      toast.success(editingId ? 'Contact updated' : 'Contact added');
+      handleCloseModal();
+    } catch { toast.error('Failed to save contact'); }
   };
 
-  const handleEdit = (contact: Contact) => {
-    setFormData(contact);
+  const handleEdit = (contact: typeof contacts[0]) => {
+    setFormData({
+      name: contact.name, email: contact.email || '', phone: contact.phone || '',
+      address: contact.address || '', notes: contact.notes || '',
+      type: contact.type || 'Client', status: contact.status || 'Active'
+    });
     setEditingId(contact.id);
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Delete this contact?')) {
-      deleteContact(id);
-      refresh();
+      await deleteContactMut.mutateAsync(id);
+      toast.success('Contact deleted');
     }
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setFormData({ name: '', email: '', phone: '', address: '', notes: '', category: 'client', status: 'active' });
+    setFormData({ name: '', email: '', phone: '', address: '', notes: '', type: 'Client', status: 'Active' });
   };
 
   const StatusBadge = ({ status }: { status: string }) => {
     const styles: Record<string, string> = {
-      active: 'bg-primary/10 text-primary border-primary/20',
-      estimate: 'bg-warning/10 text-warning border-warning/20',
-      pending: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-      inactive: 'bg-muted text-muted-foreground border-border',
+      Active: 'bg-primary/10 text-primary border-primary/20',
+      Estimate: 'bg-warning/10 text-warning border-warning/20',
+      Pending: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+      Inactive: 'bg-muted text-muted-foreground border-border',
     };
-    return (
-      <span className={`text-[8px] px-1.5 py-0.5 rounded border uppercase font-bold tracking-wider ${styles[status] || styles.inactive}`}>
-        {status}
-      </span>
-    );
+    return <span className={`text-[8px] px-1.5 py-0.5 rounded border uppercase font-bold tracking-wider ${styles[status] || styles.Inactive}`}>{status}</span>;
   };
 
   const CategoryBadge = ({ category }: { category: string }) => {
     const styles: Record<string, string> = {
-      client: 'bg-primary/5 text-primary',
-      lead: 'bg-amber-500/10 text-amber-400',
-      vendor: 'bg-blue-500/10 text-blue-400',
+      Client: 'bg-primary/5 text-primary',
+      Lead: 'bg-amber-500/10 text-amber-400',
+      Vendor: 'bg-blue-500/10 text-blue-400',
     };
-    return (
-      <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${styles[category] || ''}`}>
-        {category}
-      </span>
-    );
+    return <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${styles[category] || ''}`}>{category}</span>;
   };
+
+  if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading contacts...</div>;
 
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
@@ -115,7 +110,7 @@ const Contacts: React.FC = () => {
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
-        {(['all', 'client', 'lead', 'vendor'] as const).map(filter => (
+        {(['all', 'Client', 'Lead', 'Vendor'] as const).map(filter => (
           <button key={filter} onClick={() => setActiveFilter(filter)}
             className={`px-4 py-1.5 rounded-full text-[9px] font-bold tracking-widest uppercase whitespace-nowrap transition-all flex items-center gap-1.5 ${
               activeFilter === filter ? 'bg-primary text-primary-foreground shadow-glow' : 'bg-card border border-border text-muted-foreground hover:text-foreground'
@@ -143,10 +138,10 @@ const Contacts: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="text-foreground font-semibold text-[13px] group-hover:text-primary truncate transition-colors">{contact.name}</h3>
-                  <StatusBadge status={contact.status} />
+                  <StatusBadge status={contact.status || 'Active'} />
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <CategoryBadge category={contact.category} />
+                  <CategoryBadge category={contact.type || 'Client'} />
                   <span className="text-[9px] text-muted-foreground truncate">{contact.email || contact.phone || 'No info'}</span>
                 </div>
               </div>
@@ -156,7 +151,6 @@ const Contacts: React.FC = () => {
         )}
       </div>
 
-      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-2xl w-full max-w-md overflow-hidden shadow-soft">
@@ -172,22 +166,22 @@ const Contacts: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Category</label>
-                  <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value as any })}
+                  <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Type</label>
+                  <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}
                     className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none">
-                    <option value="client">Client</option>
-                    <option value="lead">Lead</option>
-                    <option value="vendor">Vendor</option>
+                    <option value="Client">Client</option>
+                    <option value="Lead">Lead</option>
+                    <option value="Vendor">Vendor</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Status</label>
-                  <select value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                  <select value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })}
                     className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none">
-                    <option value="active">Active</option>
-                    <option value="estimate">Estimate</option>
-                    <option value="pending">Pending</option>
-                    <option value="inactive">Inactive</option>
+                    <option value="Active">Active</option>
+                    <option value="Estimate">Estimate</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Inactive">Inactive</option>
                   </select>
                 </div>
               </div>
@@ -221,7 +215,9 @@ const Contacts: React.FC = () => {
                 )}
                 <div className="flex gap-2 ml-auto">
                   <button type="button" onClick={handleCloseModal} className="px-4 py-2 rounded-lg text-muted-foreground font-bold text-[10px] uppercase tracking-widest">Cancel</button>
-                  <button type="submit" className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-bold text-[10px] uppercase tracking-widest shadow-glow">Save</button>
+                  <button type="submit" disabled={saveContact.isPending} className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-bold text-[10px] uppercase tracking-widest shadow-glow disabled:opacity-50">
+                    {saveContact.isPending ? 'Saving...' : 'Save'}
+                  </button>
                 </div>
               </div>
             </form>

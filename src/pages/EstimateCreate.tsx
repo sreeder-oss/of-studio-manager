@@ -1,37 +1,41 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Search, Trash2, Shield } from 'lucide-react';
-import { Contact, LineItem } from '@/types';
-import { getContacts, saveEstimate } from '@/services/storage';
+import { useContacts } from '@/hooks/useContacts';
+import { useSaveEstimate } from '@/hooks/useEstimates';
 import { LEGAL_TERMS, COMPANY_INFO } from '@/lib/legal';
+import { toast } from 'sonner';
+
+interface LineItem {
+  id: string;
+  scope: string;
+  materials: string;
+  amount: number;
+}
 
 const EstimateCreate: React.FC = () => {
   const navigate = useNavigate();
-  const [contacts] = useState<Contact[]>(getContacts());
+  const { data: contacts = [] } = useContacts();
+  const saveEstimate = useSaveEstimate();
   const [step, setStep] = useState<'select-client' | 'create'>('select-client');
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [selectedContactId, setSelectedContactId] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { id: '1', description: '', scope: '', materials: '', amount: 0 }
+    { id: '1', scope: '', materials: '', amount: 0 }
   ]);
   const [notes, setNotes] = useState('50% deposit required to schedule.');
-  const [taxRate, setTaxRate] = useState(0);
-  const [estimateNumber] = useState(`EST-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`);
+  const [taxRate, setTaxRate] = useState(8.75);
   const [showTerms, setShowTerms] = useState(false);
 
   const filteredContacts = contacts.filter(c =>
-    c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || c.email.toLowerCase().includes(clientSearchTerm.toLowerCase())
+    c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || (c.email || '').toLowerCase().includes(clientSearchTerm.toLowerCase())
   );
 
   const selectedContact = contacts.find(c => c.id === selectedContactId);
 
   const updateItem = (index: number, field: keyof LineItem, value: any) => {
     const newItems = [...lineItems];
-    const item = { ...newItems[index], [field]: value };
-    if (field === 'scope' || field === 'materials') {
-      item.description = `${item.scope || ''}${item.materials ? `\nMaterials: ${item.materials}` : ''}`;
-    }
-    newItems[index] = item;
+    newItems[index] = { ...newItems[index], [field]: value };
     setLineItems(newItems);
   };
 
@@ -40,16 +44,26 @@ const EstimateCreate: React.FC = () => {
   const total = subtotal + tax;
   const deposit = total * 0.5;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedContactId || lineItems.length === 0) return;
-    saveEstimate({
-      id: `e-${Date.now()}`, contactId: selectedContactId, number: estimateNumber,
-      items: lineItems, notes, status: 'pending', date: new Date().toISOString().split('T')[0], taxRate
-    });
-    navigate('/estimates');
+    try {
+      const items = lineItems.map(li => ({
+        id: li.id,
+        description: `${li.scope || ''}${li.materials ? `\nMaterials: ${li.materials}` : ''}`,
+        scope: li.scope, materials: li.materials, amount: li.amount,
+      }));
+      await saveEstimate.mutateAsync({
+        contact_id: selectedContactId,
+        line_items: items as any,
+        subtotal, tax_rate: taxRate / 100, total,
+        status: 'Pending',
+        valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      });
+      toast.success('Estimate saved');
+      navigate('/estimates');
+    } catch { toast.error('Failed to save estimate'); }
   };
 
-  // Select Client Step
   if (step === 'select-client') {
     return (
       <div className="space-y-4 animate-fade-in max-w-2xl mx-auto">
@@ -81,26 +95,28 @@ const EstimateCreate: React.FC = () => {
     );
   }
 
-  // Create Estimate Step
   return (
     <div className="animate-fade-in max-w-2xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
         <button onClick={() => setStep('select-client')} className="p-1.5 hover:bg-accent rounded-full text-muted-foreground"><ChevronLeft size={18} /></button>
         <div className="text-center">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{estimateNumber}</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">New Estimate</p>
           <p className="text-xs text-foreground">{selectedContact?.name}</p>
         </div>
-        <button onClick={handleSave} className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-widest shadow-glow">Save</button>
+        <button onClick={handleSave} disabled={saveEstimate.isPending}
+          className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-widest shadow-glow disabled:opacity-50">
+          {saveEstimate.isPending ? 'Saving...' : 'Save'}
+        </button>
       </div>
 
       <div className="space-y-3">
         {lineItems.map((item, index) => (
           <div key={item.id} className="bg-card p-3 rounded-xl border border-border">
             <textarea placeholder="Scope of Work..." className="w-full bg-accent border border-border rounded-lg p-2 text-foreground text-[11px] mb-1.5 outline-none resize-none h-12"
-              value={item.scope || ''} onChange={e => updateItem(index, 'scope', e.target.value)} />
+              value={item.scope} onChange={e => updateItem(index, 'scope', e.target.value)} />
             <div className="flex gap-2 items-center">
               <input placeholder="Materials..." className="flex-1 bg-accent border border-border rounded-lg p-2 text-foreground text-[11px] outline-none"
-                value={item.materials || ''} onChange={e => updateItem(index, 'materials', e.target.value)} />
+                value={item.materials} onChange={e => updateItem(index, 'materials', e.target.value)} />
               <span className="text-muted-foreground text-[10px]">$</span>
               <input type="number" className="bg-accent border border-border rounded-lg p-1.5 text-right text-primary font-mono text-xs w-20 outline-none"
                 value={item.amount} onChange={e => updateItem(index, 'amount', parseFloat(e.target.value) || 0)} />
@@ -108,14 +124,14 @@ const EstimateCreate: React.FC = () => {
             </div>
           </div>
         ))}
-        <button onClick={() => setLineItems([...lineItems, { id: Date.now().toString(), description: '', scope: '', materials: '', amount: 0 }])}
+        <button onClick={() => setLineItems([...lineItems, { id: Date.now().toString(), scope: '', materials: '', amount: 0 }])}
           className="w-full py-2 border border-dashed border-border text-muted-foreground rounded-xl hover:text-foreground text-[10px] uppercase tracking-widest font-bold">+ Add Line Item</button>
       </div>
 
       <div className="bg-card p-4 rounded-xl space-y-2 border border-border">
         <div className="flex justify-between items-center text-[10px]">
           <span className="text-muted-foreground font-bold uppercase tracking-widest">Tax (%)</span>
-          <input type="number" className="bg-accent border border-border rounded px-2 py-1 text-right w-12 text-xs text-foreground outline-none"
+          <input type="number" className="bg-accent border border-border rounded px-2 py-1 text-right w-16 text-xs text-foreground outline-none"
             value={taxRate} onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} />
         </div>
         <div className="flex justify-between text-lg font-serif text-primary pt-2 border-t border-border">
@@ -135,8 +151,7 @@ const EstimateCreate: React.FC = () => {
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <button onClick={() => setShowTerms(!showTerms)}
-          className="w-full flex items-center justify-between p-3 text-left">
+        <button onClick={() => setShowTerms(!showTerms)} className="w-full flex items-center justify-between p-3 text-left">
           <div className="flex items-center gap-2">
             <Shield size={14} className="text-primary" />
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Terms & Conditions</span>

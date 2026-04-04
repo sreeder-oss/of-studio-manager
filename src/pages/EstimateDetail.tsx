@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Shield, CheckCircle, Clock, Send } from 'lucide-react';
-import { Estimate, Contact } from '@/types';
-import { getEstimates, getContacts, deleteEstimate } from '@/services/storage';
+import { useEstimate, useDeleteEstimate } from '@/hooks/useEstimates';
+import { useContact } from '@/hooks/useContacts';
 import { LEGAL_TERMS } from '@/lib/legal';
+import { toast } from 'sonner';
 
 const EstimateDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [estimate] = useState<Estimate | null>(() => getEstimates().find(e => e.id === id) || null);
-  const [contacts] = useState<Contact[]>(getContacts());
+  const { data: estimate, isLoading } = useEstimate(id!);
+  const { data: contact } = useContact(estimate?.contact_id || '');
+  const deleteEstimate = useDeleteEstimate();
+
+  if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
 
   if (!estimate) {
     return (
@@ -20,23 +24,25 @@ const EstimateDetail: React.FC = () => {
     );
   }
 
-  const contact = contacts.find(c => c.id === estimate.contactId);
-  const subtotal = estimate.items.reduce((sum, item) => sum + item.amount, 0);
-  const tax = subtotal * ((estimate.taxRate || 0) / 100);
-  const total = subtotal + tax;
+  const items = Array.isArray(estimate.line_items) ? estimate.line_items as any[] : [];
+  const subtotal = Number(estimate.subtotal || 0);
+  const taxRate = Number(estimate.tax_rate || 0);
+  const tax = subtotal * taxRate;
+  const total = Number(estimate.total || 0);
   const deposit = total * 0.5;
 
-  const getStatusInfo = (status: string) => {
-    if (status === 'approved') return { label: 'Approved', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
-    if (status === 'sent') return { label: 'Sent', classes: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: <Send size={10} className="mr-1" /> };
+  const getStatusInfo = (status: string | null) => {
+    if (status === 'Approved') return { label: 'Approved', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
+    if (status === 'Invoiced') return { label: 'Invoiced', classes: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: <Send size={10} className="mr-1" /> };
     return { label: 'Pending', classes: 'bg-warning/10 text-warning border-warning/20', icon: <Clock size={10} className="mr-1" /> };
   };
 
   const status = getStatusInfo(estimate.status);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirm('Delete this estimate?')) {
-      deleteEstimate(estimate.id);
+      await deleteEstimate.mutateAsync(estimate.id);
+      toast.success('Estimate deleted');
       navigate('/estimates');
     }
   };
@@ -55,10 +61,10 @@ const EstimateDetail: React.FC = () => {
       <div className="bg-card rounded-2xl border border-border p-5">
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h2 className="font-serif text-foreground text-xl">{estimate.number}</h2>
+            <h2 className="font-serif text-foreground text-xl">Estimate</h2>
             <p className="text-muted-foreground text-xs mt-0.5">{contact?.name || 'Unknown Client'}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              {new Date(estimate.date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+              {estimate.created_at ? new Date(estimate.created_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : ''}
             </p>
           </div>
           <span className={`text-[8px] font-bold px-2 py-0.5 rounded uppercase tracking-widest border flex items-center ${status.classes}`}>
@@ -78,15 +84,15 @@ const EstimateDetail: React.FC = () => {
 
         <div className="space-y-2 mb-4">
           <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Line Items</p>
-          {estimate.items.map((item) => (
-            <div key={item.id} className="bg-accent rounded-xl p-3 border border-border">
+          {items.map((item: any, i: number) => (
+            <div key={item.id || i} className="bg-accent rounded-xl p-3 border border-border">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   {item.scope && <p className="text-foreground text-sm font-semibold">{item.scope}</p>}
                   {item.materials && <p className="text-muted-foreground text-[11px] mt-0.5">Materials: {item.materials}</p>}
-                  {!item.scope && <p className="text-foreground text-sm">{item.description}</p>}
+                  {!item.scope && item.description && <p className="text-foreground text-sm">{item.description}</p>}
                 </div>
-                <p className="font-serif text-foreground font-bold ml-4">${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                <p className="font-serif text-foreground font-bold ml-4">${Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
           ))}
@@ -97,9 +103,9 @@ const EstimateDetail: React.FC = () => {
             <span>Subtotal</span>
             <span>${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
-          {(estimate.taxRate || 0) > 0 && (
+          {taxRate > 0 && (
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Tax ({estimate.taxRate}%)</span>
+              <span>Tax ({(taxRate * 100).toFixed(2)}%)</span>
               <span>${tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
           )}
@@ -112,13 +118,6 @@ const EstimateDetail: React.FC = () => {
             <span>${deposit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
-
-        {estimate.notes && (
-          <div className="mt-4 pt-3 border-t border-border">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Notes</p>
-            <p className="text-foreground text-sm">{estimate.notes}</p>
-          </div>
-        )}
       </div>
 
       <div className="bg-card/50 border border-border rounded-xl p-4 space-y-2">

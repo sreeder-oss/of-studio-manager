@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronRight, Phone, Mail, MapPin, ShieldCheck, Trash2 } from 'lucide-react';
-import { Contact } from '@/types';
-import { getContacts, saveContact, deleteContact } from '@/services/storage';
+import { useContact, useDeleteContact } from '@/hooks/useContacts';
 import { PRIVACY_NOTICE } from '@/lib/legal';
+import { toast } from 'sonner';
 
 const ContactDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [contact, setContact] = useState<Contact | null>(() => {
-    return getContacts().find(c => c.id === id) || null;
-  });
+  const { data: contact, isLoading } = useContact(id!);
+  const deleteContactMut = useDeleteContact();
+
+  if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
 
   if (!contact) {
     return (
@@ -21,38 +22,31 @@ const ContactDetail: React.FC = () => {
     );
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirm('Delete this contact?')) {
-      deleteContact(contact.id);
+      await deleteContactMut.mutateAsync(contact.id);
+      toast.success('Contact deleted');
       navigate('/contacts');
     }
   };
 
   const StatusBadge = ({ status }: { status: string }) => {
     const styles: Record<string, string> = {
-      active: 'bg-primary/10 text-primary border-primary/20',
-      estimate: 'bg-warning/10 text-warning border-warning/20',
-      pending: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-      inactive: 'bg-muted text-muted-foreground border-border',
+      Active: 'bg-primary/10 text-primary border-primary/20',
+      Estimate: 'bg-warning/10 text-warning border-warning/20',
+      Pending: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+      Inactive: 'bg-muted text-muted-foreground border-border',
     };
-    return (
-      <span className={`text-[8px] px-1.5 py-0.5 rounded border uppercase font-bold tracking-wider ${styles[status] || styles.inactive}`}>
-        {status}
-      </span>
-    );
+    return <span className={`text-[8px] px-1.5 py-0.5 rounded border uppercase font-bold tracking-wider ${styles[status] || styles.Inactive}`}>{status}</span>;
   };
 
   const CategoryBadge = ({ category }: { category: string }) => {
     const styles: Record<string, string> = {
-      client: 'bg-primary/5 text-primary',
-      lead: 'bg-amber-500/10 text-amber-400',
-      vendor: 'bg-blue-500/10 text-blue-400',
+      Client: 'bg-primary/5 text-primary',
+      Lead: 'bg-amber-500/10 text-amber-400',
+      Vendor: 'bg-blue-500/10 text-blue-400',
     };
-    return (
-      <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${styles[category] || ''}`}>
-        {category}
-      </span>
-    );
+    return <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${styles[category] || ''}`}>{category}</span>;
   };
 
   return (
@@ -70,14 +64,11 @@ const ContactDetail: React.FC = () => {
             <div>
               <h2 className="font-serif text-foreground text-lg">{contact.name}</h2>
               <div className="flex gap-1.5 mt-1">
-                <CategoryBadge category={contact.category} />
-                <StatusBadge status={contact.status} />
+                <CategoryBadge category={contact.type || 'Client'} />
+                <StatusBadge status={contact.status || 'Active'} />
               </div>
             </div>
           </div>
-          <button onClick={() => navigate('/contacts', { state: { editId: contact.id } })} className="text-[10px] text-primary font-bold uppercase tracking-widest hover:underline">
-            Edit
-          </button>
         </div>
 
         <div className="space-y-3 mt-5">
@@ -109,7 +100,7 @@ const ContactDetail: React.FC = () => {
         )}
 
         <div className="mt-4 pt-4 border-t border-border flex justify-between items-center">
-          <p className="text-[9px] text-muted-foreground">Added {new Date(contact.createdAt).toLocaleDateString()}</p>
+          <p className="text-[9px] text-muted-foreground">Added {contact.created_at ? new Date(contact.created_at).toLocaleDateString() : 'N/A'}</p>
           <button onClick={handleDelete} className="text-[10px] text-destructive/60 hover:text-destructive font-bold uppercase tracking-widest">
             Delete
           </button>

@@ -1,30 +1,27 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ChevronRight, FileText, CheckCircle, Clock, Send } from 'lucide-react';
-import { Contact, Estimate } from '@/types';
-import { getContacts, getEstimates } from '@/services/storage';
+import { useEstimates } from '@/hooks/useEstimates';
+import { useContacts } from '@/hooks/useContacts';
 
 const Estimates: React.FC = () => {
   const navigate = useNavigate();
-  const [contacts] = useState<Contact[]>(getContacts());
-  const [estimates] = useState<Estimate[]>(getEstimates());
+  const { data: contacts = [] } = useContacts();
+  const { data: estimates = [], isLoading } = useEstimates();
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredEstimates = estimates.filter(e => {
-    const contact = contacts.find(c => c.id === e.contactId);
-    return `${e.number} ${contact?.name || ''}`.toLowerCase().includes(searchTerm.toLowerCase());
+    const contact = contacts.find(c => c.id === e.contact_id);
+    return (contact?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  const calculateTotal = (items: { amount: number }[], taxRate = 0) => {
-    const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
-    return subtotal * (1 + taxRate / 100);
-  };
-
-  const getStatusInfo = (status: string) => {
-    if (status === 'approved') return { label: 'Approved', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
-    if (status === 'sent') return { label: 'Sent', classes: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: <Send size={10} className="mr-1" /> };
+  const getStatusInfo = (status: string | null) => {
+    if (status === 'Approved') return { label: 'Approved', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
+    if (status === 'Invoiced') return { label: 'Invoiced', classes: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: <Send size={10} className="mr-1" /> };
     return { label: 'Pending', classes: 'bg-warning/10 text-warning border-warning/20', icon: <Clock size={10} className="mr-1" /> };
   };
+
+  if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading estimates...</div>;
 
   return (
     <div className="space-y-4 animate-fade-in max-w-2xl mx-auto">
@@ -51,8 +48,8 @@ const Estimates: React.FC = () => {
           </div>
         ) : (
           filteredEstimates.map(e => {
-            const total = calculateTotal(e.items, e.taxRate);
             const status = getStatusInfo(e.status);
+            const contact = contacts.find(c => c.id === e.contact_id);
             return (
               <div key={e.id} onClick={() => navigate(`/estimates/${e.id}`)}
                 className="bg-card p-4 rounded-xl border border-border flex justify-between items-center hover:border-primary/20 transition-all cursor-pointer group">
@@ -61,13 +58,13 @@ const Estimates: React.FC = () => {
                     <FileText size={16} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">{e.number}</h3>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{contacts.find(c => c.id === e.contactId)?.name || 'Unknown'} • {new Date(e.date).toLocaleDateString()}</p>
+                    <h3 className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">{contact?.name || 'Unknown'}</h3>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{e.created_at ? new Date(e.created_at).toLocaleDateString() : ''}</p>
                   </div>
                 </div>
                 <div className="text-right flex items-center gap-3">
                   <div className="flex flex-col items-end gap-1">
-                    <span className="font-serif text-foreground text-sm">${total.toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                    <span className="font-serif text-foreground text-sm">${Number(e.total || 0).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                     <span className={`text-[8px] font-bold px-2 py-0.5 rounded uppercase tracking-widest border flex items-center ${status.classes}`}>
                       {status.icon} {status.label}
                     </span>

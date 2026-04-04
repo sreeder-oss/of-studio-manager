@@ -1,35 +1,36 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ChevronRight, FileSpreadsheet, CheckCircle, Clock, AlertCircle, Shield } from 'lucide-react';
-import { Invoice, Contact } from '@/types';
-import { getInvoices, getContacts } from '@/services/storage';
+import { useInvoices } from '@/hooks/useInvoices';
+import { useContacts } from '@/hooks/useContacts';
 import { LEGAL_TERMS, PRIVACY_NOTICE } from '@/lib/legal';
 
 const Invoices: React.FC = () => {
   const navigate = useNavigate();
-  const [invoices] = useState<Invoice[]>(getInvoices());
-  const [contacts] = useState<Contact[]>(getContacts());
+  const { data: invoices = [], isLoading } = useInvoices();
+  const { data: contacts = [] } = useContacts();
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredInvoices = invoices.filter(inv => {
-    const contact = contacts.find(c => c.id === inv.contactId);
-    return inv.number.toLowerCase().includes(searchTerm.toLowerCase()) || contact?.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const contact = contacts.find(c => c.id === inv.contact_id);
+    return (contact?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   const totals = invoices.reduce((acc, inv) => {
-    const subtotal = inv.items.reduce((sum, item) => sum + item.amount, 0);
-    const total = subtotal * (1 + (inv.taxRate || 0) / 100);
-    if (inv.status === 'paid') acc.paid += total;
+    const total = Number(inv.total || 0);
+    if (inv.paid) acc.paid += total;
     else { acc.outstanding += total; acc.unpaidCount += 1; }
     return acc;
   }, { paid: 0, outstanding: 0, unpaidCount: 0 });
 
-  const getStatusInfo = (inv: Invoice) => {
-    const isOverdue = inv.status === 'unpaid' && new Date(inv.dueDate) < new Date();
-    if (inv.status === 'paid') return { label: 'Paid', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
+  const getStatusInfo = (inv: typeof invoices[0]) => {
+    const isOverdue = !inv.paid && inv.due_date && new Date(inv.due_date) < new Date();
+    if (inv.paid) return { label: 'Paid', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
     if (isOverdue) return { label: 'Overdue', classes: 'bg-destructive/10 text-destructive border-destructive/20', icon: <AlertCircle size={10} className="mr-1" /> };
     return { label: 'Pending', classes: 'bg-warning/10 text-warning border-warning/20', icon: <Clock size={10} className="mr-1" /> };
   };
+
+  if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading invoices...</div>;
 
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
@@ -70,9 +71,9 @@ const Invoices: React.FC = () => {
           </div>
         ) : (
           filteredInvoices.map(inv => {
-            const contact = contacts.find(c => c.id === inv.contactId);
+            const contact = contacts.find(c => c.id === inv.contact_id);
             const status = getStatusInfo(inv);
-            const total = inv.items.reduce((sum, item) => sum + item.amount, 0) * (1 + (inv.taxRate || 0) / 100);
+            const total = Number(inv.total || 0);
             return (
               <div key={inv.id} onClick={() => navigate(`/invoices/${inv.id}`)}
                 className="group bg-card p-3.5 rounded-xl shadow-soft border border-border hover:border-primary/20 transition-all cursor-pointer">
@@ -82,8 +83,10 @@ const Invoices: React.FC = () => {
                       <FileSpreadsheet size={16} />
                     </div>
                     <div>
-                      <span className="font-serif font-bold text-foreground text-sm block leading-none">{inv.number}</span>
-                      <span className="text-[10px] text-muted-foreground font-bold tracking-tight mt-0.5 inline-block">{contact?.name || 'Client'}</span>
+                      <span className="font-serif font-bold text-foreground text-sm block leading-none">{contact?.name || 'Client'}</span>
+                      <span className="text-[10px] text-muted-foreground font-bold tracking-tight mt-0.5 inline-block">
+                        {inv.created_at ? new Date(inv.created_at).toLocaleDateString() : ''}
+                      </span>
                     </div>
                   </div>
                   <span className={`text-[8px] font-bold px-2 py-0.5 rounded uppercase tracking-widest border flex items-center ${status.classes}`}>
@@ -92,7 +95,7 @@ const Invoices: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-end mt-3 pl-11">
                   <div className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">
-                    {inv.status === 'paid' ? 'Paid' : 'Due'}: {new Date(inv.status === 'paid' ? inv.date : inv.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    {inv.paid ? 'Paid' : 'Due'}: {inv.due_date ? new Date(inv.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A'}
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-serif font-bold text-foreground text-base">${total.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
