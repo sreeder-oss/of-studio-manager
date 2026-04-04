@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
+import { useAuthReady } from '@/hooks/useAuthReady';
 
 export type DbInvoice = {
   id: string;
@@ -19,25 +20,30 @@ export type DbInvoice = {
 };
 
 export const useInvoices = () => {
+  const { user, isReady } = useAuthReady();
+
   return useQuery({
-    queryKey: ['invoices'],
+    queryKey: ['invoices', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase.from('invoices').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return data as DbInvoice[];
     },
+    enabled: isReady && !!user,
   });
 };
 
 export const useInvoice = (id: string) => {
+  const { user, isReady } = useAuthReady();
+
   return useQuery({
-    queryKey: ['invoices', id],
+    queryKey: ['invoices', id, user?.id],
     queryFn: async () => {
       const { data, error } = await supabase.from('invoices').select('*').eq('id', id).single();
       if (error) throw error;
       return data as DbInvoice;
     },
-    enabled: !!id,
+    enabled: isReady && !!user && !!id,
   });
 };
 

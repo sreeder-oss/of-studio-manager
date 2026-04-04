@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuthReady } from '@/hooks/useAuthReady';
 
 export type DbReceipt = {
   id: string;
@@ -17,13 +18,16 @@ export type DbReceipt = {
 };
 
 export const useReceipts = () => {
+  const { user, isReady } = useAuthReady();
+
   return useQuery({
-    queryKey: ['receipts'],
+    queryKey: ['receipts', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase.from('receipts').select('*').order('receipt_date', { ascending: false });
       if (error) throw error;
       return data as DbReceipt[];
     },
+    enabled: isReady && !!user,
   });
 };
 
