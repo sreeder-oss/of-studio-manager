@@ -1,10 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { lovable } from '@/integrations/lovable';
+import { useAuth } from '@/contexts/AuthContext';
 import logoSrc from '@/assets/of-logo.svg';
 
 const Login: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      setLoading(false);
+    }
+  }, [user]);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
@@ -12,15 +21,29 @@ const Login: React.FC = () => {
     const result = await lovable.auth.signInWithOAuth('google', {
       redirect_uri: window.location.origin,
     });
+
     if (result.error) {
       setError('Sign in failed. Please try again.');
       setLoading(false);
       return;
     }
+
     if (result.redirected) {
       return;
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="text-muted-foreground text-sm animate-pulse">Loading...</div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
