@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { lovable } from '@/integrations/lovable';
 import { useAuth } from '@/contexts/AuthContext';
-import logoSrc from '@/assets/of-logo.svg';
+import monogramSrc from '@/assets/of-monogram.svg';
 
 const Login: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
@@ -49,7 +49,7 @@ const Login: React.FC = () => {
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-8 text-center">
         <div>
-          <img src={logoSrc} alt="OF Studio" className="h-16 mx-auto mb-4" />
+          <img src={monogramSrc} alt="OF Studio" className="w-24 h-24 mx-auto mb-4 rounded-full" />
           <h1 className="text-2xl font-serif text-foreground">OF Studio</h1>
           <p className="text-[10px] text-primary uppercase tracking-[0.2em] font-semibold mt-1">Manager</p>
         </div>
