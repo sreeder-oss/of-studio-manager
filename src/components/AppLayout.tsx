@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Users, FolderKanban, FileText, FileSpreadsheet, Receipt, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import monogramSrc from '@/assets/of-monogram.svg';
+import logoSrc from '@/assets/of-letters.svg';
 
 const navItems = [
   { path: '/', label: 'Home', icon: LayoutDashboard },
