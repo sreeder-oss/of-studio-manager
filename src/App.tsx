@@ -15,6 +15,7 @@ import EstimateCreate from "./pages/EstimateCreate";
 import Invoices from "./pages/Invoices";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Receipts from "./pages/Receipts";
+import TaxSummary from "./pages/TaxSummary";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
