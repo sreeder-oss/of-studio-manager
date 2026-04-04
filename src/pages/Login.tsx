@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { lovable } from '@/integrations/lovable';
 import { useAuth } from '@/contexts/AuthContext';
-import monogramSrc from '@/assets/of-monogram.svg';
+import logoSrc from '@/assets/of-letters.svg';
 
 const Login: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
