@@ -66,10 +66,12 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <AIAssistantProvider>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/*" element={<ProtectedRoutes />} />
-            </Routes>
+            <AIContextProvider>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/*" element={<ProtectedRoutes />} />
+              </Routes>
+            </AIContextProvider>
           </AIAssistantProvider>
         </AuthProvider>
       </BrowserRouter>
