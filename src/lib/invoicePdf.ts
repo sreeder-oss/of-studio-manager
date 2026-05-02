@@ -461,7 +461,7 @@ function renderItemTable(ctx: RenderCtx, startY: number): number {
 
   autoTable(doc, {
     startY,
-    margin: { left: MARGIN, right: MARGIN },
+    margin: { left: MARGIN, right: MARGIN, top: 72, bottom: 50 },
     head: [
       [
         { content: 'Description', styles: { halign: 'left' } },
