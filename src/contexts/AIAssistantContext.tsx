@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { getStoredModelId, setStoredModelId } from '@/lib/aiModels';
 
 export interface ChatAttachment {
   dataUrl: string; // base64 data URL
@@ -22,6 +23,8 @@ interface AIAssistantContextValue {
   updateLastAssistant: (updater: (prev: string) => string, done?: boolean) => void;
   markActionApplied: (messageId: string, actionId: string) => void;
   reset: () => void;
+  modelId: string;
+  setModelId: (id: string) => void;
 }
 
 const AIAssistantContext = createContext<AIAssistantContextValue | null>(null);
@@ -35,6 +38,7 @@ export const useAIAssistant = () => {
 export const AIAssistantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [modelId, setModelIdState] = useState<string>(() => getStoredModelId());
 
   const appendMessage = useCallback((m: ChatMessage) => {
     setMessages((prev) => [...prev, m]);
@@ -63,10 +67,16 @@ export const AIAssistantProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const reset = useCallback(() => setMessages([]), []);
 
+  const setModelId = useCallback((id: string) => {
+    setModelIdState(id);
+    setStoredModelId(id);
+  }, []);
+
   const value = useMemo(
-    () => ({ open, setOpen, messages, appendMessage, updateLastAssistant, markActionApplied, reset }),
-    [open, messages, appendMessage, updateLastAssistant, markActionApplied, reset]
+    () => ({ open, setOpen, messages, appendMessage, updateLastAssistant, markActionApplied, reset, modelId, setModelId }),
+    [open, messages, appendMessage, updateLastAssistant, markActionApplied, reset, modelId, setModelId]
   );
 
   return <AIAssistantContext.Provider value={value}>{children}</AIAssistantContext.Provider>;
 };
+

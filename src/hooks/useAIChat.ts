@@ -14,7 +14,7 @@ interface SendOptions {
 }
 
 export const useAIChat = () => {
-  const { messages, appendMessage, updateLastAssistant } = useAIAssistant();
+  const { messages, appendMessage, updateLastAssistant, modelId } = useAIAssistant();
   const { currentRecord } = useAIPageContextValue();
   const [isLoading, setIsLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -67,6 +67,7 @@ export const useAIChat = () => {
             currentPage,
             currentRecord: recordForRequest,
             hasImages: !!attachments && attachments.length > 0,
+            model: modelId,
           }),
         });
 
@@ -142,7 +143,7 @@ export const useAIChat = () => {
         abortRef.current = null;
       }
     },
-    [messages, appendMessage, updateLastAssistant, currentRecord]
+    [messages, appendMessage, updateLastAssistant, currentRecord, modelId]
   );
 
   const cancel = useCallback(() => {
