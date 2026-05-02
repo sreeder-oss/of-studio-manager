@@ -9,6 +9,7 @@ import { useReceipts } from '@/hooks/useReceipts';
 import { useDocuments, useSaveDocument, useDeleteDocument, uploadDocumentFile } from '@/hooks/useDocuments';
 import { usePhotos, useSavePhoto, useDeletePhoto, uploadProjectPhoto } from '@/hooks/usePhotos';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { toast } from 'sonner';
 
 type Tab = 'overview' | 'estimates' | 'receipts' | 'documents' | 'photos';
@@ -48,6 +49,13 @@ const ProjectDetail: React.FC = () => {
 
   const project = projects.find(p => p.id === id);
   const contact = contacts.find(c => c.id === project?.contact_id);
+
+  useAIPageContext(project ? {
+    kind: 'project', id: project.id, name: project.name,
+    status: project.status, address: project.address,
+    contact_name: contact?.name ?? null,
+    contract_value: project.contract_value,
+  } : null);
 
   const estimates = allEstimates.filter(e => e.project_id === id);
   const invoices = allInvoices.filter(i => i.project_id === id);
