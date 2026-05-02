@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAIAssistant, type ChatAttachment, type ChatMessage } from '@/contexts/AIAssistantContext';
+import { useAIPageContextValue } from '@/contexts/AIContextProvider';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 

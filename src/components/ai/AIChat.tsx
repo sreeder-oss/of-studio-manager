@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Mic, Paperclip, Send, Square, X, Sparkles } from 'lucide-react';
+import { Mic, Paperclip, Send, Square, X, Sparkles, Zap } from 'lucide-react';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
 import { useAIChat } from '@/hooks/useAIChat';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
@@ -8,6 +8,8 @@ import { ChatMessage } from './ChatMessage';
 import { EstimatePreview } from './EstimatePreview';
 import { parseEstimateFromText, type EstimateDoc } from '@/lib/estimateSchema';
 import type { ChatAttachment } from '@/contexts/AIAssistantContext';
+
+const HANDS_FREE_KEY = 'of-ai-handsfree';
 
 const fileToDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -24,27 +26,58 @@ export const AIChat: React.FC = () => {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [previewEstimate, setPreviewEstimate] = useState<EstimateDoc | null>(null);
+  const [handsFree, setHandsFree] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(HANDS_FREE_KEY) === '1';
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { supported: micSupported, listening, start: startMic, stop: stopMic } = useSpeechRecognition((transcript) => {
-    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
-  });
+  // Refs so the speech callback always has fresh state without re-creating it
+  const handsFreeRef = useRef(handsFree);
+  handsFreeRef.current = handsFree;
+  const inputRef = useRef(input);
+  inputRef.current = input;
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+  const isLoadingRef = useRef(isLoading);
+  isLoadingRef.current = isLoading;
+
+  const handleSend = (overrideText?: string) => {
+    if (isLoadingRef.current) return;
+    const text = overrideText ?? input;
+    const atts = attachmentsRef.current;
+    if (!text.trim() && atts.length === 0) return;
+    send({
+      text,
+      attachments: atts.length > 0 ? atts : undefined,
+      currentPage: location.pathname,
+    });
+    setInput('');
+    setAttachments([]);
+  };
+
+  const { supported: micSupported, listening, interim, start: startMic, stop: stopMic } =
+    useSpeechRecognition((transcript) => {
+      const merged = inputRef.current ? `${inputRef.current} ${transcript}` : transcript;
+      if (handsFreeRef.current) {
+        setInput('');
+        handleSend(merged);
+      } else {
+        setInput(merged);
+      }
+    });
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
-    if (isLoading) return;
-    if (!input.trim() && attachments.length === 0) return;
-    send({
-      text: input,
-      attachments: attachments.length > 0 ? attachments : undefined,
-      currentPage: location.pathname,
-    });
-    setInput('');
-    setAttachments([]);
+  const toggleHandsFree = () => {
+    const next = !handsFree;
+    setHandsFree(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(HANDS_FREE_KEY, next ? '1' : '0');
+    }
   };
 
   const handleFiles = async (files: FileList | null) => {
@@ -87,6 +120,9 @@ export const AIChat: React.FC = () => {
 
         {/* Input */}
         <div className="border-t border-border p-2 space-y-2">
+          {listening && interim && (
+            <div className="text-[10px] italic text-primary px-2 truncate">{interim}…</div>
+          )}
           {attachments.length > 0 && (
             <div className="flex gap-1.5 flex-wrap">
               {attachments.map((a, i) => (
@@ -115,19 +151,28 @@ export const AIChat: React.FC = () => {
               className="flex-1 bg-card border border-border rounded-xl py-2 px-3 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-primary resize-none max-h-32"
             />
             {micSupported && (
-              <button
-                onClick={() => (listening ? stopMic() : startMic())}
-                className={`p-2 rounded-lg transition-colors ${listening ? 'bg-destructive text-destructive-foreground animate-pulse' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
-              >
-                <Mic size={16} />
-              </button>
+              <>
+                <button
+                  onClick={toggleHandsFree}
+                  title={handsFree ? 'Hands-free on (auto-send after silence)' : 'Hands-free off'}
+                  className={`p-2 rounded-lg transition-colors ${handsFree ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                >
+                  <Zap size={14} />
+                </button>
+                <button
+                  onClick={() => (listening ? stopMic() : startMic())}
+                  className={`p-2 rounded-lg transition-colors ${listening ? 'bg-destructive text-destructive-foreground animate-pulse' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                >
+                  <Mic size={16} />
+                </button>
+              </>
             )}
             {isLoading ? (
               <button onClick={cancel} className="p-2 bg-destructive text-destructive-foreground rounded-lg">
                 <Square size={16} />
               </button>
             ) : (
-              <button onClick={handleSend} disabled={!input.trim() && attachments.length === 0}
+              <button onClick={() => handleSend()} disabled={!input.trim() && attachments.length === 0}
                 className="p-2 bg-primary text-primary-foreground rounded-lg shadow-glow disabled:opacity-40">
                 <Send size={16} />
               </button>
