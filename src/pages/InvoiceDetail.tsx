@@ -46,6 +46,30 @@ const InvoiceDetail: React.FC = () => {
 
   const status = getStatusInfo();
 
+  const handleDownload = () => {
+    try {
+      const doc = coerceToInvoiceDoc(invoice.line_items, {
+        invoice_number: invoice.id?.slice(0, 8).toUpperCase(),
+        title: contact?.name ? `Invoice — ${contact.name}` : 'Invoice',
+        client_name: contact?.name || '',
+        project_address: contact?.address || '',
+        invoice_date: invoice.created_at?.split('T')[0] || '',
+        due_date: invoice.due_date || '',
+        subtotal: subtotal,
+        tax_applied: taxApplied,
+        total: total,
+        paid: !!invoice.paid,
+        paid_date: invoice.paid_date,
+      });
+      if (!doc) { toast.error('Nothing to export'); return; }
+      downloadInvoicePdf(doc);
+      toast.success('PDF downloaded');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to generate PDF');
+    }
+  };
+
   const togglePaid = async () => {
     try {
       await saveInvoice.mutateAsync({
