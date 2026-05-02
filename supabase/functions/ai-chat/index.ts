@@ -8,9 +8,21 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const FC = "https://api.firecrawl.dev/v2";
 const MAX_TOOL_ROUNDS = 10;
 const MAX_SCRAPES_PER_REQUEST = 12;
+
+// Whitelist of OpenRouter model slugs the client may request. Anything else
+// falls back to GPT-5 high-reasoning on Lovable AI.
+const OPENROUTER_MODELS = new Set([
+  "openai/gpt-5",
+  "openai/gpt-5-pro",
+  "anthropic/claude-opus-4.5",
+  "anthropic/claude-sonnet-4.5",
+  "google/gemini-3-pro-preview",
+  "x-ai/grok-4",
+]);
 
 interface IncomingMessage {
   role: "user" | "assistant";
@@ -22,6 +34,8 @@ interface RequestBody {
   currentPage?: string;
   currentRecord?: unknown;
   hasImages?: boolean;
+  /** Optional model override. If it matches an OpenRouter slug, route through OpenRouter. */
+  model?: string;
 }
 
 const tools = [
