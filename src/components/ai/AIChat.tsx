@@ -29,6 +29,7 @@ export const AIChat: React.FC = () => {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [previewEstimate, setPreviewEstimate] = useState<EstimateDoc | null>(null);
+  const [previewInvoice, setPreviewInvoice] = useState<InvoiceDoc | null>(null);
   const [handsFree, setHandsFree] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem(HANDS_FREE_KEY) === '1';
