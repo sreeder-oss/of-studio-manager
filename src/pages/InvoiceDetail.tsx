@@ -1,10 +1,11 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle, FileDown } from 'lucide-react';
 import { useInvoice, useSaveInvoice } from '@/hooks/useInvoices';
 import { useContact } from '@/hooks/useContacts';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { LEGAL_TERMS, PRIVACY_NOTICE } from '@/lib/legal';
+import { downloadInvoicePdf, coerceToInvoiceDoc } from '@/lib/invoicePdf';
 import { toast } from 'sonner';
 
 const InvoiceDetail: React.FC = () => {
