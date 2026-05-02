@@ -6,8 +6,10 @@ import { useAIChat } from '@/hooks/useAIChat';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { ChatMessage } from './ChatMessage';
 import { EstimatePreview } from './EstimatePreview';
+import { InvoicePreview } from './InvoicePreview';
 import { ModelPicker } from './ModelPicker';
 import { parseEstimateFromText, type EstimateDoc } from '@/lib/estimateSchema';
+import { parseInvoiceFromText, type InvoiceDoc } from '@/lib/invoiceSchema';
 import type { ChatAttachment } from '@/contexts/AIAssistantContext';
 
 const HANDS_FREE_KEY = 'of-ai-handsfree';
@@ -27,6 +29,7 @@ export const AIChat: React.FC = () => {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [previewEstimate, setPreviewEstimate] = useState<EstimateDoc | null>(null);
+  const [previewInvoice, setPreviewInvoice] = useState<InvoiceDoc | null>(null);
   const [handsFree, setHandsFree] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem(HANDS_FREE_KEY) === '1';
@@ -97,10 +100,15 @@ export const AIChat: React.FC = () => {
     if (e) setPreviewEstimate(e);
   };
 
+  const openInvoice = (text: string) => {
+    const i = parseInvoiceFromText(text);
+    if (i) setPreviewInvoice(i);
+  };
+
   return (
     <div className="flex h-full">
       {/* Chat column */}
-      <div className={`flex flex-col h-full ${previewEstimate ? 'hidden md:flex md:w-1/2 md:border-r md:border-border' : 'w-full'}`}>
+      <div className={`flex flex-col h-full ${(previewEstimate || previewInvoice) ? 'hidden md:flex md:w-1/2 md:border-r md:border-border' : 'w-full'}`}>
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border">
           <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             <Sparkles size={11} className="text-primary" /> Assistant
@@ -122,7 +130,7 @@ export const AIChat: React.FC = () => {
               </div>
             </div>
           )}
-          {messages.map((m) => <ChatMessage key={m.id} message={m} onOpenEstimate={openEstimate} />)}
+          {messages.map((m) => <ChatMessage key={m.id} message={m} onOpenEstimate={openEstimate} onOpenInvoice={openInvoice} />)}
         </div>
 
         {/* Input */}
@@ -188,10 +196,15 @@ export const AIChat: React.FC = () => {
         </div>
       </div>
 
-      {/* Estimate preview pane */}
+      {/* Preview pane (estimate or invoice) */}
       {previewEstimate && (
         <div className="flex-1 md:w-1/2">
           <EstimatePreview initial={previewEstimate} onClose={() => setPreviewEstimate(null)} />
+        </div>
+      )}
+      {previewInvoice && !previewEstimate && (
+        <div className="flex-1 md:w-1/2">
+          <InvoicePreview initial={previewInvoice} onClose={() => setPreviewInvoice(null)} />
         </div>
       )}
     </div>
