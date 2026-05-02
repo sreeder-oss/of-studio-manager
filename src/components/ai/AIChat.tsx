@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Mic, Paperclip, Send, Square, X, Sparkles, Zap } from 'lucide-react';
+import { Mic, Paperclip, Camera, Send, Square, X, Sparkles, Zap } from 'lucide-react';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
 import { useAIChat } from '@/hooks/useAIChat';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
@@ -35,6 +35,7 @@ export const AIChat: React.FC = () => {
     return window.localStorage.getItem(HANDS_FREE_KEY) === '1';
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Refs so the speech callback always has fresh state without re-creating it
@@ -152,10 +153,15 @@ export const AIChat: React.FC = () => {
             </div>
           )}
           <div className="flex items-end gap-1.5">
-            <button onClick={() => fileInputRef.current?.click()} className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
+            <button onClick={() => fileInputRef.current?.click()} title="Attach photos" className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
               <Paperclip size={16} />
             </button>
+            <button onClick={() => cameraInputRef.current?.click()} title="Take a site photo" className="p-2 text-muted-foreground hover:text-primary rounded-lg hover:bg-accent">
+              <Camera size={16} />
+            </button>
             <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+              onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
             <textarea
               value={input}
