@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AIAssistantProvider } from "@/contexts/AIAssistantContext";
+import { AIContextProvider } from "@/contexts/AIContextProvider";
 import AppLayout from "./components/AppLayout";
 import Index from "./pages/Index";
 import Contacts from "./pages/Contacts";
