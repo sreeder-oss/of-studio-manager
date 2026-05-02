@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { Sparkles, FileText } from 'lucide-react';
 import type { ChatMessage as Msg } from '@/contexts/AIAssistantContext';
 import { parseEstimateFromText } from '@/lib/estimateSchema';
+import { parseInvoiceFromText } from '@/lib/invoiceSchema';
 import { parseActionsFromText, stripActionBlocks } from '@/lib/actionSchema';
 import { ActionCard } from './ActionCard';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
@@ -10,17 +11,19 @@ import { useAIAssistant } from '@/contexts/AIAssistantContext';
 interface Props {
   message: Msg;
   onOpenEstimate: (text: string) => void;
+  onOpenInvoice: (text: string) => void;
 }
 
-export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate }) => {
+export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenInvoice }) => {
   const { markActionApplied } = useAIAssistant();
   const isUser = message.role === 'user';
   const hasEstimate = !isUser && !!parseEstimateFromText(message.content);
+  const hasInvoice = !isUser && !hasEstimate && !!parseInvoiceFromText(message.content);
   const actions = isUser ? [] : parseActionsFromText(message.content);
 
   // Hide raw fenced blocks from prose
   let display = message.content;
-  if (hasEstimate) display = display.replace(/```json\s*[\s\S]*?```/g, '').trim();
+  if (hasEstimate || hasInvoice) display = display.replace(/```json\s*[\s\S]*?```/g, '').trim();
   if (actions.length > 0) display = stripActionBlocks(display);
 
   return (
