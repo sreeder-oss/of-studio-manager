@@ -35,6 +35,7 @@ export const AIChat: React.FC = () => {
     return window.localStorage.getItem(HANDS_FREE_KEY) === '1';
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Refs so the speech callback always has fresh state without re-creating it
