@@ -1,9 +1,12 @@
-import React from 'react'; 
+import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, FolderKanban, FileText, FileSpreadsheet, Receipt, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, FolderKanban, FileText, FileSpreadsheet, Receipt, Layers, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import logoSrc from '@/assets/of-letters.svg';
+import { AIAssistantProvider } from '@/contexts/AIAssistantContext';
+import { FloatingAIButton } from '@/components/ai/FloatingAIButton';
+import { AIAssistant } from '@/components/ai/AIAssistant';
 
 const navItems = [
   { path: '/', label: 'Home', icon: LayoutDashboard },
@@ -12,6 +15,7 @@ const navItems = [
   { path: '/estimates', label: 'Estimates', icon: FileText },
   { path: '/invoices', label: 'Invoices', icon: FileSpreadsheet },
   { path: '/receipts', label: 'Receipts', icon: Receipt },
+  { path: '/systems', label: 'Systems', icon: Layers },
 ];
 
 interface AppLayoutProps {
@@ -29,50 +33,55 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="px-4 pt-4 pb-2 flex items-center gap-3">
-        <img src={logoSrc} alt="OF" className="h-8" />
-        <div className="flex-1">
-          <h1 className="font-serif text-foreground text-sm tracking-wide leading-none">OF STUDIO</h1>
-          <p className="text-[8px] text-primary uppercase tracking-[0.2em] font-semibold">manager</p>
-        </div>
-        {user && (
-          <div className="flex items-center gap-2">
-            {user.user_metadata?.avatar_url && (
-              <img src={user.user_metadata.avatar_url} alt="" className="h-7 w-7 rounded-full border border-border" />
-            )}
-            <button onClick={handleSignOut} className="p-1.5 text-muted-foreground hover:text-foreground rounded-full hover:bg-accent transition-all">
-              <LogOut size={16} />
-            </button>
+    <AIAssistantProvider>
+      <div className="min-h-screen bg-background flex flex-col">
+        <header className="px-4 pt-4 pb-2 flex items-center gap-3">
+          <img src={logoSrc} alt="OF" className="h-8" />
+          <div className="flex-1">
+            <h1 className="font-serif text-foreground text-sm tracking-wide leading-none">OF STUDIO</h1>
+            <p className="text-[8px] text-primary uppercase tracking-[0.2em] font-semibold">manager</p>
           </div>
-        )}
-      </header>
-
-      <main className="flex-1 overflow-y-auto px-4 py-4 pb-24 no-scrollbar">
-        {children}
-      </main>
-
-      <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-lg border-t border-border z-50">
-        <div className="flex justify-around items-center py-2 px-2 max-w-lg mx-auto">
-          {navItems.map(({ path, label, icon: Icon }) => {
-            const isActive = location.pathname === path;
-            return (
-              <button
-                key={path}
-                onClick={() => navigate(path)}
-                className={cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all",
-                  isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Icon size={20} strokeWidth={isActive ? 2.5 : 1.5} />
-                <span className="text-[9px] font-semibold uppercase tracking-wider">{label}</span>
+          {user && (
+            <div className="flex items-center gap-2">
+              {user.user_metadata?.avatar_url && (
+                <img src={user.user_metadata.avatar_url} alt="" className="h-7 w-7 rounded-full border border-border" />
+              )}
+              <button onClick={handleSignOut} className="p-1.5 text-muted-foreground hover:text-foreground rounded-full hover:bg-accent transition-all">
+                <LogOut size={16} />
               </button>
-            );
-          })}
-        </div>
-      </nav>
-    </div>
+            </div>
+          )}
+        </header>
+
+        <main className="flex-1 overflow-y-auto px-4 py-4 pb-24 no-scrollbar">
+          {children}
+        </main>
+
+        <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-lg border-t border-border z-50">
+          <div className="flex justify-around items-center py-2 px-1 max-w-lg mx-auto">
+            {navItems.map(({ path, label, icon: Icon }) => {
+              const isActive = location.pathname === path;
+              return (
+                <button
+                  key={path}
+                  onClick={() => navigate(path)}
+                  className={cn(
+                    "flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all",
+                    isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon size={18} strokeWidth={isActive ? 2.5 : 1.5} />
+                  <span className="text-[8px] font-semibold uppercase tracking-wider">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        <FloatingAIButton />
+        <AIAssistant />
+      </div>
+    </AIAssistantProvider>
   );
 };
 
