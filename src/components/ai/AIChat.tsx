@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Mic, Paperclip, Send, Square, X, Sparkles, Zap } from 'lucide-react';
+import { Mic, Paperclip, Camera, Send, Square, X, Sparkles, Zap } from 'lucide-react';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
 import { useAIChat } from '@/hooks/useAIChat';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
