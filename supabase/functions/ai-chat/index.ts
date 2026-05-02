@@ -1,5 +1,5 @@
-// AI chat streaming proxy to Lovable AI Gateway
-// Injects Systems Library + company defaults into the system prompt
+// AI chat with tool-calling (web search/scrape) + streaming final response.
+// Injects Systems Library + company defaults into the system prompt.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,6 +8,9 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const FC = "https://api.firecrawl.dev/v2";
+const MAX_TOOL_ROUNDS = 6;
+const MAX_SCRAPES_PER_REQUEST = 8;
 
 interface IncomingMessage {
   role: "user" | "assistant";
@@ -20,6 +23,39 @@ interface RequestBody {
   currentRecord?: unknown;
   hasImages?: boolean;
 }
+
+const tools = [
+  {
+    type: "function",
+    function: {
+      name: "web_search",
+      description: "Search the public web. Returns up to 5 results with url, title, description. Use this to find product/spec pages when the user names a brand.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "web_scrape",
+      description: "Fetch the readable text (markdown) of a single URL. Use this on URLs returned by web_search to read product specs.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Full https URL" },
+        },
+        required: ["url"],
+        additionalProperties: false,
+      },
+    },
+  },
+];
 
 function buildSystemPrompt(systemsLibrary: unknown[], settings: { overhead_pct: number; profit_pct: number; tax_rate: number; estimate_valid_days: number; }, currentPage?: string, currentRecord?: unknown) {
   return `You are the AI assistant for OF Manager, the business management app for
@@ -39,26 +75,56 @@ COMPANY DEFAULTS:
 SYSTEMS LIBRARY (use these specs when estimating; never invent costs/coverage):
 ${JSON.stringify(systemsLibrary, null, 2)}
 
-CAPABILITIES:
-You can create, read, update contacts, projects, estimates, invoices, receipts,
-documents, and photos by responding with structured JSON action blocks.
+WEB BROWSING:
+You can call web_search and web_scrape tools to look up information online —
+manufacturer websites, product spec sheets, MSDS, coverage rates, pricing.
+Use them whenever the user references a brand, product, or website you don't
+already have data for. Workflow:
+  1. web_search("New Age Artisans tadelkt") to find candidate URLs
+  2. web_scrape on the most relevant 1–3 URLs to read specs
+  3. Summarize what you found and ask for confirmation before adding anything
 
-ESTIMATING — when the user asks for an estimate or you have enough info to draft one:
-- Always confirm critical details (substrate, SF, system, access equipment) before generating
-- Inject the Systems Library: pick the matching system; use its coverage_rate, cost_per_unit, labor_rate_per_sf
-- Apply company defaults for overhead, profit, tax
-- Output the estimate as a single \`\`\`json fenced block following EXACTLY this schema:
+ACTIONS — emit a fenced \`\`\`action block to perform an operation in the app.
+Currently supported action type: add_system. Schema:
+
+\`\`\`action
+{
+  "type": "add_system",
+  "data": {
+    "name": "string (required)",
+    "manufacturer": "string|null",
+    "description": "1–2 sentence description",
+    "coats": number|null,
+    "coverage_rate": number|null,
+    "coverage_unit": "bag|gal|kit|can|null",
+    "cost_per_unit": number|null,
+    "labor_rate_per_sf": number|null,
+    "typical_equipment": "string|null",
+    "substrate_notes": "string|null",
+    "application_notes": "string|null",
+    "source_url": "string|null"
+  }
+}
+\`\`\`
+
+RULES for add_system:
+- ALWAYS scrape the source page first; never guess specs.
+- If the page doesn't state a value (cost, coverage, labor), set it to null —
+  never invent numbers. Shawn will fill them in by hand.
+- For "add all their systems": emit one separate \`\`\`action block per system.
+  Cap at ${MAX_SCRAPES_PER_REQUEST} scrapes per request.
+- Always show a short prose summary listing what you're about to add BEFORE
+  the action blocks. The user clicks Add on each card to confirm.
+- Set source_url to the page you scraped the data from.
+
+ESTIMATING — when the user asks for an estimate, output the estimate as a single
+\`\`\`json fenced block following EXACTLY this schema (this is separate from action blocks):
 
 \`\`\`json
 {
-  "title": "string",
-  "client_name": "string",
-  "project_address": "string",
-  "substrate": "string",
-  "system_name": "string",
-  "area_sf": 0,
-  "area_note": "confirmed from drawings | estimated from description",
-  "duration_estimate": "string",
+  "title": "string", "client_name": "string", "project_address": "string",
+  "substrate": "string", "system_name": "string", "area_sf": 0,
+  "area_note": "confirmed | estimated", "duration_estimate": "string",
   "sections": [
     { "label": "A — Surface Preparation", "line_items": [{"description":"","sub_note":"","qty":0,"unit":"SF","unit_cost":0,"total":0}], "subtotal": 0 },
     { "label": "B — Materials", "line_items": [], "subtotal": 0 },
@@ -67,43 +133,48 @@ ESTIMATING — when the user asks for an estimate or you have enough info to dra
     { "label": "E — Overhead & Profit", "line_items": [], "subtotal": 0 }
   ],
   "direct_cost_subtotal": 0,
-  "overhead_pct": ${settings.overhead_pct},
-  "overhead_amount": 0,
-  "profit_pct": ${settings.profit_pct},
-  "profit_amount": 0,
-  "tax_rate": ${settings.tax_rate},
-  "tax_amount": 0,
-  "total": 0,
-  "per_sf": 0,
-  "bid_range": {
-    "low": 0, "low_note": "tight scope, ideal conditions",
-    "mid": 0, "mid_note": "As estimated above",
-    "high": 0, "high_note": "added complexity / contingency"
-  },
-  "assumptions": ["string"],
-  "exclusions": ["string"],
-  "system_note": "2-3 sentences on why this system suits this substrate"
+  "overhead_pct": ${settings.overhead_pct}, "overhead_amount": 0,
+  "profit_pct": ${settings.profit_pct}, "profit_amount": 0,
+  "tax_rate": ${settings.tax_rate}, "tax_amount": 0,
+  "total": 0, "per_sf": 0,
+  "bid_range": { "low": 0, "low_note": "", "mid": 0, "mid_note": "", "high": 0, "high_note": "" },
+  "assumptions": ["string"], "exclusions": ["string"], "system_note": "string"
 }
 \`\`\`
 
-Show a short prose summary BEFORE the JSON block so Shawn can read it quickly.
+VOICE / TRANSCRIPTION: Do not auto-correct trade terms — Biolime, FasWall,
+Bauwerks, tadelkt, limewash, tilt panel, scissor lift, hawk and trowel,
+scratch coat, brown coat are correct.
 
-ACTIONS — for non-estimate database operations, emit a \`\`\`action block:
-\`\`\`action
-{ "type": "create_contact", "data": { ... } }
-\`\`\`
-Action types: create_contact, update_contact, create_project, update_project,
-create_receipt, mark_payment_received, query_tax_summary.
-Always describe what you're about to do in prose first and ask for confirmation
-before emitting the action block — unless the user has already confirmed.
+TONE: Professional peer. Concise confirmations, clear questions, no filler.`;
+}
 
-VOICE / TRANSCRIPTION:
-Do not auto-correct trade terms — Biolime, FasWall, Bauwerks, limewash,
-tilt panel, scissor lift, hawk and trowel, scratch coat, brown coat are correct.
+async function fcSearch(query: string, key: string) {
+  const r = await fetch(`${FC}/search`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ query, limit: 5 }),
+  });
+  const data = await r.json();
+  if (!r.ok) return { error: `Firecrawl search failed: ${r.status}` };
+  const results = (data?.data?.web ?? data?.data ?? []).slice(0, 5).map((x: any) => ({
+    url: x.url, title: x.title, description: x.description ?? x.snippet ?? "",
+  }));
+  return { results };
+}
 
-TONE:
-Professional peer. Shawn is the expert; you are his efficient assistant.
-Concise confirmations, clear questions, no filler.`;
+async function fcScrape(url: string, key: string) {
+  const r = await fetch(`${FC}/scrape`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+  });
+  const data = await r.json();
+  if (!r.ok) return { error: `Firecrawl scrape failed: ${r.status}` };
+  const md: string = data?.data?.markdown ?? data?.markdown ?? "";
+  const meta = data?.data?.metadata ?? data?.metadata ?? {};
+  const trimmed = md.length > 12000 ? md.slice(0, 12000) + "\n\n[...truncated...]" : md;
+  return { url, title: meta?.title, markdown: trimmed };
 }
 
 Deno.serve(async (req: Request) => {
@@ -112,87 +183,149 @@ Deno.serve(async (req: Request) => {
   try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") ?? "";
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const ANON_KEY = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify user
     const authHeader = req.headers.get("Authorization") ?? "";
     const userResp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: { Authorization: authHeader, apikey: ANON_KEY },
     });
     if (!userResp.ok) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const body = (await req.json()) as RequestBody;
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Fetch user's systems library (RLS scopes by their JWT)
     let systemsLibrary: unknown[] = [];
     try {
       const sysResp = await fetch(`${SUPABASE_URL}/rest/v1/systems?is_active=eq.true&select=*`, {
         headers: { Authorization: authHeader, apikey: ANON_KEY },
       });
       if (sysResp.ok) systemsLibrary = await sysResp.json();
-    } catch (e) {
-      console.warn("systems fetch failed", e);
-    }
+    } catch (e) { console.warn("systems fetch failed", e); }
 
     const settings = { overhead_pct: 8, profit_pct: 10, tax_rate: 8.75, estimate_valid_days: 30 };
     const systemPrompt = buildSystemPrompt(systemsLibrary, settings, body.currentPage, body.currentRecord);
 
-    // Auto-bump model when images are attached
     const hasImages = body.hasImages || body.messages.some((m) =>
       Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
     );
-    const model = hasImages ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview";
+    // Use pro for vision OR when tools may be needed; flash-preview supports tools as well
+    const model = hasImages ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash";
 
-    const upstream = await fetch(GATEWAY_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        stream: true,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...body.messages,
-        ],
-      }),
-    });
+    // Tool-calling loop: keep asking the gateway non-streaming until no more tool_calls.
+    type ChatMsg = Record<string, unknown>;
+    const conversation: ChatMsg[] = [
+      { role: "system", content: systemPrompt },
+      ...body.messages as unknown as ChatMsg[],
+    ];
+    let scrapesUsed = 0;
 
-    if (!upstream.ok) {
-      if (upstream.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit reached. Please wait a moment and try again." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (upstream.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Add credits in Lovable workspace settings." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const t = await upstream.text();
-      console.error("AI gateway error", upstream.status, t);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const upstream = await fetch(GATEWAY_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model, messages: conversation, tools, tool_choice: "auto" }),
       });
+
+      if (!upstream.ok) {
+        if (upstream.status === 429) {
+          return new Response(JSON.stringify({ error: "Rate limit reached. Please wait a moment and try again." }), {
+            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (upstream.status === 402) {
+          return new Response(JSON.stringify({ error: "AI credits exhausted. Add credits in Lovable workspace settings." }), {
+            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const t = await upstream.text();
+        console.error("AI gateway error", upstream.status, t);
+        return new Response(JSON.stringify({ error: "AI gateway error" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const data = await upstream.json();
+      const choice = data?.choices?.[0];
+      const msg = choice?.message ?? {};
+      const toolCalls = msg.tool_calls as Array<any> | undefined;
+
+      if (!toolCalls || toolCalls.length === 0) {
+        // Final answer — stream as a single SSE chunk + [DONE] for the existing client parser.
+        const finalText: string = msg.content ?? "";
+        const stream = new ReadableStream({
+          start(controller) {
+            const enc = new TextEncoder();
+            // Send in chunks so the UI feels live
+            const CHUNK = 60;
+            for (let i = 0; i < finalText.length; i += CHUNK) {
+              const piece = finalText.slice(i, i + CHUNK);
+              const payload = JSON.stringify({ choices: [{ delta: { content: piece } }] });
+              controller.enqueue(enc.encode(`data: ${payload}\n\n`));
+            }
+            controller.enqueue(enc.encode(`data: [DONE]\n\n`));
+            controller.close();
+          },
+        });
+        return new Response(stream, {
+          headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+        });
+      }
+
+      // Push assistant tool-call message and execute each tool
+      conversation.push({ role: "assistant", content: msg.content ?? "", tool_calls: toolCalls });
+
+      for (const tc of toolCalls) {
+        const fname = tc.function?.name;
+        let args: any = {};
+        try { args = JSON.parse(tc.function?.arguments ?? "{}"); } catch { /* ignore */ }
+        let result: unknown;
+
+        if (!FIRECRAWL_API_KEY) {
+          result = { error: "Web tools unavailable: FIRECRAWL_API_KEY not configured." };
+        } else if (fname === "web_search") {
+          result = await fcSearch(String(args.query ?? ""), FIRECRAWL_API_KEY);
+        } else if (fname === "web_scrape") {
+          if (scrapesUsed >= MAX_SCRAPES_PER_REQUEST) {
+            result = { error: `Scrape cap reached (${MAX_SCRAPES_PER_REQUEST}). Summarize with what you have.` };
+          } else {
+            scrapesUsed++;
+            result = await fcScrape(String(args.url ?? ""), FIRECRAWL_API_KEY);
+          }
+        } else {
+          result = { error: `Unknown tool: ${fname}` };
+        }
+
+        conversation.push({
+          role: "tool",
+          tool_call_id: tc.id,
+          name: fname,
+          content: JSON.stringify(result).slice(0, 16000),
+        });
+      }
     }
 
-    return new Response(upstream.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+    // Hit the round cap — return a graceful message
+    const stream = new ReadableStream({
+      start(controller) {
+        const enc = new TextEncoder();
+        const payload = JSON.stringify({ choices: [{ delta: { content: "I gathered partial info but hit my browsing limit. Want me to continue with what I have?" } }] });
+        controller.enqueue(enc.encode(`data: ${payload}\n\n`));
+        controller.enqueue(enc.encode(`data: [DONE]\n\n`));
+        controller.close();
+      },
     });
+    return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
   } catch (e) {
     console.error("ai-chat error", e);
     const msg = e instanceof Error ? e.message : "Unknown error";

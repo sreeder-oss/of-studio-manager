@@ -11,6 +11,7 @@ export interface ChatMessage {
   content: string;
   attachments?: ChatAttachment[];
   streaming?: boolean;
+  appliedActions?: string[];
 }
 
 interface AIAssistantContextValue {
@@ -19,6 +20,7 @@ interface AIAssistantContextValue {
   messages: ChatMessage[];
   appendMessage: (m: ChatMessage) => void;
   updateLastAssistant: (updater: (prev: string) => string, done?: boolean) => void;
+  markActionApplied: (messageId: string, actionId: string) => void;
   reset: () => void;
 }
 
@@ -51,11 +53,19 @@ export const AIAssistantProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
   }, []);
 
+  const markActionApplied = useCallback((messageId: string, actionId: string) => {
+    setMessages((prev) => prev.map((m) =>
+      m.id === messageId
+        ? { ...m, appliedActions: Array.from(new Set([...(m.appliedActions ?? []), actionId])) }
+        : m
+    ));
+  }, []);
+
   const reset = useCallback(() => setMessages([]), []);
 
   const value = useMemo(
-    () => ({ open, setOpen, messages, appendMessage, updateLastAssistant, reset }),
-    [open, messages, appendMessage, updateLastAssistant, reset]
+    () => ({ open, setOpen, messages, appendMessage, updateLastAssistant, markActionApplied, reset }),
+    [open, messages, appendMessage, updateLastAssistant, markActionApplied, reset]
   );
 
   return <AIAssistantContext.Provider value={value}>{children}</AIAssistantContext.Provider>;
