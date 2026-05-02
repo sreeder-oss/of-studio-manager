@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Shield, CheckCircle, Clock, Send } from 'lucide-react';
 import { useEstimate, useDeleteEstimate } from '@/hooks/useEstimates';
 import { useContact } from '@/hooks/useContacts';
+import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { LEGAL_TERMS } from '@/lib/legal';
 import { toast } from 'sonner';
 
@@ -12,6 +13,13 @@ const EstimateDetail: React.FC = () => {
   const { data: estimate, isLoading } = useEstimate(id!);
   const { data: contact } = useContact(estimate?.contact_id || '');
   const deleteEstimate = useDeleteEstimate();
+
+  useAIPageContext(estimate ? {
+    kind: 'estimate', id: estimate.id,
+    total: Number(estimate.total ?? 0),
+    contact_name: contact?.name ?? null,
+    status: estimate.status,
+  } : null);
 
   if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
 
