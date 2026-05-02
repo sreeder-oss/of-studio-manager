@@ -58,6 +58,14 @@ export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenIn
             <FileText size={12} /> Open estimate preview
           </button>
         )}
+        {hasInvoice && (
+          <button
+            onClick={() => onOpenInvoice(message.content)}
+            className="mt-2 w-full bg-primary/10 border border-primary/30 text-primary rounded-lg px-3 py-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest hover:bg-primary/20 transition-colors"
+          >
+            <FileText size={12} /> Open invoice preview
+          </button>
+        )}
         {actions.map((p) => (
           <ActionCard
             key={p.id}
