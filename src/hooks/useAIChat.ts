@@ -15,12 +15,14 @@ interface SendOptions {
 
 export const useAIChat = () => {
   const { messages, appendMessage, updateLastAssistant } = useAIAssistant();
+  const { currentRecord } = useAIPageContextValue();
   const [isLoading, setIsLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const send = useCallback(
-    async ({ text, attachments, currentPage, currentRecord }: SendOptions) => {
+    async ({ text, attachments, currentPage, currentRecord: overrideRecord }: SendOptions) => {
       if (!text.trim() && (!attachments || attachments.length === 0)) return;
+      const recordForRequest = overrideRecord ?? currentRecord ?? undefined;
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
