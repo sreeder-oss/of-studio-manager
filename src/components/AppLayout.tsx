@@ -4,7 +4,6 @@ import { LayoutDashboard, Users, FolderKanban, FileText, FileSpreadsheet, Receip
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import logoSrc from '@/assets/of-letters.svg';
-import { AIAssistantProvider } from '@/contexts/AIAssistantContext';
 import { FloatingAIButton } from '@/components/ai/FloatingAIButton';
 import { AIAssistant } from '@/components/ai/AIAssistant';
 
@@ -33,7 +32,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   };
 
   return (
-    <AIAssistantProvider>
+    <>
       <div className="min-h-screen bg-background flex flex-col">
         <header className="px-4 pt-4 pb-2 flex items-center gap-3">
           <img src={logoSrc} alt="OF" className="h-8" />
@@ -81,7 +80,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <FloatingAIButton />
         <AIAssistant />
       </div>
-    </AIAssistantProvider>
+    </>
   );
 };
 
