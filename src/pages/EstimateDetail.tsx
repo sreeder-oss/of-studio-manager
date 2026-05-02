@@ -1,10 +1,11 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Shield, CheckCircle, Clock, Send } from 'lucide-react';
+import { ChevronLeft, Shield, CheckCircle, Clock, Send, FileDown } from 'lucide-react';
 import { useEstimate, useDeleteEstimate } from '@/hooks/useEstimates';
 import { useContact } from '@/hooks/useContacts';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { LEGAL_TERMS } from '@/lib/legal';
+import { downloadEstimatePdf, coerceToEstimateDoc } from '@/lib/estimatePdf';
 import { toast } from 'sonner';
 
 const EstimateDetail: React.FC = () => {
@@ -55,15 +56,43 @@ const EstimateDetail: React.FC = () => {
     }
   };
 
+  const handleDownload = () => {
+    const doc = coerceToEstimateDoc(estimate.line_items, {
+      title: `Estimate — ${contact?.name || 'Client'}`,
+      client_name: contact?.name || '',
+      total: Number(estimate.total || 0),
+      tax_rate: Number(estimate.tax_rate || 0),
+    });
+    if (!doc) {
+      toast.error('No estimate data to export');
+      return;
+    }
+    // Fill in client_name from contact if missing
+    if (!doc.client_name && contact?.name) doc.client_name = contact.name;
+    if (!doc.project_address && contact?.address) doc.project_address = contact.address;
+    try {
+      downloadEstimatePdf(doc);
+      toast.success('PDF downloaded');
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to generate PDF');
+    }
+  };
+
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
       <div className="flex items-center justify-between">
         <button onClick={() => navigate('/estimates')} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[10px] font-bold uppercase tracking-widest">
           <ChevronLeft size={14} /> All Estimates
         </button>
-        <button onClick={handleDelete} className="text-[10px] text-destructive/60 hover:text-destructive font-bold uppercase tracking-widest">
-          Delete
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleDownload} className="flex items-center gap-1 text-primary hover:text-primary/80 text-[10px] font-bold uppercase tracking-widest">
+            <FileDown size={14} /> Download PDF
+          </button>
+          <button onClick={handleDelete} className="text-[10px] text-destructive/60 hover:text-destructive font-bold uppercase tracking-widest">
+            Delete
+          </button>
+        </div>
       </div>
 
       <div className="bg-card rounded-2xl border border-border p-5">
