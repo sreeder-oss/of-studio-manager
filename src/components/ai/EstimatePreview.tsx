@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { X, Save, Trash2, Plus } from 'lucide-react';
+import { X, Save, Trash2, Plus, FileDown } from 'lucide-react';
 import { recalcEstimate, type EstimateDoc } from '@/lib/estimateSchema';
+import { downloadEstimatePdf } from '@/lib/estimatePdf';
 import { useContacts } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useSaveEstimate } from '@/hooks/useEstimates';
@@ -193,9 +194,23 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
         )}
       </div>
 
-      <div className="p-3 border-t border-border">
+      <div className="p-3 border-t border-border flex gap-2">
+        <button
+          onClick={() => {
+            try {
+              downloadEstimatePdf(doc);
+              toast.success('PDF downloaded');
+            } catch (e) {
+              console.error(e);
+              toast.error('Failed to generate PDF');
+            }
+          }}
+          className="flex-1 bg-card border border-primary/40 text-primary py-2.5 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-primary/10"
+        >
+          <FileDown size={14} /> PDF
+        </button>
         <button onClick={handleSave} disabled={saveEstimate.isPending || !contactId}
-          className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-glow disabled:opacity-50 flex items-center justify-center gap-2">
+          className="flex-1 bg-primary text-primary-foreground py-2.5 rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-glow disabled:opacity-50 flex items-center justify-center gap-2">
           <Save size={14} /> {saveEstimate.isPending ? 'Saving...' : 'Save Estimate'}
         </button>
       </div>
