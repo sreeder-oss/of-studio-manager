@@ -153,10 +153,15 @@ export const AIChat: React.FC = () => {
             </div>
           )}
           <div className="flex items-end gap-1.5">
-            <button onClick={() => fileInputRef.current?.click()} className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
+            <button onClick={() => fileInputRef.current?.click()} title="Attach photos" className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
               <Paperclip size={16} />
             </button>
+            <button onClick={() => cameraInputRef.current?.click()} title="Take a site photo" className="p-2 text-muted-foreground hover:text-primary rounded-lg hover:bg-accent">
+              <Camera size={16} />
+            </button>
             <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+              onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
             <textarea
               value={input}
