@@ -455,10 +455,10 @@ function renderPricingTable(ctx: RenderCtx, startY: number): number {
     },
     columnStyles: {
       0: { cellWidth: 'auto' },
-      1: { cellWidth: 42 },
-      2: { cellWidth: 42 },
-      3: { cellWidth: 60 },
-      4: { cellWidth: 64 },
+      1: { cellWidth: 38 },
+      2: { cellWidth: 38 },
+      3: { cellWidth: 56 },
+      4: { cellWidth: 84 },
     },
     didDrawPage: () => {
       // header/footer redrawn on overflow pages
