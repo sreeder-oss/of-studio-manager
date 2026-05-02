@@ -36,12 +36,11 @@ Deno.serve(async (req) => {
       const r = await fetch(`${FC}/search`, {
         method: "POST",
         headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ query, limit: Math.min(Number(body.limit ?? 5), 8) }),
+        body: JSON.stringify({ query, limit: Math.min(Number(body.limit ?? 10), 15) }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(`Firecrawl search ${r.status}: ${JSON.stringify(data)}`);
-      // Normalize to compact list for the model
-      const results = (data?.data?.web ?? data?.data ?? []).slice(0, 8).map((x: any) => ({
+      const results = (data?.data?.web ?? data?.data ?? []).slice(0, 12).map((x: any) => ({
         url: x.url, title: x.title, description: x.description ?? x.snippet ?? "",
       }));
       return new Response(JSON.stringify({ results }), {
@@ -55,15 +54,25 @@ Deno.serve(async (req) => {
       const r = await fetch(`${FC}/scrape`, {
         method: "POST",
         headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+        body: JSON.stringify({ url, formats: ["markdown", "links"], onlyMainContent: true }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(`Firecrawl scrape ${r.status}: ${JSON.stringify(data)}`);
+      if (!r.ok) {
+        const status = r.status;
+        if (status === 401 || status === 403) {
+          return new Response(JSON.stringify({ url, paywalled: true, status, note: "Login or paid access required (e.g. dealer portal, course platform)." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw new Error(`Firecrawl scrape ${status}: ${JSON.stringify(data)}`);
+      }
       const md: string = data?.data?.markdown ?? data?.markdown ?? "";
       const meta = data?.data?.metadata ?? data?.metadata ?? {};
-      // Cap markdown length to keep token usage sane
+      const links: string[] = (data?.data?.links ?? data?.links ?? []).slice(0, 60);
       const trimmed = md.length > 12000 ? md.slice(0, 12000) + "\n\n[...truncated...]" : md;
-      return new Response(JSON.stringify({ url, title: meta?.title, markdown: trimmed }), {
+      // Detect paywall heuristics in body even when status is 200 (e.g. course portals returning marketing page)
+      const paywalled = /sign\s*in|log\s*in|members?\s*only|enroll now|course access|password|subscribe to access/i.test(md.slice(0, 2000)) && md.length < 1500;
+      return new Response(JSON.stringify({ url, title: meta?.title, markdown: trimmed, links, paywalled }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

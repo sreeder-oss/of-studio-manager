@@ -9,8 +9,8 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const FC = "https://api.firecrawl.dev/v2";
-const MAX_TOOL_ROUNDS = 6;
-const MAX_SCRAPES_PER_REQUEST = 8;
+const MAX_TOOL_ROUNDS = 10;
+const MAX_SCRAPES_PER_REQUEST = 12;
 
 interface IncomingMessage {
   role: "user" | "assistant";
@@ -75,14 +75,27 @@ COMPANY DEFAULTS:
 SYSTEMS LIBRARY (use these specs when estimating; never invent costs/coverage):
 ${JSON.stringify(systemsLibrary, null, 2)}
 
-WEB BROWSING:
-You can call web_search and web_scrape tools to look up information online —
-manufacturer websites, product spec sheets, MSDS, coverage rates, pricing.
-Use them whenever the user references a brand, product, or website you don't
-already have data for. Workflow:
-  1. web_search("New Age Artisans tadelkt") to find candidate URLs
-  2. web_scrape on the most relevant 1–3 URLs to read specs
-  3. Summarize what you found and ask for confirmation before adding anything
+WEB BROWSING — be a relentless researcher:
+You can call web_search and web_scrape to look up info on the open web.
+ALWAYS try multiple angles before reporting "not found":
+  1. Brand site directly: web_search("New Age Artisans tadelakt")
+  2. Spec sheet hunting: append "technical data sheet", "MSDS", "coverage", "spread rate", "mix ratio"
+  3. Retailer / distributor pages — they often list coverage + price even when the maker doesn't:
+     try Amazon, Build With Rise, Green Building Supply, Ecological Building Network, Eco-Building Products, distributor names
+  4. Forums / how-to guides for application notes when official docs are thin
+
+PAYWALL AWARENESS:
+Some makers (New Age Artisans Plaster Portal, dealer logins, Patreon, online course platforms)
+keep their real specs behind a paid login. If a scrape returns paywalled:true, or you see
+"sign in / members only / enroll now", do NOT pretend the data isn't out there — say so plainly:
+  "Coverage and cost for NAA live behind their paid Plaster Portal. I can: (a) add the system
+  shell now with the public info and you fill in your dealer numbers, or (b) pull comparable
+  specs from a similar product (American Clay, Meoded, Texston) so you have a starting point.
+  Which?"
+Then proceed based on the user's reply.
+
+When info IS partial, still emit add_system with everything you DO have, set unknowns to null,
+and in your prose summary list exactly which fields are missing and why.
 
 ACTIONS — emit one or more fenced \`\`\`action blocks to perform operations in
 the app. Each block is a separate confirmation card the user clicks to apply.
@@ -108,6 +121,17 @@ Supported action types:
   "name": "string (required)", "type": "Client|Vendor|Subcontractor|null",
   "status": "Active|Inactive|null", "email": "string|null",
   "phone": "string|null", "address": "string|null", "notes": "string|null"
+}}
+\`\`\`
+
+\`\`\`action
+{ "type": "update_system", "data": {
+  "id": "uuid (required)", "name": "string|null", "manufacturer": "string|null",
+  "description": "string|null", "coats": number|null,
+  "coverage_rate": number|null, "coverage_unit": "bag|gal|kit|can|null",
+  "cost_per_unit": number|null, "labor_rate_per_sf": number|null,
+  "typical_equipment": "string|null", "substrate_notes": "string|null",
+  "application_notes": "string|null", "source_url": "string|null"
 }}
 \`\`\`
 
@@ -200,11 +224,11 @@ async function fcSearch(query: string, key: string) {
   const r = await fetch(`${FC}/search`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query, limit: 5 }),
+    body: JSON.stringify({ query, limit: 10 }),
   });
   const data = await r.json();
   if (!r.ok) return { error: `Firecrawl search failed: ${r.status}` };
-  const results = (data?.data?.web ?? data?.data ?? []).slice(0, 5).map((x: any) => ({
+  const results = (data?.data?.web ?? data?.data ?? []).slice(0, 10).map((x: any) => ({
     url: x.url, title: x.title, description: x.description ?? x.snippet ?? "",
   }));
   return { results };
@@ -214,14 +238,21 @@ async function fcScrape(url: string, key: string) {
   const r = await fetch(`${FC}/scrape`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+    body: JSON.stringify({ url, formats: ["markdown", "links"], onlyMainContent: true }),
   });
   const data = await r.json();
-  if (!r.ok) return { error: `Firecrawl scrape failed: ${r.status}` };
+  if (!r.ok) {
+    if (r.status === 401 || r.status === 403) {
+      return { url, paywalled: true, status: r.status, note: "Login or paid access required." };
+    }
+    return { error: `Firecrawl scrape failed: ${r.status}` };
+  }
   const md: string = data?.data?.markdown ?? data?.markdown ?? "";
   const meta = data?.data?.metadata ?? data?.metadata ?? {};
+  const links: string[] = (data?.data?.links ?? data?.links ?? []).slice(0, 50);
   const trimmed = md.length > 12000 ? md.slice(0, 12000) + "\n\n[...truncated...]" : md;
-  return { url, title: meta?.title, markdown: trimmed };
+  const paywalled = /sign\s*in|log\s*in|members?\s*only|enroll now|course access|password|subscribe to access/i.test(md.slice(0, 2000)) && md.length < 1500;
+  return { url, title: meta?.title, markdown: trimmed, links, paywalled };
 }
 
 Deno.serve(async (req: Request) => {
@@ -266,8 +297,9 @@ Deno.serve(async (req: Request) => {
     const hasImages = body.hasImages || body.messages.some((m) =>
       Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
     );
-    // Use pro for vision OR when tools may be needed; flash-preview supports tools as well
-    const model = hasImages ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash";
+    // Pro for vision and for research-heavy requests; Pro is the default now since
+    // most AI requests in this app involve tool-using research or estimating.
+    const model = "google/gemini-2.5-pro";
 
     // Tool-calling loop: keep asking the gateway non-streaming until no more tool_calls.
     type ChatMsg = Record<string, unknown>;

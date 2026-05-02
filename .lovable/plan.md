@@ -1,94 +1,50 @@
-## Goal
+# Make the AI a stronger researcher
 
-Finish the AI Enhancement spec by shipping Phases 5–7 on top of the already-completed assistant + estimating engine + add_system action.
+## What's actually happening
 
-## Phase 5 — Voice & dictation polish
+Your AI used Firecrawl correctly. The problem is the **source**. New Age Artisans' public site (`newageartisans.com`) is a marketing + gallery site:
 
-Replace the current "tap mic, speak one phrase, tap stop" flow with a true hands-free experience.
+- No `/shop` or `/products` page exists (both 404)
+- All technical specs, coverage rates, mix ratios, and pricing live behind **Plaster Portal** — their **paid** training/dealer area (`/plaster-portal`)
+- Firecrawl can't log in, so coverage/cost truly isn't reachable from public pages
 
-**Changes to `src/hooks/useSpeechRecognition.ts`:**
-- Switch to `continuous: true`, `interimResults: true`.
-- Track final + interim text internally; expose `interim` for live preview.
-- **Auto-stop on silence**: arm a 1.5s timer on each result/audio event; when it fires, stop recognition.
-- Fire `onResult` once with the concatenated final text when `onend` runs (so caller gets one clean transcript, not chunks).
-- Add `silenceMs` option (default 1500).
+So "the AI can't find costs" is partly true (it's behind a paywall) and partly fixable (we can make it search harder and tell you clearly *why* it came up empty).
 
-**Changes to `src/components/ai/AIChat.tsx`:**
-- Show interim transcript live in the textarea placeholder area while listening (greyed italic preview under the mic indicator).
-- Add a hands-free toggle button (small `⚡` chip next to the mic). When **on**, after `onResult` fires we auto-call `handleSend()` instead of just dropping text into the input. Toggle persists in `localStorage`.
-- Persist toggle as `of-ai-handsfree=1`. Default **off** (matches your earlier guidance to err on the side of review-first).
+## Plan — 4 upgrades to the AI
 
-## Phase 6 — Action executors (wire the rest)
+### 1. Smarter model + more browsing budget
+In `supabase/functions/ai-chat/index.ts`:
+- Switch the default model from `google/gemini-2.5-flash` → **`google/gemini-2.5-pro`** for tool-using requests (better at multi-step research, reading spec sheets, and reasoning across pages). Keep flash only for trivial single-turn replies.
+- Raise `MAX_TOOL_ROUNDS` from 6 → **10** and `MAX_SCRAPES_PER_REQUEST` from 8 → **12** so it can chase sub-pages (PDFs, MSDS, tech data sheets).
 
-The system prompt already advertises these action types — only `add_system` actually executes today. We extend `actionSchema.ts` and `useAIActions.ts` to handle the rest, and `ActionCard.tsx` renders a small confirmation card for each.
+### 2. Paywall / portal awareness in the system prompt
+Add explicit rules so the AI:
+- **Tries multiple search angles** before giving up: brand site, `site:` searches, "technical data sheet", "MSDS", "coverage", "tadelakt mix ratio", and third-party retailers (Amazon, Build With Rise, distributor sites) which often list coverage and price even when the maker doesn't.
+- Recognizes paywalled / login-protected pages (Plaster Portal, dealer logins, Patreon, course platforms) and **says so explicitly** in its reply: *"Coverage and pricing for NAA are behind their paid Plaster Portal — I can add the system shell now and you can fill in your dealer pricing, or I can pull comparable specs from a similar tadelakt product (e.g. American Clay, Meoded, Texston). Which?"*
+- For `add_system`, when web data is incomplete, sets unknown fields to `null` and **lists what's missing in the prose summary**, instead of silently omitting things or refusing.
 
-**New action types (Zod schemas in `src/lib/actionSchema.ts`):**
-- `create_contact` → name (required), type, status, email, phone, address, notes
-- `update_contact` → id (required) + same optional fields
-- `create_project` → name (required), contact_id, status, address, start_date, end_date, contract_value, notes
-- `create_receipt` → vendor, amount (required), receipt_date (required, YYYY-MM-DD), category, project_id, tax_deductible, notes
-- `mark_payment_received` → invoice_id (required), paid_date (optional, defaults today)
-- `query_tax_summary` → year (string, e.g. "2026")
+### 3. Better Firecrawl usage
+In `web-tools` and the inline `fcSearch` / `fcScrape` helpers in `ai-chat`:
+- Bump `search` limit from 5 → **10** results so the model has more URLs to choose from.
+- On `scrape`, also request `links` format alongside `markdown` so the model can discover product/spec sub-pages from the homepage in one shot (today it only sees rendered text).
+- Detect HTTP 401/403/login-redirect responses and return a structured `{ paywalled: true, url }` so the model can route around it.
 
-**Executors in `src/hooks/useAIActions.ts`:**
-- Each action gets a branch in `run(action)` calling the matching mutation hook (`useSaveContact`, `useSaveProject`, `useSaveReceipt`, `useSaveInvoice`).
-- `mark_payment_received`: load invoice via supabase, then call `useSaveInvoice` with `{ id, paid: true, paid_date }`.
-- `query_tax_summary`: navigate to `/reports/tax?year=...` (uses `useNavigate`). No mutation; closes the assistant after navigation.
+### 4. Surface a dealer/cost fallback
+Add a new action type **`update_system`** so when you say *"NAA Tadelakt cost is $XX/bag, coverage 35sf"*, the AI patches the row directly instead of asking you to go edit it. Card UI: shows the diff (old → new) with a Save button.
 
-**Card UI (`src/components/ai/ActionCard.tsx`):**
-- Generic header (uppercase action type label) + summary of the most relevant fields per action type, plus Add/Confirm + Dismiss buttons (same pattern as add_system).
-- Per-action renderers (small switch in the same file) so each card shows the right preview fields. Examples:
-  - create_contact → name, type, email/phone
-  - create_project → name, address, contact name (resolved from contacts), contract_value
-  - create_receipt → vendor, amount, date, category
-  - mark_payment_received → invoice id (short), paid date
-  - query_tax_summary → year + "Open report"
-- Confirm button labels: "Create", "Update", "Mark paid", "Open report".
+## What the AI will do differently after this
+For *"add all New Age Artisans plaster systems including Tadelakt"* it will:
+1. Search broadly (NAA + tadelakt + retailers + spec sheets)
+2. Map the NAA site to find every system page (Marrakesh, Tadelakt Blend, Lime Wash, etc.)
+3. Scrape each one, plus any retailer pages with pricing
+4. Emit one `add_system` block per system with **everything it could find**, `null` for paywalled fields, and a clear note: *"Coverage/cost not public — Plaster Portal members only. Add your dealer numbers via the edit card."*
 
-**System prompt update in `supabase/functions/ai-chat/index.ts`:**
-- Replace the current single-action-type schema with a discriminated list documenting all six types, including required fields and date format conventions.
-- Reinforce the rule: prose summary first, action block(s) only after explicit confirmation cue from the user (e.g. "yes", "do it", "go ahead").
-- For `create_receipt`: instruct the AI to suggest a category from the existing list (Materials, Labor, Equipment, Subcontractor, Vehicle, Insurance, Office, Permits, Miscellaneous) and to set `tax_deductible: true` by default for business expenses.
+## Files to edit
+- `supabase/functions/ai-chat/index.ts` — model switch, round/scrape caps, prompt rewrites, `update_system` tool
+- `supabase/functions/web-tools/index.ts` — limit bumps, links format, paywall detection
+- `src/lib/actionSchema.ts` — add `update_system` schema
+- `src/hooks/useAIActions.ts` — `update_system` executor
+- `src/components/ai/ActionCard.tsx` — diff renderer for `update_system`
 
-## Phase 7 — Page-aware context
-
-Today `currentPage` is sent but `currentRecord` is always `null`. Make the assistant aware of *which record* you're looking at so "summarize this project" or "draft an invoice for this estimate" works without restating context.
-
-**New: `src/contexts/AIContextProvider.tsx`**
-- Thin context that exposes `setCurrentRecord(record)` / `clearCurrentRecord()`.
-- Lives alongside `AIAssistantProvider` (added in `App.tsx` so all routes can call it).
-
-**New hook: `src/hooks/useAIPageContext.ts`**
-- `useAIPageContext(record)` — `useEffect` that calls `setCurrentRecord` on mount and clears on unmount.
-- Detail pages call this with a compact summary object (NOT the raw row — only the fields useful to the AI):
-  - `ProjectDetail`: `{ kind: 'project', id, name, status, address, contact_name, contract_value }`
-  - `EstimateDetail`: `{ kind: 'estimate', id, total, project_name, contact_name }`
-  - `InvoiceDetail`: `{ kind: 'invoice', id, total, paid, due_date, project_name }`
-  - `ContactDetail`: `{ kind: 'contact', id, name, email, phone, type }`
-
-**Integration:**
-- `useAIChat` reads `currentRecord` from the new context (instead of always sending `undefined`) and includes it in the request body.
-- The existing `ai-chat` edge function already injects `currentRecord` into the system prompt — no backend change needed beyond mentioning the new shape in the prompt's CURRENT CONTEXT example.
-
-## Files
-
-**New**
-- `src/contexts/AIContextProvider.tsx`
-- `src/hooks/useAIPageContext.ts`
-
-**Modified**
-- `src/hooks/useSpeechRecognition.ts` — continuous + interim + silence auto-stop
-- `src/components/ai/AIChat.tsx` — interim preview, hands-free toggle
-- `src/lib/actionSchema.ts` — add 5 new action variants to the discriminated union
-- `src/hooks/useAIActions.ts` — executors for the new actions
-- `src/components/ai/ActionCard.tsx` — per-action card renderers
-- `src/hooks/useAIChat.ts` — pull currentRecord from new context
-- `src/App.tsx` — wrap with `AIContextProvider`
-- `src/pages/ProjectDetail.tsx`, `EstimateDetail.tsx`, `InvoiceDetail.tsx`, `ContactDetail.tsx` — call `useAIPageContext(...)`
-- `supabase/functions/ai-chat/index.ts` — expanded action schema in system prompt + receipt category guidance
-
-## Out of scope
-
-- No new database tables, RLS, or storage buckets.
-- No changes to the existing manual editors for contacts/projects/estimates/invoices/receipts.
-- No persistent chat history (still in-memory per session, per your earlier decision).
+## Note on cost
+Switching the default to Gemini 2.5 Pro costs more credits per request than Flash. Worth it for research tasks; if you'd rather keep Flash as default and only auto-promote to Pro when web tools get triggered, say the word and I'll wire that branch instead.

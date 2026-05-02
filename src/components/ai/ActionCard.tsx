@@ -11,6 +11,7 @@ interface Props {
 
 const META: Record<AIAction['type'], { label: string; icon: LucideIcon; cta: string }> = {
   add_system:           { label: 'Add system',          icon: Plus,        cta: 'Add' },
+  update_system:        { label: 'Update system',       icon: UserCog,     cta: 'Save' },
   create_contact:       { label: 'New contact',         icon: UserPlus,    cta: 'Create' },
   update_contact:       { label: 'Update contact',      icon: UserCog,     cta: 'Update' },
   create_project:       { label: 'New project',         icon: FolderPlus,  cta: 'Create' },
@@ -28,8 +29,9 @@ const Field: React.FC<{ k: string; v: React.ReactNode }> = ({ k, v }) => (
 
 const renderBody = (a: AIAction): React.ReactNode => {
   switch (a.type) {
-    case 'add_system': {
-      const d = a.data;
+    case 'add_system':
+    case 'update_system': {
+      const d = a.data as any;
       return (
         <>
           {d.description && <p className="text-foreground/70 mb-1.5 line-clamp-2">{d.description}</p>}
@@ -101,6 +103,7 @@ const renderBody = (a: AIAction): React.ReactNode => {
 const titleFor = (a: AIAction): string => {
   switch (a.type) {
     case 'add_system': return a.data.name;
+    case 'update_system': return a.data.name ?? `System ${a.data.id.slice(0, 8)}…`;
     case 'create_contact': return a.data.name;
     case 'update_contact': return a.data.name ?? `Contact ${a.data.id.slice(0, 8)}…`;
     case 'create_project': return a.data.name;
@@ -110,8 +113,10 @@ const titleFor = (a: AIAction): string => {
   }
 };
 
-const sourceUrlOf = (a: AIAction): string | null =>
-  a.type === 'add_system' ? (a.data.source_url ?? null) : null;
+const sourceUrlOf = (a: AIAction): string | null => {
+  if (a.type === 'add_system' || a.type === 'update_system') return (a.data as any).source_url ?? null;
+  return null;
+};
 
 export const ActionCard: React.FC<Props> = ({ parsed, applied, onApplied }) => {
   const { run } = useAIActions();
