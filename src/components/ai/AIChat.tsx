@@ -100,6 +100,11 @@ export const AIChat: React.FC = () => {
     if (e) setPreviewEstimate(e);
   };
 
+  const openInvoice = (text: string) => {
+    const i = parseInvoiceFromText(text);
+    if (i) setPreviewInvoice(i);
+  };
+
   return (
     <div className="flex h-full">
       {/* Chat column */}
