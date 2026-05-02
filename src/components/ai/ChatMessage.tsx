@@ -3,6 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import { Sparkles, FileText } from 'lucide-react';
 import type { ChatMessage as Msg } from '@/contexts/AIAssistantContext';
 import { parseEstimateFromText } from '@/lib/estimateSchema';
+import { parseActionsFromText, stripActionBlocks } from '@/lib/actionSchema';
+import { ActionCard } from './ActionCard';
+import { useAIAssistant } from '@/contexts/AIAssistantContext';
 
 interface Props {
   message: Msg;
@@ -10,12 +13,15 @@ interface Props {
 }
 
 export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate }) => {
+  const { markActionApplied } = useAIAssistant();
   const isUser = message.role === 'user';
   const hasEstimate = !isUser && !!parseEstimateFromText(message.content);
-  // Hide raw json fenced block from rendered prose if estimate was extracted
-  const display = hasEstimate
-    ? message.content.replace(/```json\s*[\s\S]*?```/g, '').trim()
-    : message.content;
+  const actions = isUser ? [] : parseActionsFromText(message.content);
+
+  // Hide raw fenced blocks from prose
+  let display = message.content;
+  if (hasEstimate) display = display.replace(/```json\s*[\s\S]*?```/g, '').trim();
+  if (actions.length > 0) display = stripActionBlocks(display);
 
   return (
     <div className={`flex gap-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -39,7 +45,7 @@ export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate }) => {
             <ReactMarkdown>{display}</ReactMarkdown>
           </div>
         ) : (
-          message.streaming ? <span className="inline-block w-2 h-3 bg-current animate-pulse" /> : null
+          message.streaming && actions.length === 0 ? <span className="inline-block w-2 h-3 bg-current animate-pulse" /> : null
         )}
         {hasEstimate && (
           <button
@@ -49,6 +55,14 @@ export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate }) => {
             <FileText size={12} /> Open estimate preview
           </button>
         )}
+        {actions.map((p) => (
+          <ActionCard
+            key={p.id}
+            parsed={p}
+            applied={!!message.appliedActions?.includes(p.id)}
+            onApplied={(id) => markActionApplied(message.id, id)}
+          />
+        ))}
       </div>
     </div>
   );
