@@ -8,9 +8,21 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const FC = "https://api.firecrawl.dev/v2";
 const MAX_TOOL_ROUNDS = 10;
 const MAX_SCRAPES_PER_REQUEST = 12;
+
+// Whitelist of OpenRouter model slugs the client may request. Anything else
+// falls back to GPT-5 high-reasoning on Lovable AI.
+const OPENROUTER_MODELS = new Set([
+  "openai/gpt-5",
+  "openai/gpt-5-pro",
+  "anthropic/claude-opus-4.5",
+  "anthropic/claude-sonnet-4.5",
+  "google/gemini-3-pro-preview",
+  "x-ai/grok-4",
+]);
 
 interface IncomingMessage {
   role: "user" | "assistant";
@@ -22,6 +34,8 @@ interface RequestBody {
   currentPage?: string;
   currentRecord?: unknown;
   hasImages?: boolean;
+  /** Optional model override. If it matches an OpenRouter slug, route through OpenRouter. */
+  model?: string;
 }
 
 const tools = [
@@ -297,9 +311,23 @@ Deno.serve(async (req: Request) => {
     const hasImages = body.hasImages || body.messages.some((m) =>
       Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
     );
-    // Pro for vision and for research-heavy requests; Pro is the default now since
-    // most AI requests in this app involve tool-using research or estimating.
-    const model = "google/gemini-2.5-pro";
+
+    // Provider routing. Default = Lovable AI / GPT-5 with high reasoning.
+    // If client passed an OpenRouter-whitelisted slug, use OpenRouter instead.
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
+    const requestedModel = body.model?.trim() || "";
+    const useOpenRouter = !!requestedModel && OPENROUTER_MODELS.has(requestedModel) && !!OPENROUTER_API_KEY;
+    const model = useOpenRouter
+      ? requestedModel
+      : (requestedModel.startsWith("google/") || requestedModel.startsWith("openai/") ? requestedModel : "openai/gpt-5");
+
+    const upstreamUrl = useOpenRouter ? OPENROUTER_URL : GATEWAY_URL;
+    const upstreamKey = useOpenRouter ? OPENROUTER_API_KEY : LOVABLE_API_KEY;
+    const upstreamExtraHeaders: Record<string, string> = useOpenRouter
+      ? { "HTTP-Referer": "https://of-manager.lovable.app", "X-Title": "OF Manager" }
+      : {};
+
+    console.log("ai-chat routing", { provider: useOpenRouter ? "openrouter" : "lovable", model });
 
     // Tool-calling loop: keep asking the gateway non-streaming until no more tool_calls.
     type ChatMsg = Record<string, unknown>;
@@ -310,10 +338,24 @@ Deno.serve(async (req: Request) => {
     let scrapesUsed = 0;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const upstream = await fetch(GATEWAY_URL, {
+      const reqBody: Record<string, unknown> = {
+        model,
+        messages: conversation,
+        tools,
+        tool_choice: "auto",
+      };
+      // GPT-5 family supports `reasoning` for deeper thinking on hard tasks.
+      if (model.startsWith("openai/gpt-5")) {
+        reqBody.reasoning = { effort: "high" };
+      }
+      const upstream = await fetch(upstreamUrl, {
         method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model, messages: conversation, tools, tool_choice: "auto" }),
+        headers: {
+          Authorization: `Bearer ${upstreamKey}`,
+          "Content-Type": "application/json",
+          ...upstreamExtraHeaders,
+        },
+        body: JSON.stringify(reqBody),
       });
 
       if (!upstream.ok) {
