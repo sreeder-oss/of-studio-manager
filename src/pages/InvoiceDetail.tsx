@@ -147,9 +147,13 @@ const InvoiceDetail: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-4 pt-3 border-t border-border">
+        <div className="mt-4 pt-3 border-t border-border flex gap-2">
+          <button onClick={handleDownload}
+            className="flex-1 bg-card border border-primary/40 text-primary py-2.5 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-primary/10">
+            <FileDown size={14} /> PDF
+          </button>
           <button onClick={togglePaid} disabled={saveInvoice.isPending}
-            className={`w-full py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all disabled:opacity-50 ${
+            className={`flex-1 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all disabled:opacity-50 ${
               invoice.paid
                 ? 'bg-muted text-muted-foreground border border-border hover:bg-destructive/10 hover:text-destructive'
                 : 'bg-primary text-primary-foreground shadow-glow'
