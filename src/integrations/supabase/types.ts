@@ -359,6 +359,63 @@ export type Database = {
           },
         ]
       }
+      systems: {
+        Row: {
+          application_notes: string | null
+          coats: number | null
+          cost_per_unit: number | null
+          coverage_rate: number | null
+          coverage_unit: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          labor_rate_per_sf: number | null
+          manufacturer: string | null
+          name: string
+          substrate_notes: string | null
+          typical_equipment: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          application_notes?: string | null
+          coats?: number | null
+          cost_per_unit?: number | null
+          coverage_rate?: number | null
+          coverage_unit?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          labor_rate_per_sf?: number | null
+          manufacturer?: string | null
+          name: string
+          substrate_notes?: string | null
+          typical_equipment?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Update: {
+          application_notes?: string | null
+          coats?: number | null
+          cost_per_unit?: number | null
+          coverage_rate?: number | null
+          coverage_unit?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          labor_rate_per_sf?: number | null
+          manufacturer?: string | null
+          name?: string
+          substrate_notes?: string | null
+          typical_equipment?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
