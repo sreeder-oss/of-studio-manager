@@ -6,8 +6,10 @@ import { useAIChat } from '@/hooks/useAIChat';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { ChatMessage } from './ChatMessage';
 import { EstimatePreview } from './EstimatePreview';
+import { InvoicePreview } from './InvoicePreview';
 import { ModelPicker } from './ModelPicker';
 import { parseEstimateFromText, type EstimateDoc } from '@/lib/estimateSchema';
+import { parseInvoiceFromText, type InvoiceDoc } from '@/lib/invoiceSchema';
 import type { ChatAttachment } from '@/contexts/AIAssistantContext';
 
 const HANDS_FREE_KEY = 'of-ai-handsfree';
