@@ -629,12 +629,8 @@ export interface BuildEstimatePdfOptions {
   filename?: string;
 }
 
-/**
- * Build the PDF and trigger a browser download.
- * Accepts a structured EstimateDoc; if your storage uses the legacy flat
- * line-items shape, convert it first before calling this.
- */
-export function downloadEstimatePdf(raw: EstimateDoc, opts: BuildEstimatePdfOptions = {}) {
+/** Build the jsPDF document in memory (no I/O). */
+export function buildEstimatePdf(raw: EstimateDoc, opts: BuildEstimatePdfOptions = {}): jsPDF {
   const company: CompanyInfo = { ...DEFAULT_COMPANY, ...(opts.company || {}) };
   const est = recalcEstimate(raw);
 
@@ -650,18 +646,21 @@ export function downloadEstimatePdf(raw: EstimateDoc, opts: BuildEstimatePdfOpti
   y = renderTiers(ctx, y);
   renderBack(ctx, y);
 
-  // Finalize footer page numbers (autoTable may have added pages without
-  // calling drawFooter; sweep all pages and re-stamp).
+  // Sweep all pages and re-stamp footer with correct page numbers
   const total = doc.internal.pages.length - 1;
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
-    // Clear bottom strip and redraw footer with correct page number
     doc.setFillColor(255, 255, 255);
     doc.rect(0, PAGE_H - 44, PAGE_W, 44, 'F');
     drawFooter({ ...ctx, pageNum: p });
   }
+  return doc;
+}
 
-  const safeTitle = (est.title || 'Estimate').replace(/[^a-z0-9]+/gi, '_').slice(0, 60);
+/** Build and trigger a browser download. */
+export function downloadEstimatePdf(raw: EstimateDoc, opts: BuildEstimatePdfOptions = {}) {
+  const doc = buildEstimatePdf(raw, opts);
+  const safeTitle = (raw.title || 'Estimate').replace(/[^a-z0-9]+/gi, '_').slice(0, 60);
   const filename = opts.filename || `OF_Estimate_${safeTitle}.pdf`;
   doc.save(filename);
 }
