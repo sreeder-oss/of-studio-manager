@@ -39,6 +39,25 @@ export const useAIActions = () => {
           toast.success(`Added system: ${d.name}`);
           return true;
         }
+        case 'update_system': {
+          const d = action.data;
+          await saveSystem.mutateAsync({
+            id: d.id,
+            name: d.name ?? '',
+            manufacturer: d.manufacturer ?? undefined,
+            description: d.description ?? undefined,
+            coats: d.coats ?? undefined,
+            coverage_rate: d.coverage_rate ?? undefined,
+            coverage_unit: d.coverage_unit ?? undefined,
+            cost_per_unit: d.cost_per_unit ?? undefined,
+            labor_rate_per_sf: d.labor_rate_per_sf ?? undefined,
+            typical_equipment: d.typical_equipment ?? undefined,
+            substrate_notes: d.substrate_notes ?? undefined,
+            application_notes: d.application_notes ?? undefined,
+          });
+          toast.success('System updated');
+          return true;
+        }
         case 'create_contact': {
           const d = action.data;
           await saveContact.mutateAsync({

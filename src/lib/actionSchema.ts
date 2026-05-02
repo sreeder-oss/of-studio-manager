@@ -56,8 +56,13 @@ export const queryTaxSummarySchema = z.object({
   year: z.string(),
 });
 
+export const updateSystemSchema = addSystemDataSchema.partial().extend({
+  id: z.string().uuid(),
+});
+
 export const actionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('add_system'), data: addSystemDataSchema }),
+  z.object({ type: z.literal('update_system'), data: updateSystemSchema }),
   z.object({ type: z.literal('create_contact'), data: createContactSchema }),
   z.object({ type: z.literal('update_contact'), data: updateContactSchema }),
   z.object({ type: z.literal('create_project'), data: createProjectSchema }),
@@ -74,6 +79,7 @@ export type CreateProjectData = z.infer<typeof createProjectSchema>;
 export type CreateReceiptData = z.infer<typeof createReceiptSchema>;
 export type MarkPaymentReceivedData = z.infer<typeof markPaymentReceivedSchema>;
 export type QueryTaxSummaryData = z.infer<typeof queryTaxSummarySchema>;
+export type UpdateSystemData = z.infer<typeof updateSystemSchema>;
 
 export interface ParsedAction {
   /** Stable id (hash of fenced block contents) so we can mark it applied. */
