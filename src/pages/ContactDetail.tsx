@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronRight, Phone, Mail, MapPin, ShieldCheck, Trash2 } from 'lucide-react';
 import { useContact, useDeleteContact } from '@/hooks/useContacts';
+import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { PRIVACY_NOTICE } from '@/lib/legal';
 import { toast } from 'sonner';
 
@@ -10,6 +11,11 @@ const ContactDetail: React.FC = () => {
   const navigate = useNavigate();
   const { data: contact, isLoading } = useContact(id!);
   const deleteContactMut = useDeleteContact();
+
+  useAIPageContext(contact ? {
+    kind: 'contact', id: contact.id, name: contact.name,
+    email: contact.email, phone: contact.phone, type: contact.type,
+  } : null);
 
   if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
 

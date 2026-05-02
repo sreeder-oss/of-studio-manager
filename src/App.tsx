@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AIAssistantProvider } from "@/contexts/AIAssistantContext";
+import { AIContextProvider } from "@/contexts/AIContextProvider";
 import AppLayout from "./components/AppLayout";
 import Index from "./pages/Index";
 import Contacts from "./pages/Contacts";
@@ -65,10 +66,12 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <AIAssistantProvider>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/*" element={<ProtectedRoutes />} />
-            </Routes>
+            <AIContextProvider>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/*" element={<ProtectedRoutes />} />
+              </Routes>
+            </AIContextProvider>
           </AIAssistantProvider>
         </AuthProvider>
       </BrowserRouter>

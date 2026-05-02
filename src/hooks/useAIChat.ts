@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAIAssistant, type ChatAttachment, type ChatMessage } from '@/contexts/AIAssistantContext';
+import { useAIPageContextValue } from '@/contexts/AIContextProvider';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
@@ -14,12 +15,14 @@ interface SendOptions {
 
 export const useAIChat = () => {
   const { messages, appendMessage, updateLastAssistant } = useAIAssistant();
+  const { currentRecord } = useAIPageContextValue();
   const [isLoading, setIsLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const send = useCallback(
-    async ({ text, attachments, currentPage, currentRecord }: SendOptions) => {
+    async ({ text, attachments, currentPage, currentRecord: overrideRecord }: SendOptions) => {
       if (!text.trim() && (!attachments || attachments.length === 0)) return;
+      const recordForRequest = overrideRecord ?? currentRecord ?? undefined;
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -62,7 +65,7 @@ export const useAIChat = () => {
           body: JSON.stringify({
             messages: apiMessages,
             currentPage,
-            currentRecord,
+            currentRecord: recordForRequest,
             hasImages: !!attachments && attachments.length > 0,
           }),
         });
@@ -139,7 +142,7 @@ export const useAIChat = () => {
         abortRef.current = null;
       }
     },
-    [messages, appendMessage, updateLastAssistant]
+    [messages, appendMessage, updateLastAssistant, currentRecord]
   );
 
   const cancel = useCallback(() => {

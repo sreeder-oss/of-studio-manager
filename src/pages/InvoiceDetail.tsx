@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { useInvoice, useSaveInvoice } from '@/hooks/useInvoices';
 import { useContact } from '@/hooks/useContacts';
+import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { LEGAL_TERMS, PRIVACY_NOTICE } from '@/lib/legal';
 import { toast } from 'sonner';
 
@@ -12,6 +13,12 @@ const InvoiceDetail: React.FC = () => {
   const { data: invoice, isLoading } = useInvoice(id!);
   const { data: contact } = useContact(invoice?.contact_id || '');
   const saveInvoice = useSaveInvoice();
+
+  useAIPageContext(invoice ? {
+    kind: 'invoice', id: invoice.id,
+    total: Number(invoice.total ?? 0),
+    paid: invoice.paid, due_date: invoice.due_date,
+  } : null);
 
   if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
 

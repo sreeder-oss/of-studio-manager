@@ -1,76 +1,94 @@
 ## Goal
 
-Let the AI assistant browse the web during a chat. When you say "go to newageartisans.com and add their Tadelkt system" (or "add all their systems"), it scrapes the site, extracts each system's specs, and creates entries in your Systems Library — with a confirmation step before anything is written.
+Finish the AI Enhancement spec by shipping Phases 5–7 on top of the already-completed assistant + estimating engine + add_system action.
 
-## How it will work (user-facing)
+## Phase 5 — Voice & dictation polish
 
-1. You ask: *"Go to newageartisans.com, find their Tadelkt waterproof plaster system, and add it to my library."*
-2. The AI calls a web-search tool, then a scrape tool on the matching page(s).
-3. It returns a short summary with the parsed fields (name, manufacturer, description, coats, coverage, cost, labor, substrate, application notes) and asks: *"Add these 4 systems? Yes/No."*
-4. On confirmation it emits an `add_system` action block per system, the chat UI calls `useSaveSystem`, and you see them appear in `/systems`.
-5. Same flow works for "add all their systems" — it maps the site, scrapes each product page, and batches them.
+Replace the current "tap mic, speak one phrase, tap stop" flow with a true hands-free experience.
 
-## Technical changes
+**Changes to `src/hooks/useSpeechRecognition.ts`:**
+- Switch to `continuous: true`, `interimResults: true`.
+- Track final + interim text internally; expose `interim` for live preview.
+- **Auto-stop on silence**: arm a 1.5s timer on each result/audio event; when it fires, stop recognition.
+- Fire `onResult` once with the concatenated final text when `onend` runs (so caller gets one clean transcript, not chunks).
+- Add `silenceMs` option (default 1500).
 
-### 1. Edge function: `web-tools` (new)
-`supabase/functions/web-tools/index.ts` — single endpoint with two operations the AI calls via tool-calling:
-- `web_search(query)` → uses **Firecrawl `/v2/search`** (already a known connector pattern). Returns top 5 results with url/title/snippet.
-- `web_scrape(url)` → uses **Firecrawl `/v2/scrape`** with `formats: ['markdown']`, `onlyMainContent: true`. Returns clean markdown.
+**Changes to `src/components/ai/AIChat.tsx`:**
+- Show interim transcript live in the textarea placeholder area while listening (greyed italic preview under the mic indicator).
+- Add a hands-free toggle button (small `⚡` chip next to the mic). When **on**, after `onResult` fires we auto-call `handleSend()` instead of just dropping text into the input. Toggle persists in `localStorage`.
+- Persist toggle as `of-ai-handsfree=1`. Default **off** (matches your earlier guidance to err on the side of review-first).
 
-Requires `FIRECRAWL_API_KEY`. I'll prompt you to connect the Firecrawl connector (free tier covers this easily). JWT-verified, CORS enabled.
+## Phase 6 — Action executors (wire the rest)
 
-### 2. Upgrade `ai-chat` edge function to support tool-calling
-- Switch model to `google/gemini-2.5-pro` when tools are needed (flash-preview supports tools too, keep as default).
-- Add `tools: [web_search, web_scrape, add_system]` to the gateway request.
-- Implement the **tool-call loop**: when the model returns `tool_calls`, the function executes them server-side (web_search/web_scrape call the Firecrawl proxy; `add_system` is *not* executed server-side — it's emitted back to the client as an action block for confirmation).
-- Stream the final assistant message after tools resolve. The existing SSE parser on the client keeps working.
+The system prompt already advertises these action types — only `add_system` actually executes today. We extend `actionSchema.ts` and `useAIActions.ts` to handle the rest, and `ActionCard.tsx` renders a small confirmation card for each.
 
-### 3. New action type: `add_system`
-Extend the system prompt's action schema:
-```
-```action
-{ "type": "add_system", "data": { name, manufacturer, description, coats, coverage_rate, coverage_unit, cost_per_unit, labor_rate_per_sf, typical_equipment, substrate_notes, application_notes } }
-```
-```
-The prompt instructs the AI to **always show the parsed data in prose first and wait for "yes"** before emitting the action block. For "add all", it emits one action block per system in sequence.
+**New action types (Zod schemas in `src/lib/actionSchema.ts`):**
+- `create_contact` → name (required), type, status, email, phone, address, notes
+- `update_contact` → id (required) + same optional fields
+- `create_project` → name (required), contact_id, status, address, start_date, end_date, contract_value, notes
+- `create_receipt` → vendor, amount (required), receipt_date (required, YYYY-MM-DD), category, project_id, tax_deductible, notes
+- `mark_payment_received` → invoice_id (required), paid_date (optional, defaults today)
+- `query_tax_summary` → year (string, e.g. "2026")
 
-### 4. Client: action block parser + executor
-- New `src/lib/actionSchema.ts` — Zod schemas for each action type, mirror of `parseEstimateFromText` but for ` ```action ` blocks.
-- New `src/hooks/useAIActions.ts` — given a parsed action, dispatches to the right hook (`useSaveSystem` for `add_system`, later `useContacts`/`useReceipts` mutations for the other types already in the prompt).
-- Update `ChatMessage.tsx`: when an assistant message contains action blocks, hide the raw fenced block and render a compact card per action with **Confirm** / **Dismiss** buttons. On Confirm → run the mutation → toast → mark the action as applied (stored on the message).
-- Extend `ChatMessage` in `AIAssistantContext` with an optional `appliedActions: string[]` so confirmed actions don't re-trigger.
+**Executors in `src/hooks/useAIActions.ts`:**
+- Each action gets a branch in `run(action)` calling the matching mutation hook (`useSaveContact`, `useSaveProject`, `useSaveReceipt`, `useSaveInvoice`).
+- `mark_payment_received`: load invoice via supabase, then call `useSaveInvoice` with `{ id, paid: true, paid_date }`.
+- `query_tax_summary`: navigate to `/reports/tax?year=...` (uses `useNavigate`). No mutation; closes the assistant after navigation.
 
-### 5. Cost/safety guardrails
-- Cap scrape calls per user message to 8 (prevents a runaway "add all" on a 200-page site).
-- Cap web_search results to 5.
-- Action blocks are **never auto-applied** — always require your click. Voice "yes" in the next message also works because the AI sees the confirmation in chat history and emits the action block then.
+**Card UI (`src/components/ai/ActionCard.tsx`):**
+- Generic header (uppercase action type label) + summary of the most relevant fields per action type, plus Add/Confirm + Dismiss buttons (same pattern as add_system).
+- Per-action renderers (small switch in the same file) so each card shows the right preview fields. Examples:
+  - create_contact → name, type, email/phone
+  - create_project → name, address, contact name (resolved from contacts), contract_value
+  - create_receipt → vendor, amount, date, category
+  - mark_payment_received → invoice id (short), paid date
+  - query_tax_summary → year + "Open report"
+- Confirm button labels: "Create", "Update", "Mark paid", "Open report".
 
-### 6. System prompt additions
-Tell the AI:
-- Use `web_search` to find the right page when the user names a brand or product.
-- Use `web_scrape` on the resulting URLs to read product specs.
-- Map scraped specs into the `add_system` schema. **Leave numeric fields null if the site doesn't state them** — never invent coverage/cost numbers.
-- Always summarize what it's about to add and ask for confirmation before emitting `add_system` blocks.
+**System prompt update in `supabase/functions/ai-chat/index.ts`:**
+- Replace the current single-action-type schema with a discriminated list documenting all six types, including required fields and date format conventions.
+- Reinforce the rule: prose summary first, action block(s) only after explicit confirmation cue from the user (e.g. "yes", "do it", "go ahead").
+- For `create_receipt`: instruct the AI to suggest a category from the existing list (Materials, Labor, Equipment, Subcontractor, Vehicle, Insurance, Office, Permits, Miscellaneous) and to set `tax_deductible: true` by default for business expenses.
+
+## Phase 7 — Page-aware context
+
+Today `currentPage` is sent but `currentRecord` is always `null`. Make the assistant aware of *which record* you're looking at so "summarize this project" or "draft an invoice for this estimate" works without restating context.
+
+**New: `src/contexts/AIContextProvider.tsx`**
+- Thin context that exposes `setCurrentRecord(record)` / `clearCurrentRecord()`.
+- Lives alongside `AIAssistantProvider` (added in `App.tsx` so all routes can call it).
+
+**New hook: `src/hooks/useAIPageContext.ts`**
+- `useAIPageContext(record)` — `useEffect` that calls `setCurrentRecord` on mount and clears on unmount.
+- Detail pages call this with a compact summary object (NOT the raw row — only the fields useful to the AI):
+  - `ProjectDetail`: `{ kind: 'project', id, name, status, address, contact_name, contract_value }`
+  - `EstimateDetail`: `{ kind: 'estimate', id, total, project_name, contact_name }`
+  - `InvoiceDetail`: `{ kind: 'invoice', id, total, paid, due_date, project_name }`
+  - `ContactDetail`: `{ kind: 'contact', id, name, email, phone, type }`
+
+**Integration:**
+- `useAIChat` reads `currentRecord` from the new context (instead of always sending `undefined`) and includes it in the request body.
+- The existing `ai-chat` edge function already injects `currentRecord` into the system prompt — no backend change needed beyond mentioning the new shape in the prompt's CURRENT CONTEXT example.
 
 ## Files
 
 **New**
-- `supabase/functions/web-tools/index.ts`
-- `src/lib/actionSchema.ts`
-- `src/hooks/useAIActions.ts`
-- `src/components/ai/ActionCard.tsx`
+- `src/contexts/AIContextProvider.tsx`
+- `src/hooks/useAIPageContext.ts`
 
 **Modified**
-- `supabase/functions/ai-chat/index.ts` — tool-calling loop, updated system prompt
-- `src/components/ai/ChatMessage.tsx` — render action cards
-- `src/contexts/AIAssistantContext.tsx` — track applied actions
-- `src/hooks/useAIChat.ts` — minor: surface tool-call streaming events in status
+- `src/hooks/useSpeechRecognition.ts` — continuous + interim + silence auto-stop
+- `src/components/ai/AIChat.tsx` — interim preview, hands-free toggle
+- `src/lib/actionSchema.ts` — add 5 new action variants to the discriminated union
+- `src/hooks/useAIActions.ts` — executors for the new actions
+- `src/components/ai/ActionCard.tsx` — per-action card renderers
+- `src/hooks/useAIChat.ts` — pull currentRecord from new context
+- `src/App.tsx` — wrap with `AIContextProvider`
+- `src/pages/ProjectDetail.tsx`, `EstimateDetail.tsx`, `InvoiceDetail.tsx`, `ContactDetail.tsx` — call `useAIPageContext(...)`
+- `supabase/functions/ai-chat/index.ts` — expanded action schema in system prompt + receipt category guidance
 
-## Setup step required from you
+## Out of scope
 
-I'll trigger the Firecrawl connector flow when implementing — one click to connect it. After that, everything works inside the chat with no extra setup.
-
-## Out of scope (for this round)
-
-- Wiring up `create_contact`, `create_project`, etc. action handlers (the prompt already mentions them but they don't have client executors yet). I'll scaffold `useAIActions` so adding them later is one function each, but only `add_system` ships fully wired in this change.
-- Caching scraped pages (each scrape is a fresh Firecrawl call).
+- No new database tables, RLS, or storage buckets.
+- No changes to the existing manual editors for contacts/projects/estimates/invoices/receipts.
+- No persistent chat history (still in-memory per session, per your earlier decision).
