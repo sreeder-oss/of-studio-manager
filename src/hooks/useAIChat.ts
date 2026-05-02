@@ -65,7 +65,7 @@ export const useAIChat = () => {
           body: JSON.stringify({
             messages: apiMessages,
             currentPage,
-            currentRecord,
+            currentRecord: recordForRequest,
             hasImages: !!attachments && attachments.length > 0,
           }),
         });
@@ -142,7 +142,7 @@ export const useAIChat = () => {
         abortRef.current = null;
       }
     },
-    [messages, appendMessage, updateLastAssistant]
+    [messages, appendMessage, updateLastAssistant, currentRecord]
   );
 
   const cancel = useCallback(() => {
