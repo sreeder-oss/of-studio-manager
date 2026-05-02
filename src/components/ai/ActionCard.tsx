@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Plus, X, ExternalLink, UserPlus, FolderPlus, Receipt, BadgeCheck, BarChart3, UserCog } from 'lucide-react';
+import { Check, Plus, X, ExternalLink, UserPlus, FolderPlus, Receipt, BadgeCheck, BarChart3, UserCog, type LucideIcon } from 'lucide-react';
 import type { ParsedAction, AIAction } from '@/lib/actionSchema';
 import { useAIActions } from '@/hooks/useAIActions';
 
@@ -9,7 +9,7 @@ interface Props {
   onApplied: (id: string) => void;
 }
 
-const META: Record<AIAction['type'], { label: string; icon: React.ComponentType<{ size?: number }>; cta: string }> = {
+const META: Record<AIAction['type'], { label: string; icon: LucideIcon; cta: string }> = {
   add_system:           { label: 'Add system',          icon: Plus,        cta: 'Add' },
   create_contact:       { label: 'New contact',         icon: UserPlus,    cta: 'Create' },
   update_contact:       { label: 'Update contact',      icon: UserCog,     cta: 'Update' },
