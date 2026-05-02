@@ -196,10 +196,15 @@ export const AIChat: React.FC = () => {
         </div>
       </div>
 
-      {/* Estimate preview pane */}
+      {/* Preview pane (estimate or invoice) */}
       {previewEstimate && (
         <div className="flex-1 md:w-1/2">
           <EstimatePreview initial={previewEstimate} onClose={() => setPreviewEstimate(null)} />
+        </div>
+      )}
+      {previewInvoice && !previewEstimate && (
+        <div className="flex-1 md:w-1/2">
+          <InvoicePreview initial={previewInvoice} onClose={() => setPreviewInvoice(null)} />
         </div>
       )}
     </div>
