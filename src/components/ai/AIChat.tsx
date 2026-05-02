@@ -108,7 +108,7 @@ export const AIChat: React.FC = () => {
   return (
     <div className="flex h-full">
       {/* Chat column */}
-      <div className={`flex flex-col h-full ${previewEstimate ? 'hidden md:flex md:w-1/2 md:border-r md:border-border' : 'w-full'}`}>
+      <div className={`flex flex-col h-full ${(previewEstimate || previewInvoice) ? 'hidden md:flex md:w-1/2 md:border-r md:border-border' : 'w-full'}`}>
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border">
           <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             <Sparkles size={11} className="text-primary" /> Assistant
