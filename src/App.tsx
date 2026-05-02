@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AIAssistantProvider } from "@/contexts/AIAssistantContext";
 import AppLayout from "./components/AppLayout";
 import Index from "./pages/Index";
 import Contacts from "./pages/Contacts";
@@ -63,10 +64,12 @@ const App = () => (
       <Toaster position="top-right" closeButton />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/*" element={<ProtectedRoutes />} />
-          </Routes>
+          <AIAssistantProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/*" element={<ProtectedRoutes />} />
+            </Routes>
+          </AIAssistantProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
