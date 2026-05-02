@@ -130,7 +130,7 @@ export const AIChat: React.FC = () => {
               </div>
             </div>
           )}
-          {messages.map((m) => <ChatMessage key={m.id} message={m} onOpenEstimate={openEstimate} />)}
+          {messages.map((m) => <ChatMessage key={m.id} message={m} onOpenEstimate={openEstimate} onOpenInvoice={openInvoice} />)}
         </div>
 
         {/* Input */}
