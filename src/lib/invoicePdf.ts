@@ -543,7 +543,7 @@ function renderPayments(ctx: RenderCtx, y: number): number {
 
   autoTable(doc, {
     startY: y,
-    margin: { left: MARGIN, right: MARGIN },
+    margin: { left: MARGIN, right: MARGIN, top: 72, bottom: 50 },
     head: [['Date', 'Method', 'Note', 'Amount']],
     body: rows,
     theme: 'plain',
