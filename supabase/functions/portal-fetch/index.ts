@@ -40,16 +40,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Firecrawl supported action types: wait, click, write, press, scroll, scrape, screenshot, executeJavascript, pdf.
-    // Strategy: load the LOGIN_URL, fill and submit the Outseta widget, wait, then JS-navigate to the target.
+    // Outseta auth widget uses these selectors:
+    //   #o-auth-username, #o-auth-password, button.o--Login--login
     const actions: any[] = [
-      { type: "wait", milliseconds: 3500 },
-      { type: "write", selector: "input[type='email']", text: EMAIL },
-      { type: "write", selector: "input[type='password']", text: PASSWORD },
-      { type: "click", selector: "button[type='submit']" },
-      { type: "wait", milliseconds: 5000 },
-      { type: "executeJavascript", script: `window.location.href = ${JSON.stringify(target)};` },
       { type: "wait", milliseconds: 4000 },
+      { type: "write", selector: "#o-auth-username", text: EMAIL },
+      { type: "write", selector: "#o-auth-password", text: PASSWORD },
+      { type: "wait", milliseconds: 800 },
+      { type: "click", selector: "button.o--Login--login" },
+      { type: "wait", milliseconds: 7000 },
+      { type: "executeJavascript", script: `window.location.href = ${JSON.stringify(target)};` },
+      { type: "wait", milliseconds: 6000 },
       { type: "scrape" },
     ];
 
