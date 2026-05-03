@@ -10,8 +10,8 @@ const corsHeaders = {
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const FC = "https://api.firecrawl.dev/v2";
-const MAX_TOOL_ROUNDS = 10;
-const MAX_SCRAPES_PER_REQUEST = 12;
+const MAX_TOOL_ROUNDS = 25;
+const MAX_SCRAPES_PER_REQUEST = 30;
 
 // Whitelist of OpenRouter model slugs the client may request. Anything else
 // falls back to GPT-5 high-reasoning on Lovable AI.
