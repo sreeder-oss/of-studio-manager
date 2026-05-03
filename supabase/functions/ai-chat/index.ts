@@ -635,6 +635,13 @@ Deno.serve(async (req: Request) => {
             scrapesUsed++;
             result = await fcScrape(String(args.url ?? ""), FIRECRAWL_API_KEY);
           }
+        } else if (fname === "naa_portal_fetch") {
+          if (scrapesUsed >= MAX_SCRAPES_PER_REQUEST) {
+            result = { error: `Scrape cap reached (${MAX_SCRAPES_PER_REQUEST}).` };
+          } else {
+            scrapesUsed++;
+            result = await fcNaaPortal(String(args.url ?? ""), FIRECRAWL_API_KEY);
+          }
         } else {
           result = { error: `Unknown tool: ${fname}` };
         }
