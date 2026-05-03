@@ -224,7 +224,7 @@ const ProjectDetail: React.FC = () => {
             <div key={r.id} className="bg-card p-3 rounded-xl border border-border flex items-center gap-3">
               {r.image_url && (
                 <div className="w-10 h-10 rounded-lg overflow-hidden border border-border flex-shrink-0">
-                  <img src={r.image_url} alt="" className="w-full h-full object-cover" />
+                  <SignedImage bucket="receipts" path={r.image_url} className="w-full h-full object-cover" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
