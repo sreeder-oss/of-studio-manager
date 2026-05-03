@@ -64,6 +64,13 @@ export const AI_MODELS: AIModelOption[] = [
     blurb: 'Fast, candid, good at on-the-fly research.',
     openrouter: true,
   },
+  {
+    id: 'deepseek/deepseek-v3.2-exp',
+    label: 'DeepSeek 3.2',
+    provider: 'DeepSeek',
+    blurb: 'Cost-efficient with strong reasoning and coding. Great cheap daily driver.',
+    openrouter: true,
+  },
 ];
 
 export const DEFAULT_AI_MODEL_ID = 'openai/gpt-5';
