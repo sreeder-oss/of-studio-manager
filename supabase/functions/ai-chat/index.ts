@@ -601,7 +601,15 @@ Deno.serve(async (req: Request) => {
               return;
             }
 
-            const data = await upstream.json();
+            let data: any;
+            try {
+              data = await upstream.json();
+            } catch (e) {
+              console.error("ai-chat upstream JSON parse error", e);
+              send({ choices: [{ delta: { content: "_Upstream returned an unreadable response (502). Please retry._" } }] });
+              done();
+              return;
+            }
             const choice = data?.choices?.[0];
             const msg = choice?.message ?? {};
             const toolCalls = msg.tool_calls as Array<any> | undefined;
