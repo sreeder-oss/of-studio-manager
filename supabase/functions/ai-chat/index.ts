@@ -539,131 +539,149 @@ Deno.serve(async (req: Request) => {
 
     console.log("ai-chat routing", { provider: useOpenRouter ? "openrouter" : "lovable", model });
 
-    // Tool-calling loop: keep asking the gateway non-streaming until no more tool_calls.
+    // Tool-calling loop. We open the SSE stream IMMEDIATELY and write keepalive
+    // comments between rounds so the edge runtime's 150s idle timer never trips.
     type ChatMsg = Record<string, unknown>;
     const conversation: ChatMsg[] = [
       { role: "system", content: systemPrompt },
       ...body.messages as unknown as ChatMsg[],
     ];
-    let scrapesUsed = 0;
 
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const reqBody: Record<string, unknown> = {
-        model,
-        messages: conversation,
-        tools,
-        tool_choice: "auto",
-      };
-      // GPT-5 family supports `reasoning` for deeper thinking on hard tasks.
-      if (model.startsWith("openai/gpt-5")) {
-        reqBody.reasoning = { effort: "high" };
-      }
-      const upstream = await fetch(upstreamUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${upstreamKey}`,
-          "Content-Type": "application/json",
-          ...upstreamExtraHeaders,
-        },
-        body: JSON.stringify(reqBody),
-      });
-
-      if (!upstream.ok) {
-        if (upstream.status === 429) {
-          return new Response(JSON.stringify({ error: "Rate limit reached. Please wait a moment and try again." }), {
-            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        if (upstream.status === 402) {
-          return new Response(JSON.stringify({ error: "AI credits exhausted. Add credits in Lovable workspace settings." }), {
-            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        const t = await upstream.text();
-        console.error("AI gateway error", upstream.status, t);
-        return new Response(JSON.stringify({ error: "AI gateway error" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const data = await upstream.json();
-      const choice = data?.choices?.[0];
-      const msg = choice?.message ?? {};
-      const toolCalls = msg.tool_calls as Array<any> | undefined;
-
-      if (!toolCalls || toolCalls.length === 0) {
-        // Final answer — stream as a single SSE chunk + [DONE] for the existing client parser.
-        const finalText: string = msg.content ?? "";
-        const stream = new ReadableStream({
-          start(controller) {
-            const enc = new TextEncoder();
-            // Send in chunks so the UI feels live
-            const CHUNK = 60;
-            for (let i = 0; i < finalText.length; i += CHUNK) {
-              const piece = finalText.slice(i, i + CHUNK);
-              const payload = JSON.stringify({ choices: [{ delta: { content: piece } }] });
-              controller.enqueue(enc.encode(`data: ${payload}\n\n`));
-            }
-            controller.enqueue(enc.encode(`data: [DONE]\n\n`));
-            controller.close();
-          },
-        });
-        return new Response(stream, {
-          headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-        });
-      }
-
-      // Push assistant tool-call message and execute each tool
-      conversation.push({ role: "assistant", content: msg.content ?? "", tool_calls: toolCalls });
-
-      for (const tc of toolCalls) {
-        const fname = tc.function?.name;
-        let args: any = {};
-        try { args = JSON.parse(tc.function?.arguments ?? "{}"); } catch { /* ignore */ }
-        let result: unknown;
-
-        if (!FIRECRAWL_API_KEY) {
-          result = { error: "Web tools unavailable: FIRECRAWL_API_KEY not configured." };
-        } else if (fname === "web_search") {
-          result = await fcSearch(String(args.query ?? ""), FIRECRAWL_API_KEY);
-        } else if (fname === "web_scrape") {
-          if (scrapesUsed >= MAX_SCRAPES_PER_REQUEST) {
-            result = { error: `Scrape cap reached (${MAX_SCRAPES_PER_REQUEST}). Summarize with what you have.` };
-          } else {
-            scrapesUsed++;
-            result = await fcScrape(String(args.url ?? ""), FIRECRAWL_API_KEY);
-          }
-        } else if (fname === "naa_portal_fetch") {
-          if (scrapesUsed >= MAX_SCRAPES_PER_REQUEST) {
-            result = { error: `Scrape cap reached (${MAX_SCRAPES_PER_REQUEST}).` };
-          } else {
-            scrapesUsed++;
-            result = await fcNaaPortal(String(args.url ?? ""), FIRECRAWL_API_KEY);
-          }
-        } else {
-          result = { error: `Unknown tool: ${fname}` };
-        }
-
-        conversation.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          name: fname,
-          content: JSON.stringify(result).slice(0, 16000),
-        });
-      }
-    }
-
-    // Hit the round cap — return a graceful message
+    const enc = new TextEncoder();
     const stream = new ReadableStream({
-      start(controller) {
-        const enc = new TextEncoder();
-        const payload = JSON.stringify({ choices: [{ delta: { content: "I gathered partial info but hit my browsing limit. Want me to continue with what I have?" } }] });
-        controller.enqueue(enc.encode(`data: ${payload}\n\n`));
-        controller.enqueue(enc.encode(`data: [DONE]\n\n`));
-        controller.close();
+      async start(controller) {
+        const send = (obj: unknown) =>
+          controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        const ping = () => controller.enqueue(enc.encode(`: keepalive ${Date.now()}\n\n`));
+        const done = () => {
+          controller.enqueue(enc.encode(`data: [DONE]\n\n`));
+          controller.close();
+        };
+
+        // Heartbeat every 10s so neither the edge runtime nor any proxy idles us out.
+        const heartbeat = setInterval(() => {
+          try { ping(); } catch { /* closed */ }
+        }, 10_000);
+        ping();
+
+        let scrapesUsed = 0;
+        try {
+          for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            const isLastAllowedRound = round === MAX_TOOL_ROUNDS - 1;
+            const reqBody: Record<string, unknown> = {
+              model,
+              messages: conversation,
+              tools,
+              tool_choice: "auto",
+            };
+            if (model.startsWith("openai/gpt-5")) {
+              reqBody.reasoning = { effort: "high" };
+            }
+
+            const upstream = await fetch(upstreamUrl, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${upstreamKey}`,
+                "Content-Type": "application/json",
+                ...upstreamExtraHeaders,
+              },
+              body: JSON.stringify(reqBody),
+            });
+
+            if (!upstream.ok) {
+              const t = await upstream.text().catch(() => "");
+              console.error("AI gateway error", upstream.status, t);
+              const errMsg =
+                upstream.status === 429 ? "_Rate limit reached. Please wait a moment and try again._" :
+                upstream.status === 402 ? "_AI credits exhausted. Add credits in workspace settings._" :
+                `_AI gateway error (${upstream.status})._`;
+              send({ choices: [{ delta: { content: errMsg } }] });
+              done();
+              return;
+            }
+
+            const data = await upstream.json();
+            const choice = data?.choices?.[0];
+            const msg = choice?.message ?? {};
+            const toolCalls = msg.tool_calls as Array<any> | undefined;
+
+            if (!toolCalls || toolCalls.length === 0) {
+              const finalText: string = msg.content ?? "";
+              const CHUNK = 80;
+              for (let i = 0; i < finalText.length; i += CHUNK) {
+                send({ choices: [{ delta: { content: finalText.slice(i, i + CHUNK) } }] });
+              }
+              done();
+              return;
+            }
+
+            // Tool round — push assistant message + execute tools, with progress pings.
+            conversation.push({ role: "assistant", content: msg.content ?? "", tool_calls: toolCalls });
+
+            for (const tc of toolCalls) {
+              const fname = tc.function?.name;
+              let args: any = {};
+              try { args = JSON.parse(tc.function?.arguments ?? "{}"); } catch { /* ignore */ }
+              ping();
+              let result: unknown;
+
+              if (!FIRECRAWL_API_KEY) {
+                result = { error: "Web tools unavailable: FIRECRAWL_API_KEY not configured." };
+              } else if (fname === "web_search") {
+                result = await fcSearch(String(args.query ?? ""), FIRECRAWL_API_KEY);
+              } else if (fname === "web_scrape") {
+                if (scrapesUsed >= MAX_SCRAPES_PER_REQUEST) {
+                  result = { error: `Scrape cap reached (${MAX_SCRAPES_PER_REQUEST}). Summarize with what you have.` };
+                } else {
+                  scrapesUsed++;
+                  result = await fcScrape(String(args.url ?? ""), FIRECRAWL_API_KEY);
+                }
+              } else if (fname === "naa_portal_fetch") {
+                if (scrapesUsed >= MAX_SCRAPES_PER_REQUEST) {
+                  result = { error: `Scrape cap reached (${MAX_SCRAPES_PER_REQUEST}).` };
+                } else {
+                  scrapesUsed++;
+                  result = await fcNaaPortal(String(args.url ?? ""), FIRECRAWL_API_KEY);
+                }
+              } else {
+                result = { error: `Unknown tool: ${fname}` };
+              }
+              ping();
+
+              conversation.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                name: fname,
+                content: JSON.stringify(result).slice(0, 16000),
+              });
+            }
+
+            if (isLastAllowedRound) {
+              send({ choices: [{ delta: { content: "_I gathered partial info but hit my browsing limit. Want me to continue with what I have?_" } }] });
+              done();
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("ai-chat stream error", err);
+          try {
+            send({ choices: [{ delta: { content: `_Connection error: ${(err as Error).message}_` } }] });
+            done();
+          } catch { /* already closed */ }
+        } finally {
+          clearInterval(heartbeat);
+        }
       },
     });
-    return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+      },
+    });
   } catch (e) {
     console.error("ai-chat error", e);
     const msg = e instanceof Error ? e.message : "Unknown error";
