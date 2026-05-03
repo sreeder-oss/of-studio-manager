@@ -40,15 +40,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Firecrawl actions: open login widget, fill, submit, wait, navigate to target, scrape.
-    const actions = [
-      { type: "wait", milliseconds: 2500 },
-      { type: "write", selector: "input[type='email'], input[name='Username'], input[name='username'], input[name='email']", text: EMAIL },
-      { type: "write", selector: "input[type='password'], input[name='Password'], input[name='password']", text: PASSWORD },
-      { type: "click", selector: "button[type='submit'], input[type='submit'], button.o-button--primary" },
+    // Firecrawl supported action types: wait, click, write, press, scroll, scrape, screenshot, executeJavascript, pdf.
+    // Strategy: load the LOGIN_URL, fill and submit the Outseta widget, wait, then JS-navigate to the target.
+    const actions: any[] = [
+      { type: "wait", milliseconds: 3500 },
+      { type: "write", selector: "input[type='email']", text: EMAIL },
+      { type: "write", selector: "input[type='password']", text: PASSWORD },
+      { type: "click", selector: "button[type='submit']" },
+      { type: "wait", milliseconds: 5000 },
+      { type: "executeJavascript", script: `window.location.href = ${JSON.stringify(target)};` },
       { type: "wait", milliseconds: 4000 },
-      { type: "navigate", url: target },
-      { type: "wait", milliseconds: 3000 },
+      { type: "scrape" },
     ];
 
     const r = await fetch(`${FC}/scrape`, {
