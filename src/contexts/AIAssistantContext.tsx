@@ -99,11 +99,29 @@ export const AIAssistantProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [conversations, setConversations] = useState<Conversation[]>(initial.current.convos);
   const [activeConversationId, setActiveConversationId] = useState<string>(initial.current.activeId);
 
-  // Persist
+  // Persist (strip heavy attachment payloads so we don't blow the localStorage quota)
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations.slice(0, MAX_CONVOS)));
-    } catch { /* ignore */ }
+      const slim = conversations.slice(0, MAX_CONVOS).map((c) => ({
+        ...c,
+        messages: c.messages.map((m) => {
+          if (!m.attachments || m.attachments.length === 0) return m;
+          return {
+            ...m,
+            attachments: m.attachments.map((a) => ({
+              name: a.name,
+              kind: a.kind,
+              dataUrl: '', // drop base64 image data
+              // keep a small text excerpt for PDFs so context isn't lost
+              text: a.text ? a.text.slice(0, 4000) : undefined,
+            })),
+          };
+        }),
+      }));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+    } catch (e) {
+      console.warn('Failed to persist conversations', e);
+    }
   }, [conversations]);
   useEffect(() => {
     try { window.localStorage.setItem(ACTIVE_KEY, activeConversationId); } catch { /* ignore */ }
