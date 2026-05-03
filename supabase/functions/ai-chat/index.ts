@@ -69,6 +69,21 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "naa_portal_fetch",
+      description: "Fetch a page from the New Age Artisans Plaster Portal using saved login credentials. Use this for ANY newageartisans.com URL that requires login (product specs, coverage, dealer pricing). Logs in via the Outseta auth widget then returns the page markdown.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Full https URL on newageartisans.com (e.g. /plaster-portal or a course/product page)" },
+        },
+        required: ["url"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 function buildSystemPrompt(systemsLibrary: unknown[], settings: { overhead_pct: number; profit_pct: number; tax_rate: number; estimate_valid_days: number; }, currentPage?: string, currentRecord?: unknown) {
