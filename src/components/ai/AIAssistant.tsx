@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
-import { useAIAssistant } from '@/contexts/AIAssistantContext';
+import { useAIAssistantOptional } from '@/contexts/AIAssistantContext';
 import { AIChat } from './AIChat';
 
 const useIsDesktop = () => {
@@ -16,8 +16,10 @@ const useIsDesktop = () => {
 };
 
 export const AIAssistant: React.FC = () => {
-  const { open, setOpen } = useAIAssistant();
+  const ctx = useAIAssistantOptional();
   const isDesktop = useIsDesktop();
+  if (!ctx) return null;
+  const { open, setOpen } = ctx;
 
   if (isDesktop) {
     return (
