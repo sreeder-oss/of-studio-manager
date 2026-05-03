@@ -11,6 +11,7 @@ import { usePhotos, useSavePhoto, useDeletePhoto, uploadProjectPhoto } from '@/h
 import { useAuth } from '@/contexts/AuthContext';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { toast } from 'sonner';
+import { SignedImage, SignedLink } from '@/components/SignedAsset';
 
 type Tab = 'overview' | 'estimates' | 'receipts' | 'documents' | 'photos';
 
