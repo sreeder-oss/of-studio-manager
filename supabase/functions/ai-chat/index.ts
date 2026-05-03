@@ -444,6 +444,43 @@ async function fcScrape(url: string, key: string) {
   return { url, title: meta?.title, markdown: trimmed, links, paywalled };
 }
 
+async function fcNaaPortal(target: string, key: string) {
+  const EMAIL = Deno.env.get("NAA_PORTAL_EMAIL");
+  const PASSWORD = Deno.env.get("NAA_PORTAL_PASSWORD");
+  if (!EMAIL || !PASSWORD) {
+    return { error: "NAA portal credentials not configured (NAA_PORTAL_EMAIL / NAA_PORTAL_PASSWORD)." };
+  }
+  if (!/newageartisans\.com|outseta\.com/.test(target)) {
+    return { error: "naa_portal_fetch only works for newageartisans.com URLs." };
+  }
+  const LOGIN_URL = "https://new-age-artisans.outseta.com/auth?widgetMode=login#o-anonymous";
+  const actions = [
+    { type: "wait", milliseconds: 4000 },
+    { type: "write", selector: "#o-auth-username", text: EMAIL },
+    { type: "write", selector: "#o-auth-password", text: PASSWORD },
+    { type: "wait", milliseconds: 800 },
+    { type: "click", selector: "button.o--Login--login" },
+    { type: "wait", milliseconds: 7000 },
+    { type: "executeJavascript", script: `window.location.href = ${JSON.stringify(target)};` },
+    { type: "wait", milliseconds: 6000 },
+    { type: "scrape" },
+  ];
+  const r = await fetch(`${FC}/scrape`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ url: LOGIN_URL, formats: ["markdown", "links"], onlyMainContent: false, actions, waitFor: 1500 }),
+  });
+  const data = await r.json();
+  if (!r.ok) return { error: `NAA portal scrape failed [${r.status}]`, details: data };
+  const md: string = data?.data?.markdown ?? data?.markdown ?? "";
+  const meta = data?.data?.metadata ?? data?.metadata ?? {};
+  const links: string[] = (data?.data?.links ?? data?.links ?? []).slice(0, 60);
+  const trimmed = md.length > 14000 ? md.slice(0, 14000) + "\n\n[...truncated...]" : md;
+  const finalUrl = meta?.sourceURL ?? meta?.url ?? target;
+  const stillOnLogin = /outseta\.com\/auth/i.test(finalUrl) && md.length < 1200;
+  return { requestedUrl: target, finalUrl, title: meta?.title, loggedIn: !stillOnLogin, markdown: trimmed, links };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
