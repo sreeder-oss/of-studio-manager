@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Mic, Paperclip, Camera, Send, Square, X, Sparkles, Zap } from 'lucide-react';
+import { Mic, Paperclip, Camera, Send, Square, X, Sparkles, Zap, History, Plus } from 'lucide-react';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
 import { useAIChat } from '@/hooks/useAIChat';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { ChatMessage } from './ChatMessage';
+import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { EstimatePreview } from './EstimatePreview';
 import { InvoicePreview } from './InvoicePreview';
 import { ModelPicker } from './ModelPicker';
@@ -23,13 +24,14 @@ const fileToDataUrl = (file: File) =>
   });
 
 export const AIChat: React.FC = () => {
-  const { messages } = useAIAssistant();
+  const { messages, newConversation, activeConversationId } = useAIAssistant();
   const { send, cancel, isLoading } = useAIChat();
   const location = useLocation();
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [previewEstimate, setPreviewEstimate] = useState<EstimateDoc | null>(null);
   const [previewInvoice, setPreviewInvoice] = useState<InvoiceDoc | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [handsFree, setHandsFree] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem(HANDS_FREE_KEY) === '1';
@@ -109,13 +111,30 @@ export const AIChat: React.FC = () => {
   return (
     <div className="flex h-full">
       {/* Chat column */}
-      <div className={`flex flex-col h-full ${(previewEstimate || previewInvoice) ? 'hidden md:flex md:w-1/2 md:border-r md:border-border' : 'w-full'}`}>
+      <div className={`relative flex flex-col h-full ${(previewEstimate || previewInvoice) ? 'hidden md:flex md:w-1/2 md:border-r md:border-border' : 'w-full'}`}>
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border">
           <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             <Sparkles size={11} className="text-primary" /> Assistant
           </div>
-          <ModelPicker />
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setHistoryOpen(true)}
+              title="Recent chats"
+              className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent"
+            >
+              <History size={14} />
+            </button>
+            <button
+              onClick={() => newConversation()}
+              title="New chat"
+              className="p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-accent"
+            >
+              <Plus size={14} />
+            </button>
+            <ModelPicker />
+          </div>
         </div>
+        {historyOpen && <ChatHistoryPanel onClose={() => setHistoryOpen(false)} />}
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-8">
