@@ -477,11 +477,25 @@ async function fcScrape(url: string, key: string) {
   }
 }
 
+// Strict detection: returns true when content clearly is NOT authenticated portal content.
+function detectUnauthenticated(finalUrl: string, md: string): { unauth: boolean; reason: string } {
+  if (/outseta\.com\/auth/i.test(finalUrl)) return { unauth: true, reason: "redirected_to_login" };
+  const head = md.slice(0, 4000);
+  if (/Annual Membership\s*-\s*\$\d+|Get Access|Sign in with Google|sign up.*plan/i.test(head) &&
+      /\[log in\]|\[sign up\]/i.test(head)) {
+    return { unauth: true, reason: "public_marketing_page" };
+  }
+  if (/o-auth-username|o-auth-password|name=["']password["']/i.test(md)) {
+    return { unauth: true, reason: "login_form_present" };
+  }
+  return { unauth: false, reason: "" };
+}
+
 async function fcNaaPortal(target: string, key: string) {
   const EMAIL = Deno.env.get("NAA_PORTAL_EMAIL");
   const PASSWORD = Deno.env.get("NAA_PORTAL_PASSWORD");
   if (!EMAIL || !PASSWORD) {
-    return { error: "NAA portal credentials not configured (NAA_PORTAL_EMAIL / NAA_PORTAL_PASSWORD)." };
+    return { error: "NAA_PORTAL_AUTH_FAILED: portal credentials not configured (NAA_PORTAL_EMAIL / NAA_PORTAL_PASSWORD missing)." };
   }
   if (!/newageartisans\.com|outseta\.com/.test(target)) {
     return { error: "naa_portal_fetch only works for newageartisans.com URLs." };
@@ -489,13 +503,17 @@ async function fcNaaPortal(target: string, key: string) {
   const LOGIN_URL = "https://new-age-artisans.outseta.com/auth?widgetMode=login#o-anonymous";
   const actions = [
     { type: "wait", milliseconds: 4000 },
+    { type: "click", selector: "#o-auth-username" },
     { type: "write", selector: "#o-auth-username", text: EMAIL },
+    { type: "press", key: "Tab" },
+    { type: "click", selector: "#o-auth-password" },
     { type: "write", selector: "#o-auth-password", text: PASSWORD },
-    { type: "wait", milliseconds: 800 },
+    { type: "press", key: "Tab" },
+    { type: "wait", milliseconds: 1200 },
     { type: "click", selector: "button.o--Login--login" },
-    { type: "wait", milliseconds: 7000 },
+    { type: "wait", milliseconds: 8000 },
     { type: "executeJavascript", script: `window.location.href = ${JSON.stringify(target)};` },
-    { type: "wait", milliseconds: 6000 },
+    { type: "wait", milliseconds: 7000 },
     { type: "scrape" },
   ];
   try {
@@ -505,16 +523,24 @@ async function fcNaaPortal(target: string, key: string) {
       body: JSON.stringify({ url: LOGIN_URL, formats: ["markdown", "links"], onlyMainContent: false, actions, waitFor: 1500 }),
     }, TOOL_TIMEOUT_MS.portal);
     const data = await r.json();
-    if (!r.ok) return { error: `NAA portal scrape failed [${r.status}]`, details: data };
+    if (!r.ok) return { error: `NAA_PORTAL_AUTH_FAILED: scrape failed [${r.status}]` };
     const md: string = data?.data?.markdown ?? data?.markdown ?? "";
     const meta = data?.data?.metadata ?? data?.metadata ?? {};
     const links: string[] = (data?.data?.links ?? data?.links ?? []).slice(0, 60);
-    const trimmed = md.length > 14000 ? md.slice(0, 14000) + "\n\n[...truncated...]" : md;
     const finalUrl = meta?.sourceURL ?? meta?.url ?? target;
-    const stillOnLogin = /outseta\.com\/auth/i.test(finalUrl) && md.length < 1200;
-    return { requestedUrl: target, finalUrl, title: meta?.title, loggedIn: !stillOnLogin, markdown: trimmed, links };
+    const det = detectUnauthenticated(finalUrl, md);
+    console.log("naa_portal_fetch", { target, finalUrl, bytes: md.length, unauth: det.unauth, reason: det.reason, emailLen: EMAIL.length, pwLen: PASSWORD.length });
+    if (det.unauth) {
+      return {
+        error: `NAA_PORTAL_AUTH_FAILED: ${det.reason}. The saved NAA portal credentials did not authenticate (final URL: ${finalUrl}). Do not call naa_portal_fetch again this conversation. Proceed with public web research and clearly note in the estimate that protected NAA portal data was unavailable.`,
+        finalUrl,
+        reason: det.reason,
+      };
+    }
+    const trimmed = md.length > 14000 ? md.slice(0, 14000) + "\n\n[...truncated...]" : md;
+    return { requestedUrl: target, finalUrl, title: meta?.title, loggedIn: true, markdown: trimmed, links };
   } catch (e) {
-    return { error: `naa_portal_fetch ${(e as Error).message}` };
+    return { error: `NAA_PORTAL_AUTH_FAILED: ${(e as Error).message}` };
   }
 }
 
