@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, Search, X, Trash2, ChevronDown, ChevronRight, FolderOpen, Layers } from 'lucide-react';
 import { useReceipts, useSaveReceipt, useDeleteReceipt, uploadReceiptImage } from '@/hooks/useReceipts';
+import { SignedImage } from '@/components/SignedAsset';
 import { useProjects, useSaveProject } from '@/hooks/useProjects';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
