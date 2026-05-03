@@ -35,6 +35,8 @@ export const useAIAssistant = () => {
   return ctx;
 };
 
+export const useAIAssistantOptional = () => useContext(AIAssistantContext);
+
 export const AIAssistantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
