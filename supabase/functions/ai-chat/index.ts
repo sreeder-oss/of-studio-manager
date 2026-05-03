@@ -681,6 +681,15 @@ Deno.serve(async (req: Request) => {
               ping();
               let result: unknown;
 
+              // Visible status so the user knows we're working, not stuck.
+              const status =
+                fname === "web_search"      ? `_🔎 Searching: ${String(args.query ?? "").slice(0, 80)}…_\n` :
+                fname === "web_scrape"      ? `_📄 Reading ${String(args.url ?? "").slice(0, 80)}…_\n` :
+                fname === "naa_portal_fetch"? `_🔐 Logging into NAA portal for ${String(args.url ?? "").slice(0, 80)}…_\n` :
+                "";
+              if (status && round === 0) send({ choices: [{ delta: { content: status } }] });
+              else if (status) send({ choices: [{ delta: { content: status } }] });
+
               if (!FIRECRAWL_API_KEY) {
                 result = { error: "Web tools unavailable: FIRECRAWL_API_KEY not configured." };
               } else if (fname === "web_search") {
