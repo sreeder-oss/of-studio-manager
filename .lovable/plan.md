@@ -1,50 +1,42 @@
-# Make the AI a stronger researcher
+## Goal
+Let the AI fetch product/spec/pricing pages from the New Age Artisans Plaster portal that currently sit behind a login, so estimates use real data instead of guesses.
 
-## What's actually happening
+## Honest constraints (read first)
+1. **I still need the portal URL.** You answered the URL question with your email address. I won't guess a URL — without the real login page I can't test anything and I'd be doing exactly what you asked me not to do.
+2. **Firecrawl (our current scraper) does not log into arbitrary portals.** It fetches a page and returns whatever the server gives an unauthenticated visitor. To get past a login we need a different approach — either a Firecrawl `actions` flow (type email, type password, click submit, then scrape) or a Deno-side `fetch` that posts to the portal's login endpoint and reuses the session cookie. Which one works depends entirely on how that specific portal authenticates. We will only know after testing against the real URL.
+3. **No payment/banking data rule still applies.** A vendor portal login is fine to store; just flagging that I checked.
 
-Your AI used Firecrawl correctly. The problem is the **source**. New Age Artisans' public site (`newageartisans.com`) is a marketing + gallery site:
+## Storage
+- Save credentials as **backend secrets**, not in a database row:
+  - `NAA_PORTAL_EMAIL`
+  - `NAA_PORTAL_PASSWORD`
+  - `NAA_PORTAL_BASE_URL` (the login URL you provide)
+- Secrets are only readable by edge functions, never shipped to the browser, and don't appear in logs.
 
-- No `/shop` or `/products` page exists (both 404)
-- All technical specs, coverage rates, mix ratios, and pricing live behind **Plaster Portal** — their **paid** training/dealer area (`/plaster-portal`)
-- Firecrawl can't log in, so coverage/cost truly isn't reachable from public pages
+## New edge function: `portal-fetch`
+A small Deno function the AI tool loop can call when it hits a paywalled New Age Artisans page.
 
-So "the AI can't find costs" is partly true (it's behind a paywall) and partly fixable (we can make it search harder and tell you clearly *why* it came up empty).
+Behavior:
+1. Verify the caller is an authenticated app user (same JWT check as `web-tools`).
+2. Read the three secrets above. If any missing → return a clear error (no guessing).
+3. Attempt login against the portal:
+   - First try: HTTP login (POST form/JSON to the portal's auth endpoint, capture `Set-Cookie`, then GET the requested URL with that cookie).
+   - If that fails, fall back to Firecrawl `scrape` with `actions: [{type:"write", selector:"...", text: email}, {type:"write", selector:"...", text: password}, {type:"click", selector:"..."}, {type:"wait", milliseconds: 1500}]`.
+4. Return `{ url, markdown, title, loggedIn: true }` on success, or `{ error, status }` on failure — including the actual HTTP status and a short snippet so we can debug instead of pretending it worked.
 
-## Plan — 4 upgrades to the AI
+## Wiring into the AI
+- In `supabase/functions/ai-chat/index.ts`, register a new tool `portal_fetch` (description: "Fetch a page from the New Age Artisans plaster portal using saved credentials. Use this whenever a New Age Artisans URL would otherwise be paywalled.") that proxies to `portal-fetch`.
+- Update the existing `web-tools` paywall response so when the scraper sees `newageartisans` (or whatever the real domain is) and gets blocked, the AI knows to retry via `portal_fetch` instead of giving up.
 
-### 1. Smarter model + more browsing budget
-In `supabase/functions/ai-chat/index.ts`:
-- Switch the default model from `google/gemini-2.5-flash` → **`google/gemini-2.5-pro`** for tool-using requests (better at multi-step research, reading spec sheets, and reasoning across pages). Keep flash only for trivial single-turn replies.
-- Raise `MAX_TOOL_ROUNDS` from 6 → **10** and `MAX_SCRAPES_PER_REQUEST` from 8 → **12** so it can chase sub-pages (PDFs, MSDS, tech data sheets).
+## Validation (the part that proves it actually works)
+Once the URL is provided and secrets are added, I will:
+1. Deploy `portal-fetch`.
+2. Call it via `curl_edge_functions` against the real login URL + one known product page.
+3. Read the response. If `loggedIn: true` and we get real product markdown back → confirm to you it works.
+4. If it fails → tell you exactly what failed (e.g. "login form uses CSRF token X, need a different approach") and propose the next step. **No silent fallbacks, no fake success.**
 
-### 2. Paywall / portal awareness in the system prompt
-Add explicit rules so the AI:
-- **Tries multiple search angles** before giving up: brand site, `site:` searches, "technical data sheet", "MSDS", "coverage", "tadelakt mix ratio", and third-party retailers (Amazon, Build With Rise, distributor sites) which often list coverage and price even when the maker doesn't.
-- Recognizes paywalled / login-protected pages (Plaster Portal, dealer logins, Patreon, course platforms) and **says so explicitly** in its reply: *"Coverage and pricing for NAA are behind their paid Plaster Portal — I can add the system shell now and you can fill in your dealer pricing, or I can pull comparable specs from a similar tadelakt product (e.g. American Clay, Meoded, Texston). Which?"*
-- For `add_system`, when web data is incomplete, sets unknown fields to `null` and **lists what's missing in the prose summary**, instead of silently omitting things or refusing.
+## What I need from you to proceed
+- The **portal URL** (login page, e.g. `https://portal.newageartisans.com/login` — whatever the real one is).
+- Confirmation to add the three secrets (`NAA_PORTAL_EMAIL`, `NAA_PORTAL_PASSWORD`, `NAA_PORTAL_BASE_URL`).
 
-### 3. Better Firecrawl usage
-In `web-tools` and the inline `fcSearch` / `fcScrape` helpers in `ai-chat`:
-- Bump `search` limit from 5 → **10** results so the model has more URLs to choose from.
-- On `scrape`, also request `links` format alongside `markdown` so the model can discover product/spec sub-pages from the homepage in one shot (today it only sees rendered text).
-- Detect HTTP 401/403/login-redirect responses and return a structured `{ paywalled: true, url }` so the model can route around it.
-
-### 4. Surface a dealer/cost fallback
-Add a new action type **`update_system`** so when you say *"NAA Tadelakt cost is $XX/bag, coverage 35sf"*, the AI patches the row directly instead of asking you to go edit it. Card UI: shows the diff (old → new) with a Save button.
-
-## What the AI will do differently after this
-For *"add all New Age Artisans plaster systems including Tadelakt"* it will:
-1. Search broadly (NAA + tadelakt + retailers + spec sheets)
-2. Map the NAA site to find every system page (Marrakesh, Tadelakt Blend, Lime Wash, etc.)
-3. Scrape each one, plus any retailer pages with pricing
-4. Emit one `add_system` block per system with **everything it could find**, `null` for paywalled fields, and a clear note: *"Coverage/cost not public — Plaster Portal members only. Add your dealer numbers via the edit card."*
-
-## Files to edit
-- `supabase/functions/ai-chat/index.ts` — model switch, round/scrape caps, prompt rewrites, `update_system` tool
-- `supabase/functions/web-tools/index.ts` — limit bumps, links format, paywall detection
-- `src/lib/actionSchema.ts` — add `update_system` schema
-- `src/hooks/useAIActions.ts` — `update_system` executor
-- `src/components/ai/ActionCard.tsx` — diff renderer for `update_system`
-
-## Note on cost
-Switching the default to Gemini 2.5 Pro costs more credits per request than Flash. Worth it for research tasks; if you'd rather keep Flash as default and only auto-promote to Pro when web tools get triggered, say the word and I'll wire that branch instead.
+Once approved, I'll request the secrets, build the function, test it live, and report back honestly with the result.
