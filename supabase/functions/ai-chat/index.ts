@@ -573,6 +573,7 @@ Deno.serve(async (req: Request) => {
               messages: conversation,
               tools,
               tool_choice: "auto",
+              stream: false,
             };
             if (model.startsWith("openai/gpt-5")) {
               reqBody.reasoning = { effort: "high" };
