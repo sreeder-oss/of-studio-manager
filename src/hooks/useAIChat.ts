@@ -35,11 +35,20 @@ export const useAIChat = () => {
       // Build outgoing message list for the API
       const apiMessages = [...messages, userMsg].map((m) => {
         if (m.role === 'user' && m.attachments && m.attachments.length > 0) {
+          const images = m.attachments.filter((a) => a.kind !== 'pdf' && a.dataUrl);
+          const pdfs = m.attachments.filter((a) => a.kind === 'pdf');
+          const pdfText = pdfs
+            .map((p) => `\n\n[Attached PDF: ${p.name}]\n${p.text ?? ''}`)
+            .join('');
+          const baseText = (m.content || (images.length ? '(image attached)' : '(pdf attached)')) + pdfText;
+          if (images.length === 0) {
+            return { role: 'user' as const, content: baseText };
+          }
           return {
             role: 'user' as const,
             content: [
-              { type: 'text' as const, text: m.content || '(image attached)' },
-              ...m.attachments.map((a) => ({ type: 'image_url' as const, image_url: { url: a.dataUrl } })),
+              { type: 'text' as const, text: baseText },
+              ...images.map((a) => ({ type: 'image_url' as const, image_url: { url: a.dataUrl } })),
             ],
           };
         }
