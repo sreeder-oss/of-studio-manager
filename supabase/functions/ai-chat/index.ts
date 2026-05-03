@@ -10,8 +10,23 @@ const corsHeaders = {
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const FC = "https://api.firecrawl.dev/v2";
-const MAX_TOOL_ROUNDS = 25;
+const MAX_TOOL_ROUNDS = 8;
 const MAX_SCRAPES_PER_REQUEST = 30;
+const UPSTREAM_ROUND_TIMEOUT_MS = 90_000;
+const TOOL_TIMEOUT_MS = { search: 20_000, scrape: 30_000, portal: 45_000 };
+
+async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await Promise.race([
+      p,
+      new Promise<T>((_, rej) => ctl.signal.addEventListener("abort", () => rej(new Error(`${label} timed out after ${ms}ms`)))),
+    ]);
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 // Whitelist of OpenRouter model slugs the client may request. Anything else
 // falls back to GPT-5 high-reasoning on Lovable AI.
@@ -118,6 +133,10 @@ PAYWALL AWARENESS:
 For ANY newageartisans.com URL (Plaster Portal, courses, product pages), use the
 naa_portal_fetch tool — Shawn's portal credentials are saved and it will log in for you.
 Do NOT use web_scrape on newageartisans.com; it will only see the public marketing page.
+**Call naa_portal_fetch AT MOST 2 times per estimate.** If the first 1–2 fetches don't
+surface coverage / mix ratio / price, STOP retrying — proceed with the spec you have
+plus a clear assumption note in the estimate. Do not loop trying to find numbers that
+aren't published.
 For other paywalled sources (Patreon, other dealer logins) where we have no saved login,
 say so plainly and offer (a) add system shell with public info, or (b) pull comparable
 specs from a similar product (American Clay, Meoded, Texston).
@@ -408,39 +427,53 @@ scratch coat, brown coat are correct.
 TONE: Professional peer. Concise confirmations, clear questions, no filler.`;
 }
 
+function fetchWithTimeout(url: string, init: RequestInit, ms: number) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  return fetch(url, { ...init, signal: ctl.signal }).finally(() => clearTimeout(t));
+}
+
 async function fcSearch(query: string, key: string) {
-  const r = await fetch(`${FC}/search`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query, limit: 10 }),
-  });
-  const data = await r.json();
-  if (!r.ok) return { error: `Firecrawl search failed: ${r.status}` };
-  const results = (data?.data?.web ?? data?.data ?? []).slice(0, 10).map((x: any) => ({
-    url: x.url, title: x.title, description: x.description ?? x.snippet ?? "",
-  }));
-  return { results };
+  try {
+    const r = await fetchWithTimeout(`${FC}/search`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query, limit: 10 }),
+    }, TOOL_TIMEOUT_MS.search);
+    const data = await r.json();
+    if (!r.ok) return { error: `Firecrawl search failed: ${r.status}` };
+    const results = (data?.data?.web ?? data?.data ?? []).slice(0, 10).map((x: any) => ({
+      url: x.url, title: x.title, description: x.description ?? x.snippet ?? "",
+    }));
+    return { results };
+  } catch (e) {
+    return { error: `web_search ${(e as Error).message}` };
+  }
 }
 
 async function fcScrape(url: string, key: string) {
-  const r = await fetch(`${FC}/scrape`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ url, formats: ["markdown", "links"], onlyMainContent: true }),
-  });
-  const data = await r.json();
-  if (!r.ok) {
-    if (r.status === 401 || r.status === 403) {
-      return { url, paywalled: true, status: r.status, note: "Login or paid access required." };
+  try {
+    const r = await fetchWithTimeout(`${FC}/scrape`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ url, formats: ["markdown", "links"], onlyMainContent: true }),
+    }, TOOL_TIMEOUT_MS.scrape);
+    const data = await r.json();
+    if (!r.ok) {
+      if (r.status === 401 || r.status === 403) {
+        return { url, paywalled: true, status: r.status, note: "Login or paid access required." };
+      }
+      return { error: `Firecrawl scrape failed: ${r.status}` };
     }
-    return { error: `Firecrawl scrape failed: ${r.status}` };
+    const md: string = data?.data?.markdown ?? data?.markdown ?? "";
+    const meta = data?.data?.metadata ?? data?.metadata ?? {};
+    const links: string[] = (data?.data?.links ?? data?.links ?? []).slice(0, 50);
+    const trimmed = md.length > 12000 ? md.slice(0, 12000) + "\n\n[...truncated...]" : md;
+    const paywalled = /sign\s*in|log\s*in|members?\s*only|enroll now|course access|password|subscribe to access/i.test(md.slice(0, 2000)) && md.length < 1500;
+    return { url, title: meta?.title, markdown: trimmed, links, paywalled };
+  } catch (e) {
+    return { error: `web_scrape ${(e as Error).message}` };
   }
-  const md: string = data?.data?.markdown ?? data?.markdown ?? "";
-  const meta = data?.data?.metadata ?? data?.metadata ?? {};
-  const links: string[] = (data?.data?.links ?? data?.links ?? []).slice(0, 50);
-  const trimmed = md.length > 12000 ? md.slice(0, 12000) + "\n\n[...truncated...]" : md;
-  const paywalled = /sign\s*in|log\s*in|members?\s*only|enroll now|course access|password|subscribe to access/i.test(md.slice(0, 2000)) && md.length < 1500;
-  return { url, title: meta?.title, markdown: trimmed, links, paywalled };
 }
 
 async function fcNaaPortal(target: string, key: string) {
@@ -464,20 +497,24 @@ async function fcNaaPortal(target: string, key: string) {
     { type: "wait", milliseconds: 6000 },
     { type: "scrape" },
   ];
-  const r = await fetch(`${FC}/scrape`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ url: LOGIN_URL, formats: ["markdown", "links"], onlyMainContent: false, actions, waitFor: 1500 }),
-  });
-  const data = await r.json();
-  if (!r.ok) return { error: `NAA portal scrape failed [${r.status}]`, details: data };
-  const md: string = data?.data?.markdown ?? data?.markdown ?? "";
-  const meta = data?.data?.metadata ?? data?.metadata ?? {};
-  const links: string[] = (data?.data?.links ?? data?.links ?? []).slice(0, 60);
-  const trimmed = md.length > 14000 ? md.slice(0, 14000) + "\n\n[...truncated...]" : md;
-  const finalUrl = meta?.sourceURL ?? meta?.url ?? target;
-  const stillOnLogin = /outseta\.com\/auth/i.test(finalUrl) && md.length < 1200;
-  return { requestedUrl: target, finalUrl, title: meta?.title, loggedIn: !stillOnLogin, markdown: trimmed, links };
+  try {
+    const r = await fetchWithTimeout(`${FC}/scrape`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ url: LOGIN_URL, formats: ["markdown", "links"], onlyMainContent: false, actions, waitFor: 1500 }),
+    }, TOOL_TIMEOUT_MS.portal);
+    const data = await r.json();
+    if (!r.ok) return { error: `NAA portal scrape failed [${r.status}]`, details: data };
+    const md: string = data?.data?.markdown ?? data?.markdown ?? "";
+    const meta = data?.data?.metadata ?? data?.metadata ?? {};
+    const links: string[] = (data?.data?.links ?? data?.links ?? []).slice(0, 60);
+    const trimmed = md.length > 14000 ? md.slice(0, 14000) + "\n\n[...truncated...]" : md;
+    const finalUrl = meta?.sourceURL ?? meta?.url ?? target;
+    const stillOnLogin = /outseta\.com\/auth/i.test(finalUrl) && md.length < 1200;
+    return { requestedUrl: target, finalUrl, title: meta?.title, loggedIn: !stillOnLogin, markdown: trimmed, links };
+  } catch (e) {
+    return { error: `naa_portal_fetch ${(e as Error).message}` };
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -580,15 +617,24 @@ Deno.serve(async (req: Request) => {
               reqBody.reasoning = { effort: "high" };
             }
 
-            const upstream = await fetch(upstreamUrl, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${upstreamKey}`,
-                "Content-Type": "application/json",
-                ...upstreamExtraHeaders,
-              },
-              body: JSON.stringify(reqBody),
-            });
+            console.log("ai-chat round", round, "scrapes_used", scrapesUsed);
+            let upstream: Response;
+            try {
+              upstream = await fetchWithTimeout(upstreamUrl, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${upstreamKey}`,
+                  "Content-Type": "application/json",
+                  ...upstreamExtraHeaders,
+                },
+                body: JSON.stringify(reqBody),
+              }, UPSTREAM_ROUND_TIMEOUT_MS);
+            } catch (e) {
+              console.error("ai-chat upstream timeout/abort round", round, e);
+              send({ choices: [{ delta: { content: `_Model timed out on round ${round + 1} (${Math.round(UPSTREAM_ROUND_TIMEOUT_MS/1000)}s). Try again, or pick a faster model._` } }] });
+              done();
+              return;
+            }
 
             if (!upstream.ok) {
               const t = await upstream.text().catch(() => "");
@@ -634,6 +680,15 @@ Deno.serve(async (req: Request) => {
               try { args = JSON.parse(tc.function?.arguments ?? "{}"); } catch { /* ignore */ }
               ping();
               let result: unknown;
+
+              // Visible status so the user knows we're working, not stuck.
+              const status =
+                fname === "web_search"      ? `_🔎 Searching: ${String(args.query ?? "").slice(0, 80)}…_\n` :
+                fname === "web_scrape"      ? `_📄 Reading ${String(args.url ?? "").slice(0, 80)}…_\n` :
+                fname === "naa_portal_fetch"? `_🔐 Logging into NAA portal for ${String(args.url ?? "").slice(0, 80)}…_\n` :
+                "";
+              if (status && round === 0) send({ choices: [{ delta: { content: status } }] });
+              else if (status) send({ choices: [{ delta: { content: status } }] });
 
               if (!FIRECRAWL_API_KEY) {
                 result = { error: "Web tools unavailable: FIRECRAWL_API_KEY not configured." };
