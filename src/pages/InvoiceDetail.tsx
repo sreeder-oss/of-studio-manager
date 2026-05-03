@@ -1,7 +1,7 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle, FileDown } from 'lucide-react';
-import { useInvoice, useSaveInvoice } from '@/hooks/useInvoices';
+import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle, FileDown, Trash2 } from 'lucide-react';
+import { useInvoice, useSaveInvoice, useDeleteInvoice } from '@/hooks/useInvoices';
 import { useContact } from '@/hooks/useContacts';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { LEGAL_TERMS, PRIVACY_NOTICE } from '@/lib/legal';
@@ -14,6 +14,18 @@ const InvoiceDetail: React.FC = () => {
   const { data: invoice, isLoading } = useInvoice(id!);
   const { data: contact } = useContact(invoice?.contact_id || '');
   const saveInvoice = useSaveInvoice();
+  const deleteInvoice = useDeleteInvoice();
+
+  const handleDelete = async () => {
+    if (!invoice) return;
+    if (confirm('Delete this invoice? This cannot be undone.')) {
+      try {
+        await deleteInvoice.mutateAsync(invoice.id);
+        toast.success('Invoice deleted');
+        navigate('/invoices');
+      } catch { toast.error('Failed to delete invoice'); }
+    }
+  };
 
   useAIPageContext(invoice ? {
     kind: 'invoice', id: invoice.id,
@@ -86,6 +98,10 @@ const InvoiceDetail: React.FC = () => {
       <div className="flex items-center justify-between">
         <button onClick={() => navigate('/invoices')} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[10px] font-bold uppercase tracking-widest">
           <ChevronLeft size={14} /> All Invoices
+        </button>
+        <button onClick={handleDelete} disabled={deleteInvoice.isPending}
+          className="flex items-center gap-1 text-destructive/60 hover:text-destructive text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">
+          <Trash2 size={12} /> Delete
         </button>
       </div>
 
