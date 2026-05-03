@@ -201,7 +201,7 @@ export const AIChat: React.FC = () => {
             <button onClick={() => cameraInputRef.current?.click()} title="Take a site photo" className="p-2 text-muted-foreground hover:text-primary rounded-lg hover:bg-accent">
               <Camera size={16} />
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+            <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple className="hidden"
               onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
