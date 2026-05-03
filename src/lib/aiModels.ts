@@ -37,6 +37,13 @@ export const AI_MODELS: AIModelOption[] = [
     openrouter: true,
   },
   {
+    id: 'anthropic/claude-sonnet-4-6',
+    label: 'Claude Sonnet 4.6',
+    provider: 'Anthropic',
+    blurb: 'Latest Claude Sonnet. Fast, intelligent, great for estimates and detailed work.',
+    openrouter: true,
+  },
+  {
     id: 'google/gemini-3-pro-preview',
     label: 'Gemini 3 Pro',
     provider: 'Google',

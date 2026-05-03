@@ -20,6 +20,7 @@ const OPENROUTER_MODELS = new Set([
   "openai/gpt-5-pro",
   "anthropic/claude-opus-4.5",
   "anthropic/claude-sonnet-4.5",
+  "anthropic/claude-sonnet-4-6",
   "google/gemini-3-pro-preview",
   "x-ai/grok-4",
 ]);
