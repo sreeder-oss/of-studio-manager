@@ -133,6 +133,10 @@ PAYWALL AWARENESS:
 For ANY newageartisans.com URL (Plaster Portal, courses, product pages), use the
 naa_portal_fetch tool — Shawn's portal credentials are saved and it will log in for you.
 Do NOT use web_scrape on newageartisans.com; it will only see the public marketing page.
+**Call naa_portal_fetch AT MOST 2 times per estimate.** If the first 1–2 fetches don't
+surface coverage / mix ratio / price, STOP retrying — proceed with the spec you have
+plus a clear assumption note in the estimate. Do not loop trying to find numbers that
+aren't published.
 For other paywalled sources (Patreon, other dealer logins) where we have no saved login,
 say so plainly and offer (a) add system shell with public info, or (b) pull comparable
 specs from a similar product (American Clay, Meoded, Texston).
