@@ -1,55 +1,108 @@
-## Goal
-Stop the silent multi-minute hangs when the AI runs research-heavy prompts (Tadelakt estimate, "add all NAA systems", etc.) on Sonnet 4.5 / 4.6, while keeping the existing tool-calling behavior.
+## What I found
 
-## Root cause recap
-- `ai-chat` runs a non-streaming tool round, then executes tools (NAA portal fetch = ~18s each), then loops — up to 25 rounds.
-- Any single stalled upstream call freezes the whole conversation. The 10s heartbeat keeps the socket open, so the UI shows "thinking" forever with no signal of progress or failure.
-- Sonnet's tool-use loops are noticeably longer than GPT-5's because the new system prompt aggressively encourages multiple lookups + the portal tool.
+The current behavior does **not actually prove the NAA login succeeded**.
 
-## Changes (all in `supabase/functions/ai-chat/index.ts`)
+1. `ai-chat` is **not using** the dedicated `portal-fetch` function at all.
+   - It has its own inline `fcNaaPortal()` implementation inside `supabase/functions/ai-chat/index.ts`.
+   - That means any prior “it worked” result only proved the assistant eventually produced an estimate, **not** that the NAA portal auth flow was valid.
 
-1. **Per-round timeout on the upstream LLM call.**
-   Wrap each `fetch(upstreamUrl, ...)` in an `AbortController` with a 90s timeout. On abort: stream a clear message (`_Model timed out on round N. Returning what I have so far._`), break the loop, and `done()` instead of hanging.
+2. The current login-success check is too weak.
+   - `fcNaaPortal()` decides login worked unless the final URL still contains `outseta.com/auth` **and** the markdown is short.
+   - But `https://www.newageartisans.com/plaster-portal` is publicly readable as a marketing page even without login.
+   - So the function can return a plausible page, the model keeps researching, and it looks like it “got into the portal” when it may not have.
 
-2. **Per-tool timeout on Firecrawl calls.**
-   - `fcSearch`: 20s
-   - `fcScrape`: 30s
-   - `fcNaaPortal`: 45s (it legitimately needs ~18–25s for the login dance)
-   On timeout, return `{ error: "<tool> timed out after Ns" }` to the model so it can recover instead of the whole function dying.
+3. The logs support that diagnosis.
+   - I can see `ai-chat` rounds and the assistant’s status messages.
+   - I **do not** see evidence that the dedicated `portal-fetch` function was involved.
+   - So the portal step is currently a black box inside `ai-chat`, with weak auth verification and no direct test coverage.
 
-3. **Visible progress pings as real assistant deltas.**
-   Right now we only send SSE comments between rounds. Add short italic status lines as actual `delta.content` events so the user sees:
-   - `_Searching: tadelakt waterproof shower coverage…_`
-   - `_Reading newageartisans.com plaster portal…_`
-   - `_Drafting estimate…_`
-   These are emitted before each tool call and before the final answer round. Cheap to do, massive UX win, and they make a wedge state obvious.
+## Root cause to fix
 
-4. **Lower `MAX_TOOL_ROUNDS` from 25 → 8.**
-   Twenty-five rounds was always aspirational; in practice the model either finishes in ≤5 or it's stuck in a loop. 8 is a real cap, and combined with the per-round timeout the worst-case wall time becomes bounded (~12 min absolute ceiling, typical 60–120s).
+Most likely one of these is happening:
 
-5. **Tighten the portal-fetch wording in the system prompt.**
-   Add: "Call `naa_portal_fetch` AT MOST 2 times per estimate. If the first 1–2 fetches don't surface coverage / mix ratio, proceed with the spec you have plus a clear assumption note — don't keep retrying."
-   This is the single biggest reason Sonnet hangs on Tadelakt: it keeps re-fetching portal pages hoping for a number that isn't published.
+- the saved NAA credentials are wrong / expired, or
+- the Outseta login flow/selectors changed, or
+- login works but the scraper lands on a public/plaster-portal marketing page, so the code mistakes that for authenticated access.
 
-6. **Catch & surface `429` / `402` mid-loop.**
-   Already handled on first call; make sure the same handling runs for every round (it currently does, but the error string will now include which round failed so we can debug from logs).
+Right now the code masks all three cases as “success enough.”
 
-7. **Log every round.**
-   `console.log("ai-chat round", round, "tool_calls", toolCalls?.length, "scrapes_used", scrapesUsed)` so future hangs are diagnosable from the function log alone.
+## Plan
 
-## Validation (after switching to default mode)
+### 1) Unify portal access behind the dedicated backend function
+Refactor `ai-chat` so `naa_portal_fetch` calls the deployed `portal-fetch` function instead of duplicating the login logic inline.
 
-1. Deploy `ai-chat`.
-2. `curl_edge_functions` with the exact failing prompt on **Sonnet 4.6**:
-   > create an estimate for a 300 square foot shower, finished using the Tadelakt system from New Age Artisans, no color, we are waterproofing and sealing, we are not hanging the board or doing the pan. no niches just walls please, in tulsa
-3. Confirm the response stream contains:
-   - At least one `_Searching…_` / `_Reading…_` status delta
-   - Either a full ```json estimate block, or a clear timeout/limit message — never silence
-4. Repeat on **Sonnet 4.5** and **GPT-5** (default) to confirm no regression.
-5. Read `edge_function_logs ai-chat` and verify the new per-round logs appear and the function reaches a clean shutdown each time.
-6. Report results back here honestly — including any prompt that still doesn't finish, with the round count and what tool stalled.
+Why:
+- one source of truth for login behavior
+- easier debugging
+- direct logs for portal auth attempts
+- easier to test separately from the model loop
 
-## Non-goals (call out so we don't scope-creep)
-- Not changing the model list, not touching `aiModels.ts`.
-- Not adding new tools or new portal logic.
-- Not refactoring the SSE client (`useAIChat.ts`) — it already handles `delta.content` correctly, so the new status pings will render with no client change.
+### 2) Make portal auth validation strict
+Update `portal-fetch` and the `naa_portal_fetch` tool contract so they only report success when authenticated access is clearly confirmed.
+
+Specifically:
+- treat login as failed if the response still resembles a login wall or public upsell page
+- detect obvious unauthenticated markers such as:
+  - login form fields
+  - “Annual Membership”, “Get Access”, “Sign in with Google”, “Foundational Courses” upsell content
+  - redirect back to Outseta auth
+- return a structured error like:
+  - `auth_failed`
+  - `login_page_detected`
+  - `public_marketing_page_detected`
+
+This will stop the assistant from pretending it has portal data when it doesn’t.
+
+### 3) Add safe diagnostics
+Add explicit logs around the portal flow without exposing secrets:
+- target URL
+- final URL
+- whether login markers were detected
+- whether marketing-page markers were detected
+- safe credential metadata only if needed (length / masked prefix), never full values
+
+This will tell us whether the issue is:
+- bad credentials
+- broken selectors
+- redirect/login failure
+- false positive on a public page
+
+### 4) Make the AI fail fast and clearly when portal auth fails
+Update `ai-chat` so when `naa_portal_fetch` returns auth failure:
+- it stops retrying the portal
+- it tells you plainly that the saved NAA credentials/login flow failed
+- it does **not** continue as if it successfully browsed the protected portal
+- it falls back to public-web research only, with a clear note that protected portal data was unavailable
+
+### 5) Add automated tests
+Create Deno tests for the portal flow and tool interpretation.
+
+Coverage:
+- successful authenticated portal scrape
+- redirected back to login
+- public marketing page mistaken for portal content
+- invalid credentials / auth failure
+- `ai-chat` tool handling when portal auth fails
+
+These tests will mock Firecrawl responses so this behavior is deterministic.
+
+### 6) Validate end-to-end after the fix
+Once I’m back in build mode, I’ll run both direct and end-to-end checks:
+
+1. direct call to `portal-fetch` against the NAA target URL
+2. inspect `portal-fetch` logs to confirm whether auth succeeded or failed
+3. send your exact estimate prompt through `ai-chat` on Sonnet 4.5 and 4.6
+4. confirm one of these happens:
+   - authenticated portal content is used, or
+   - a clear “portal auth failed” message appears
+5. verify the assistant no longer gets stuck looping at the portal step
+
+## Expected result
+
+After this fix, the system will no longer blur together:
+- “the assistant finished an estimate” and
+- “the NAA credentials/login actually worked.”
+
+It will either:
+- successfully authenticate and use protected NAA data, or
+- tell you clearly that the stored NAA login failed and stop pretending otherwise.
