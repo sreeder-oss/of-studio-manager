@@ -178,7 +178,14 @@ export const AIChat: React.FC = () => {
             <div className="flex gap-1.5 flex-wrap">
               {attachments.map((a, i) => (
                 <div key={i} className="relative">
-                  <img src={a.dataUrl} alt={a.name} className="h-12 w-12 object-cover rounded-lg border border-border" />
+                  {a.kind === 'pdf' ? (
+                    <div className="h-12 w-12 rounded-lg border border-border bg-card flex flex-col items-center justify-center px-1" title={a.name}>
+                      <FileText size={16} className="text-primary" />
+                      <span className="text-[8px] text-muted-foreground truncate w-full text-center">PDF</span>
+                    </div>
+                  ) : (
+                    <img src={a.dataUrl} alt={a.name} className="h-12 w-12 object-cover rounded-lg border border-border" />
+                  )}
                   <button onClick={() => setAttachments((p) => p.filter((_, j) => j !== i))}
                     className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5">
                     <X size={10} />
