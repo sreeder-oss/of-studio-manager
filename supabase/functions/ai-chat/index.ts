@@ -637,6 +637,7 @@ Deno.serve(async (req: Request) => {
         ping();
 
         let scrapesUsed = 0;
+        let portalAuthFailed = false;
         try {
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             const isLastAllowedRound = round === MAX_TOOL_ROUNDS - 1;
@@ -750,11 +751,17 @@ Deno.serve(async (req: Request) => {
                   result = await fcScrape(String(args.url ?? ""), FIRECRAWL_API_KEY);
                 }
               } else if (fname === "naa_portal_fetch") {
-                if (scrapesUsed >= MAX_SCRAPES_PER_REQUEST) {
+                if (portalAuthFailed) {
+                  result = { error: "NAA_PORTAL_AUTH_FAILED: already failed once this conversation. Do not retry. Use public web research only." };
+                } else if (scrapesUsed >= MAX_SCRAPES_PER_REQUEST) {
                   result = { error: `Scrape cap reached (${MAX_SCRAPES_PER_REQUEST}).` };
                 } else {
                   scrapesUsed++;
                   result = await fcNaaPortal(String(args.url ?? ""), FIRECRAWL_API_KEY);
+                  if ((result as any)?.error?.startsWith?.("NAA_PORTAL_AUTH_FAILED")) {
+                    portalAuthFailed = true;
+                    send({ choices: [{ delta: { content: `_⚠️ NAA portal login failed (${(result as any).reason ?? "auth error"}). Continuing with public sources only._\n` } }] });
+                  }
                 }
               } else {
                 result = { error: `Unknown tool: ${fname}` };
