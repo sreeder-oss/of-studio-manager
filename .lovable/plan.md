@@ -1,42 +1,55 @@
 ## Goal
-Let the AI fetch product/spec/pricing pages from the New Age Artisans Plaster portal that currently sit behind a login, so estimates use real data instead of guesses.
+Stop the silent multi-minute hangs when the AI runs research-heavy prompts (Tadelakt estimate, "add all NAA systems", etc.) on Sonnet 4.5 / 4.6, while keeping the existing tool-calling behavior.
 
-## Honest constraints (read first)
-1. **I still need the portal URL.** You answered the URL question with your email address. I won't guess a URL — without the real login page I can't test anything and I'd be doing exactly what you asked me not to do.
-2. **Firecrawl (our current scraper) does not log into arbitrary portals.** It fetches a page and returns whatever the server gives an unauthenticated visitor. To get past a login we need a different approach — either a Firecrawl `actions` flow (type email, type password, click submit, then scrape) or a Deno-side `fetch` that posts to the portal's login endpoint and reuses the session cookie. Which one works depends entirely on how that specific portal authenticates. We will only know after testing against the real URL.
-3. **No payment/banking data rule still applies.** A vendor portal login is fine to store; just flagging that I checked.
+## Root cause recap
+- `ai-chat` runs a non-streaming tool round, then executes tools (NAA portal fetch = ~18s each), then loops — up to 25 rounds.
+- Any single stalled upstream call freezes the whole conversation. The 10s heartbeat keeps the socket open, so the UI shows "thinking" forever with no signal of progress or failure.
+- Sonnet's tool-use loops are noticeably longer than GPT-5's because the new system prompt aggressively encourages multiple lookups + the portal tool.
 
-## Storage
-- Save credentials as **backend secrets**, not in a database row:
-  - `NAA_PORTAL_EMAIL`
-  - `NAA_PORTAL_PASSWORD`
-  - `NAA_PORTAL_BASE_URL` (the login URL you provide)
-- Secrets are only readable by edge functions, never shipped to the browser, and don't appear in logs.
+## Changes (all in `supabase/functions/ai-chat/index.ts`)
 
-## New edge function: `portal-fetch`
-A small Deno function the AI tool loop can call when it hits a paywalled New Age Artisans page.
+1. **Per-round timeout on the upstream LLM call.**
+   Wrap each `fetch(upstreamUrl, ...)` in an `AbortController` with a 90s timeout. On abort: stream a clear message (`_Model timed out on round N. Returning what I have so far._`), break the loop, and `done()` instead of hanging.
 
-Behavior:
-1. Verify the caller is an authenticated app user (same JWT check as `web-tools`).
-2. Read the three secrets above. If any missing → return a clear error (no guessing).
-3. Attempt login against the portal:
-   - First try: HTTP login (POST form/JSON to the portal's auth endpoint, capture `Set-Cookie`, then GET the requested URL with that cookie).
-   - If that fails, fall back to Firecrawl `scrape` with `actions: [{type:"write", selector:"...", text: email}, {type:"write", selector:"...", text: password}, {type:"click", selector:"..."}, {type:"wait", milliseconds: 1500}]`.
-4. Return `{ url, markdown, title, loggedIn: true }` on success, or `{ error, status }` on failure — including the actual HTTP status and a short snippet so we can debug instead of pretending it worked.
+2. **Per-tool timeout on Firecrawl calls.**
+   - `fcSearch`: 20s
+   - `fcScrape`: 30s
+   - `fcNaaPortal`: 45s (it legitimately needs ~18–25s for the login dance)
+   On timeout, return `{ error: "<tool> timed out after Ns" }` to the model so it can recover instead of the whole function dying.
 
-## Wiring into the AI
-- In `supabase/functions/ai-chat/index.ts`, register a new tool `portal_fetch` (description: "Fetch a page from the New Age Artisans plaster portal using saved credentials. Use this whenever a New Age Artisans URL would otherwise be paywalled.") that proxies to `portal-fetch`.
-- Update the existing `web-tools` paywall response so when the scraper sees `newageartisans` (or whatever the real domain is) and gets blocked, the AI knows to retry via `portal_fetch` instead of giving up.
+3. **Visible progress pings as real assistant deltas.**
+   Right now we only send SSE comments between rounds. Add short italic status lines as actual `delta.content` events so the user sees:
+   - `_Searching: tadelakt waterproof shower coverage…_`
+   - `_Reading newageartisans.com plaster portal…_`
+   - `_Drafting estimate…_`
+   These are emitted before each tool call and before the final answer round. Cheap to do, massive UX win, and they make a wedge state obvious.
 
-## Validation (the part that proves it actually works)
-Once the URL is provided and secrets are added, I will:
-1. Deploy `portal-fetch`.
-2. Call it via `curl_edge_functions` against the real login URL + one known product page.
-3. Read the response. If `loggedIn: true` and we get real product markdown back → confirm to you it works.
-4. If it fails → tell you exactly what failed (e.g. "login form uses CSRF token X, need a different approach") and propose the next step. **No silent fallbacks, no fake success.**
+4. **Lower `MAX_TOOL_ROUNDS` from 25 → 8.**
+   Twenty-five rounds was always aspirational; in practice the model either finishes in ≤5 or it's stuck in a loop. 8 is a real cap, and combined with the per-round timeout the worst-case wall time becomes bounded (~12 min absolute ceiling, typical 60–120s).
 
-## What I need from you to proceed
-- The **portal URL** (login page, e.g. `https://portal.newageartisans.com/login` — whatever the real one is).
-- Confirmation to add the three secrets (`NAA_PORTAL_EMAIL`, `NAA_PORTAL_PASSWORD`, `NAA_PORTAL_BASE_URL`).
+5. **Tighten the portal-fetch wording in the system prompt.**
+   Add: "Call `naa_portal_fetch` AT MOST 2 times per estimate. If the first 1–2 fetches don't surface coverage / mix ratio, proceed with the spec you have plus a clear assumption note — don't keep retrying."
+   This is the single biggest reason Sonnet hangs on Tadelakt: it keeps re-fetching portal pages hoping for a number that isn't published.
 
-Once approved, I'll request the secrets, build the function, test it live, and report back honestly with the result.
+6. **Catch & surface `429` / `402` mid-loop.**
+   Already handled on first call; make sure the same handling runs for every round (it currently does, but the error string will now include which round failed so we can debug from logs).
+
+7. **Log every round.**
+   `console.log("ai-chat round", round, "tool_calls", toolCalls?.length, "scrapes_used", scrapesUsed)` so future hangs are diagnosable from the function log alone.
+
+## Validation (after switching to default mode)
+
+1. Deploy `ai-chat`.
+2. `curl_edge_functions` with the exact failing prompt on **Sonnet 4.6**:
+   > create an estimate for a 300 square foot shower, finished using the Tadelakt system from New Age Artisans, no color, we are waterproofing and sealing, we are not hanging the board or doing the pan. no niches just walls please, in tulsa
+3. Confirm the response stream contains:
+   - At least one `_Searching…_` / `_Reading…_` status delta
+   - Either a full ```json estimate block, or a clear timeout/limit message — never silence
+4. Repeat on **Sonnet 4.5** and **GPT-5** (default) to confirm no regression.
+5. Read `edge_function_logs ai-chat` and verify the new per-round logs appear and the function reaches a clean shutdown each time.
+6. Report results back here honestly — including any prompt that still doesn't finish, with the round count and what tool stalled.
+
+## Non-goals (call out so we don't scope-creep)
+- Not changing the model list, not touching `aiModels.ts`.
+- Not adding new tools or new portal logic.
+- Not refactoring the SSE client (`useAIChat.ts`) — it already handles `delta.content` correctly, so the new status pings will render with no client change.

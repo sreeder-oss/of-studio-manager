@@ -10,8 +10,23 @@ const corsHeaders = {
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const FC = "https://api.firecrawl.dev/v2";
-const MAX_TOOL_ROUNDS = 25;
+const MAX_TOOL_ROUNDS = 8;
 const MAX_SCRAPES_PER_REQUEST = 30;
+const UPSTREAM_ROUND_TIMEOUT_MS = 90_000;
+const TOOL_TIMEOUT_MS = { search: 20_000, scrape: 30_000, portal: 45_000 };
+
+async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await Promise.race([
+      p,
+      new Promise<T>((_, rej) => ctl.signal.addEventListener("abort", () => rej(new Error(`${label} timed out after ${ms}ms`)))),
+    ]);
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 // Whitelist of OpenRouter model slugs the client may request. Anything else
 // falls back to GPT-5 high-reasoning on Lovable AI.
