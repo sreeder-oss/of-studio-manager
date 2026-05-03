@@ -66,11 +66,24 @@ export const useDeleteReceipt = () => {
   });
 };
 
+// Returns the storage path (not a URL). Use getReceiptImageUrl to display.
 export const uploadReceiptImage = async (userId: string, file: File): Promise<string> => {
   const ext = file.name.split('.').pop();
   const path = `${userId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from('receipts').upload(path, file);
   if (error) throw error;
-  const { data } = supabase.storage.from('receipts').getPublicUrl(path);
-  return data.publicUrl;
+  return path;
+};
+
+// Resolve a stored value (path or legacy public URL) to a short-lived signed URL.
+export const getReceiptImageUrl = async (pathOrUrl: string): Promise<string> => {
+  if (/^https?:\/\//.test(pathOrUrl)) {
+    // Legacy public URL — extract the storage path after `/receipts/`
+    const m = pathOrUrl.match(/\/receipts\/(.+)$/);
+    if (!m) return pathOrUrl;
+    pathOrUrl = m[1];
+  }
+  const { data, error } = await supabase.storage.from('receipts').createSignedUrl(pathOrUrl, 3600);
+  if (error) throw error;
+  return data.signedUrl;
 };

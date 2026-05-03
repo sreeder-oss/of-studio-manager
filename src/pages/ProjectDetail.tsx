@@ -11,6 +11,7 @@ import { usePhotos, useSavePhoto, useDeletePhoto, uploadProjectPhoto } from '@/h
 import { useAuth } from '@/contexts/AuthContext';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { toast } from 'sonner';
+import { SignedImage, SignedLink } from '@/components/SignedAsset';
 
 type Tab = 'overview' | 'estimates' | 'receipts' | 'documents' | 'photos';
 
@@ -223,7 +224,7 @@ const ProjectDetail: React.FC = () => {
             <div key={r.id} className="bg-card p-3 rounded-xl border border-border flex items-center gap-3">
               {r.image_url && (
                 <div className="w-10 h-10 rounded-lg overflow-hidden border border-border flex-shrink-0">
-                  <img src={r.image_url} alt="" className="w-full h-full object-cover" />
+                  <SignedImage bucket="receipts" path={r.image_url} className="w-full h-full object-cover" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
@@ -270,7 +271,7 @@ const ProjectDetail: React.FC = () => {
                 <p className="text-[10px] text-muted-foreground">{doc.type} • {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : ''}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {doc.file_url && <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="text-primary text-[9px] font-bold uppercase tracking-widest hover:underline">View</a>}
+                {doc.file_url && <SignedLink bucket="of-documents" path={doc.file_url} className="text-primary text-[9px] font-bold uppercase tracking-widest hover:underline">View</SignedLink>}
                 <button onClick={() => { deleteDocMut.mutateAsync(doc.id); toast.success('Deleted'); }} className="text-destructive/50 hover:text-destructive"><Trash2 size={12} /></button>
               </div>
             </div>

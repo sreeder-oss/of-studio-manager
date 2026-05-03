@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, Search, X, Trash2, ChevronDown, ChevronRight, FolderOpen, Layers } from 'lucide-react';
 import { useReceipts, useSaveReceipt, useDeleteReceipt, uploadReceiptImage } from '@/hooks/useReceipts';
+import { SignedImage } from '@/components/SignedAsset';
 import { useProjects, useSaveProject } from '@/hooks/useProjects';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -154,7 +155,7 @@ const Receipts: React.FC = () => {
     <div key={receipt.id} className="bg-card p-3 rounded-xl border border-border flex items-center gap-3 group">
       {receipt.image_url && (
         <div className="w-12 h-12 rounded-lg overflow-hidden border border-border flex-shrink-0">
-          <img src={receipt.image_url} alt="Receipt" className="w-full h-full object-cover" />
+          <SignedImage bucket="receipts" path={receipt.image_url} alt="Receipt" className="w-full h-full object-cover" />
         </div>
       )}
       <div className="flex-1 min-w-0">

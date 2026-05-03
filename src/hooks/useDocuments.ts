@@ -55,11 +55,23 @@ export const useDeleteDocument = () => {
   });
 };
 
+// Returns the storage path (not a URL). Use getDocumentFileUrl to open.
 export const uploadDocumentFile = async (userId: string, file: File): Promise<string> => {
   const ext = file.name.split('.').pop();
   const path = `${userId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from('of-documents').upload(path, file);
   if (error) throw error;
-  const { data } = supabase.storage.from('of-documents').getPublicUrl(path);
-  return data.publicUrl;
+  return path;
+};
+
+// Resolve a stored value (path or legacy public URL) to a short-lived signed URL.
+export const getDocumentFileUrl = async (pathOrUrl: string): Promise<string> => {
+  if (/^https?:\/\//.test(pathOrUrl)) {
+    const m = pathOrUrl.match(/\/of-documents\/(.+)$/);
+    if (!m) return pathOrUrl;
+    pathOrUrl = m[1];
+  }
+  const { data, error } = await supabase.storage.from('of-documents').createSignedUrl(pathOrUrl, 3600);
+  if (error) throw error;
+  return data.signedUrl;
 };
