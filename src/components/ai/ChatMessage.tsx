@@ -39,7 +39,14 @@ export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenIn
         {message.attachments && message.attachments.length > 0 && (
           <div className="flex gap-1.5 mb-1.5 flex-wrap">
             {message.attachments.map((a, i) => (
-              <img key={i} src={a.dataUrl} alt={a.name} className="h-16 w-16 object-cover rounded-lg border border-border" />
+              a.kind === 'pdf' ? (
+                <div key={i} className="h-16 px-2 rounded-lg border border-border bg-background/40 flex items-center gap-1.5 text-[10px]">
+                  <FileText size={14} className="text-primary" />
+                  <span className="truncate max-w-[120px]">{a.name}</span>
+                </div>
+              ) : (
+                <img key={i} src={a.dataUrl} alt={a.name} className="h-16 w-16 object-cover rounded-lg border border-border" />
+              )
             ))}
           </div>
         )}

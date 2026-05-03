@@ -2,8 +2,10 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { getStoredModelId, setStoredModelId } from '@/lib/aiModels';
 
 export interface ChatAttachment {
-  dataUrl: string; // base64 data URL
+  dataUrl: string; // base64 data URL (empty string for text-only attachments like PDFs)
   name: string;
+  kind?: 'image' | 'pdf';
+  text?: string; // extracted text for PDFs
 }
 
 export interface ChatMessage {

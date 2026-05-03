@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Mic, Paperclip, Camera, Send, Square, X, Sparkles, Zap, History, Plus } from 'lucide-react';
+import { Mic, Paperclip, Camera, Send, Square, X, Sparkles, Zap, History, Plus, FileText } from 'lucide-react';
+import { toast } from 'sonner';
+import { extractPdfText } from '@/lib/pdfExtract';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
 import { useAIChat } from '@/hooks/useAIChat';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
@@ -91,9 +93,23 @@ export const AIChat: React.FC = () => {
     if (!files) return;
     const next: ChatAttachment[] = [];
     for (const f of Array.from(files).slice(0, 4)) {
-      if (!f.type.startsWith('image/')) continue;
-      const dataUrl = await fileToDataUrl(f);
-      next.push({ dataUrl, name: f.name });
+      if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+        try {
+          const text = await extractPdfText(f);
+          if (!text.trim()) {
+            toast.error(`${f.name}: no extractable text (scanned PDF?)`);
+            continue;
+          }
+          next.push({ dataUrl: '', name: f.name, kind: 'pdf', text });
+          toast.success(`${f.name} attached`);
+        } catch (err) {
+          console.error('PDF extract failed', err);
+          toast.error(`Failed to read ${f.name}`);
+        }
+      } else if (f.type.startsWith('image/')) {
+        const dataUrl = await fileToDataUrl(f);
+        next.push({ dataUrl, name: f.name, kind: 'image' });
+      }
     }
     setAttachments((prev) => [...prev, ...next].slice(0, 4));
   };
@@ -162,7 +178,14 @@ export const AIChat: React.FC = () => {
             <div className="flex gap-1.5 flex-wrap">
               {attachments.map((a, i) => (
                 <div key={i} className="relative">
-                  <img src={a.dataUrl} alt={a.name} className="h-12 w-12 object-cover rounded-lg border border-border" />
+                  {a.kind === 'pdf' ? (
+                    <div className="h-12 w-12 rounded-lg border border-border bg-card flex flex-col items-center justify-center px-1" title={a.name}>
+                      <FileText size={16} className="text-primary" />
+                      <span className="text-[8px] text-muted-foreground truncate w-full text-center">PDF</span>
+                    </div>
+                  ) : (
+                    <img src={a.dataUrl} alt={a.name} className="h-12 w-12 object-cover rounded-lg border border-border" />
+                  )}
                   <button onClick={() => setAttachments((p) => p.filter((_, j) => j !== i))}
                     className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5">
                     <X size={10} />
@@ -178,7 +201,7 @@ export const AIChat: React.FC = () => {
             <button onClick={() => cameraInputRef.current?.click()} title="Take a site photo" className="p-2 text-muted-foreground hover:text-primary rounded-lg hover:bg-accent">
               <Camera size={16} />
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+            <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple className="hidden"
               onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
