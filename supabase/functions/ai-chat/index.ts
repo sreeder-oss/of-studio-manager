@@ -10,7 +10,8 @@ const corsHeaders = {
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const FC = "https://api.firecrawl.dev/v2";
-const MAX_TOOL_ROUNDS = 8;
+const MAX_TOOL_ROUNDS = 16;
+const RESEARCH_SOFT_CAP = 6; // after this many tool rounds, force the model to wrap up
 const MAX_SCRAPES_PER_REQUEST = 30;
 const UPSTREAM_ROUND_TIMEOUT_MS = 90_000;
 const TOOL_TIMEOUT_MS = { search: 20_000, scrape: 30_000, portal: 45_000 };
@@ -588,17 +589,24 @@ Deno.serve(async (req: Request) => {
     const enc = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (obj: unknown) =>
-          controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
-        const ping = () => controller.enqueue(enc.encode(`: keepalive ${Date.now()}\n\n`));
+        let closed = false;
+        const safeEnqueue = (chunk: Uint8Array) => {
+          if (closed) return;
+          try { controller.enqueue(chunk); } catch { closed = true; }
+        };
+        const send = (obj: unknown) => safeEnqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        const ping = () => safeEnqueue(enc.encode(`: keepalive ${Date.now()}\n\n`));
         const done = () => {
-          controller.enqueue(enc.encode(`data: [DONE]\n\n`));
-          controller.close();
+          if (closed) return;
+          safeEnqueue(enc.encode(`data: [DONE]\n\n`));
+          closed = true;
+          try { controller.close(); } catch { /* already closed */ }
         };
 
         // Heartbeat every 10s so neither the edge runtime nor any proxy idles us out.
         const heartbeat = setInterval(() => {
-          try { ping(); } catch { /* closed */ }
+          if (closed) { clearInterval(heartbeat); return; }
+          ping();
         }, 10_000);
         ping();
 
@@ -606,13 +614,27 @@ Deno.serve(async (req: Request) => {
         try {
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             const isLastAllowedRound = round === MAX_TOOL_ROUNDS - 1;
+            const forceWrapUp = round >= RESEARCH_SOFT_CAP;
+            if (forceWrapUp) {
+              // Inject a final user-style nudge so the model stops researching and produces output.
+              const lastIsNudge = (conversation[conversation.length - 1] as any)?._wrapUpNudge;
+              if (!lastIsNudge) {
+                conversation.push({
+                  role: "user",
+                  content: "STOP researching. You have enough. Produce the final answer NOW using what you have — emit the estimate JSON block (or whatever the user asked for) with clear assumption notes for any unknowns. Do not call any more tools.",
+                  _wrapUpNudge: true,
+                } as any);
+              }
+            }
             const reqBody: Record<string, unknown> = {
               model,
-              messages: conversation,
-              tools,
-              tool_choice: "auto",
+              messages: conversation.map(({ _wrapUpNudge, ...m }: any) => m),
               stream: false,
             };
+            if (!forceWrapUp) {
+              reqBody.tools = tools;
+              reqBody.tool_choice = "auto";
+            }
             if (model.startsWith("openai/gpt-5")) {
               reqBody.reasoning = { effort: "high" };
             }
