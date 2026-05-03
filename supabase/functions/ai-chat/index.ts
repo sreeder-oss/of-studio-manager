@@ -607,13 +607,27 @@ Deno.serve(async (req: Request) => {
         try {
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             const isLastAllowedRound = round === MAX_TOOL_ROUNDS - 1;
+            const forceWrapUp = round >= RESEARCH_SOFT_CAP;
+            if (forceWrapUp) {
+              // Inject a final user-style nudge so the model stops researching and produces output.
+              const lastIsNudge = (conversation[conversation.length - 1] as any)?._wrapUpNudge;
+              if (!lastIsNudge) {
+                conversation.push({
+                  role: "user",
+                  content: "STOP researching. You have enough. Produce the final answer NOW using what you have — emit the estimate JSON block (or whatever the user asked for) with clear assumption notes for any unknowns. Do not call any more tools.",
+                  _wrapUpNudge: true,
+                } as any);
+              }
+            }
             const reqBody: Record<string, unknown> = {
               model,
-              messages: conversation,
-              tools,
-              tool_choice: "auto",
+              messages: conversation.map(({ _wrapUpNudge, ...m }: any) => m),
               stream: false,
             };
+            if (!forceWrapUp) {
+              reqBody.tools = tools;
+              reqBody.tool_choice = "auto";
+            }
             if (model.startsWith("openai/gpt-5")) {
               reqBody.reasoning = { effort: "high" };
             }
