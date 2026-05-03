@@ -93,9 +93,23 @@ export const AIChat: React.FC = () => {
     if (!files) return;
     const next: ChatAttachment[] = [];
     for (const f of Array.from(files).slice(0, 4)) {
-      if (!f.type.startsWith('image/')) continue;
-      const dataUrl = await fileToDataUrl(f);
-      next.push({ dataUrl, name: f.name });
+      if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+        try {
+          const text = await extractPdfText(f);
+          if (!text.trim()) {
+            toast.error(`${f.name}: no extractable text (scanned PDF?)`);
+            continue;
+          }
+          next.push({ dataUrl: '', name: f.name, kind: 'pdf', text });
+          toast.success(`${f.name} attached`);
+        } catch (err) {
+          console.error('PDF extract failed', err);
+          toast.error(`Failed to read ${f.name}`);
+        }
+      } else if (f.type.startsWith('image/')) {
+        const dataUrl = await fileToDataUrl(f);
+        next.push({ dataUrl, name: f.name, kind: 'image' });
+      }
     }
     setAttachments((prev) => [...prev, ...next].slice(0, 4));
   };
