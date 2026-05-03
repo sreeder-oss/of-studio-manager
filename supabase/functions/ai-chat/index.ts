@@ -589,17 +589,24 @@ Deno.serve(async (req: Request) => {
     const enc = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (obj: unknown) =>
-          controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
-        const ping = () => controller.enqueue(enc.encode(`: keepalive ${Date.now()}\n\n`));
+        let closed = false;
+        const safeEnqueue = (chunk: Uint8Array) => {
+          if (closed) return;
+          try { controller.enqueue(chunk); } catch { closed = true; }
+        };
+        const send = (obj: unknown) => safeEnqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        const ping = () => safeEnqueue(enc.encode(`: keepalive ${Date.now()}\n\n`));
         const done = () => {
-          controller.enqueue(enc.encode(`data: [DONE]\n\n`));
-          controller.close();
+          if (closed) return;
+          safeEnqueue(enc.encode(`data: [DONE]\n\n`));
+          closed = true;
+          try { controller.close(); } catch { /* already closed */ }
         };
 
         // Heartbeat every 10s so neither the edge runtime nor any proxy idles us out.
         const heartbeat = setInterval(() => {
-          try { ping(); } catch { /* closed */ }
+          if (closed) { clearInterval(heartbeat); return; }
+          ping();
         }, 10_000);
         ping();
 
