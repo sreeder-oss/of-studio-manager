@@ -7,7 +7,7 @@ export interface AIModelOption {
   /** Short label for the dropdown. */
   label: string;
   /** Provider tag (UI only). */
-  provider: 'OpenAI' | 'Anthropic' | 'Google' | 'xAI';
+  provider: 'OpenAI' | 'Anthropic' | 'Google' | 'xAI' | 'DeepSeek';
   /** One-line strength description for the tooltip / help text. */
   blurb: string;
   /** True = routes through OpenRouter; false = Lovable AI gateway. */
