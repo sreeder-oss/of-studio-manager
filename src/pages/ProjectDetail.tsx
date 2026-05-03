@@ -271,7 +271,7 @@ const ProjectDetail: React.FC = () => {
                 <p className="text-[10px] text-muted-foreground">{doc.type} • {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : ''}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {doc.file_url && <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="text-primary text-[9px] font-bold uppercase tracking-widest hover:underline">View</a>}
+                {doc.file_url && <SignedLink bucket="of-documents" path={doc.file_url} className="text-primary text-[9px] font-bold uppercase tracking-widest hover:underline">View</SignedLink>}
                 <button onClick={() => { deleteDocMut.mutateAsync(doc.id); toast.success('Deleted'); }} className="text-destructive/50 hover:text-destructive"><Trash2 size={12} /></button>
               </div>
             </div>
