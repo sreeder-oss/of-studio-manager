@@ -39,6 +39,7 @@ const OPENROUTER_MODELS = new Set([
   "anthropic/claude-sonnet-4-6",
   "google/gemini-3-pro-preview",
   "x-ai/grok-4",
+  "deepseek/deepseek-v3.2-exp",
 ]);
 
 interface IncomingMessage {

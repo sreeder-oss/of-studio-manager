@@ -7,7 +7,7 @@ export interface AIModelOption {
   /** Short label for the dropdown. */
   label: string;
   /** Provider tag (UI only). */
-  provider: 'OpenAI' | 'Anthropic' | 'Google' | 'xAI';
+  provider: 'OpenAI' | 'Anthropic' | 'Google' | 'xAI' | 'DeepSeek';
   /** One-line strength description for the tooltip / help text. */
   blurb: string;
   /** True = routes through OpenRouter; false = Lovable AI gateway. */
@@ -62,6 +62,13 @@ export const AI_MODELS: AIModelOption[] = [
     label: 'Grok 4',
     provider: 'xAI',
     blurb: 'Fast, candid, good at on-the-fly research.',
+    openrouter: true,
+  },
+  {
+    id: 'deepseek/deepseek-v3.2-exp',
+    label: 'DeepSeek 3.2',
+    provider: 'DeepSeek',
+    blurb: 'Cost-efficient with strong reasoning and coding. Great cheap daily driver.',
     openrouter: true,
   },
 ];
