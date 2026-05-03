@@ -96,14 +96,27 @@ export const AIChat: React.FC = () => {
       if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
         try {
           const text = await extractPdfText(f);
-          if (!text.trim()) {
-            toast.error(`${f.name}: no extractable text (scanned PDF?)`);
-            continue;
+          if (text.trim().length > 40) {
+            next.push({ dataUrl: '', name: f.name, kind: 'pdf', text });
+            toast.success(`${f.name} attached`);
+          } else {
+            // Visual / scanned PDF — send pages as images so the model can see it
+            const images = await renderPdfPagesToImages(f, { maxPages: 6 });
+            if (images.length === 0) {
+              toast.error(`${f.name}: couldn't read this PDF`);
+              continue;
+            }
+            images.forEach((dataUrl, idx) => {
+              next.push({
+                dataUrl,
+                name: images.length > 1 ? `${f.name} (p${idx + 1})` : f.name,
+                kind: 'image',
+              });
+            });
+            toast.success(`${f.name} attached as ${images.length} image${images.length === 1 ? '' : 's'}`);
           }
-          next.push({ dataUrl: '', name: f.name, kind: 'pdf', text });
-          toast.success(`${f.name} attached`);
         } catch (err) {
-          console.error('PDF extract failed', err);
+          console.error('PDF read failed', err);
           toast.error(`Failed to read ${f.name}`);
         }
       } else if (f.type.startsWith('image/')) {
