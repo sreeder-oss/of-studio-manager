@@ -617,15 +617,24 @@ Deno.serve(async (req: Request) => {
               reqBody.reasoning = { effort: "high" };
             }
 
-            const upstream = await fetch(upstreamUrl, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${upstreamKey}`,
-                "Content-Type": "application/json",
-                ...upstreamExtraHeaders,
-              },
-              body: JSON.stringify(reqBody),
-            });
+            console.log("ai-chat round", round, "scrapes_used", scrapesUsed);
+            let upstream: Response;
+            try {
+              upstream = await fetchWithTimeout(upstreamUrl, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${upstreamKey}`,
+                  "Content-Type": "application/json",
+                  ...upstreamExtraHeaders,
+                },
+                body: JSON.stringify(reqBody),
+              }, UPSTREAM_ROUND_TIMEOUT_MS);
+            } catch (e) {
+              console.error("ai-chat upstream timeout/abort round", round, e);
+              send({ choices: [{ delta: { content: `_Model timed out on round ${round + 1} (${Math.round(UPSTREAM_ROUND_TIMEOUT_MS/1000)}s). Try again, or pick a faster model._` } }] });
+              done();
+              return;
+            }
 
             if (!upstream.ok) {
               const t = await upstream.text().catch(() => "");
