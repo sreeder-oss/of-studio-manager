@@ -1,10 +1,11 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
-import { useAIAssistant } from '@/contexts/AIAssistantContext';
+import { useAIAssistantOptional } from '@/contexts/AIAssistantContext';
 
 export const FloatingAIButton: React.FC = () => {
-  const { setOpen, open } = useAIAssistant();
-  if (open) return null;
+  const ctx = useAIAssistantOptional();
+  if (!ctx || ctx.open) return null;
+  const { setOpen } = ctx;
   return (
     <button
       onClick={() => setOpen(true)}
