@@ -69,6 +69,21 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "naa_portal_fetch",
+      description: "Fetch a page from the New Age Artisans Plaster Portal using saved login credentials. Use this for ANY newageartisans.com URL that requires login (product specs, coverage, dealer pricing). Logs in via the Outseta auth widget then returns the page markdown.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Full https URL on newageartisans.com (e.g. /plaster-portal or a course/product page)" },
+        },
+        required: ["url"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 function buildSystemPrompt(systemsLibrary: unknown[], settings: { overhead_pct: number; profit_pct: number; tax_rate: number; estimate_valid_days: number; }, currentPage?: string, currentRecord?: unknown) {
@@ -99,14 +114,12 @@ ALWAYS try multiple angles before reporting "not found":
   4. Forums / how-to guides for application notes when official docs are thin
 
 PAYWALL AWARENESS:
-Some makers (New Age Artisans Plaster Portal, dealer logins, Patreon, online course platforms)
-keep their real specs behind a paid login. If a scrape returns paywalled:true, or you see
-"sign in / members only / enroll now", do NOT pretend the data isn't out there — say so plainly:
-  "Coverage and cost for NAA live behind their paid Plaster Portal. I can: (a) add the system
-  shell now with the public info and you fill in your dealer numbers, or (b) pull comparable
-  specs from a similar product (American Clay, Meoded, Texston) so you have a starting point.
-  Which?"
-Then proceed based on the user's reply.
+For ANY newageartisans.com URL (Plaster Portal, courses, product pages), use the
+naa_portal_fetch tool — Shawn's portal credentials are saved and it will log in for you.
+Do NOT use web_scrape on newageartisans.com; it will only see the public marketing page.
+For other paywalled sources (Patreon, other dealer logins) where we have no saved login,
+say so plainly and offer (a) add system shell with public info, or (b) pull comparable
+specs from a similar product (American Clay, Meoded, Texston).
 
 When info IS partial, still emit add_system with everything you DO have, set unknowns to null,
 and in your prose summary list exactly which fields are missing and why.
@@ -429,6 +442,43 @@ async function fcScrape(url: string, key: string) {
   return { url, title: meta?.title, markdown: trimmed, links, paywalled };
 }
 
+async function fcNaaPortal(target: string, key: string) {
+  const EMAIL = Deno.env.get("NAA_PORTAL_EMAIL");
+  const PASSWORD = Deno.env.get("NAA_PORTAL_PASSWORD");
+  if (!EMAIL || !PASSWORD) {
+    return { error: "NAA portal credentials not configured (NAA_PORTAL_EMAIL / NAA_PORTAL_PASSWORD)." };
+  }
+  if (!/newageartisans\.com|outseta\.com/.test(target)) {
+    return { error: "naa_portal_fetch only works for newageartisans.com URLs." };
+  }
+  const LOGIN_URL = "https://new-age-artisans.outseta.com/auth?widgetMode=login#o-anonymous";
+  const actions = [
+    { type: "wait", milliseconds: 4000 },
+    { type: "write", selector: "#o-auth-username", text: EMAIL },
+    { type: "write", selector: "#o-auth-password", text: PASSWORD },
+    { type: "wait", milliseconds: 800 },
+    { type: "click", selector: "button.o--Login--login" },
+    { type: "wait", milliseconds: 7000 },
+    { type: "executeJavascript", script: `window.location.href = ${JSON.stringify(target)};` },
+    { type: "wait", milliseconds: 6000 },
+    { type: "scrape" },
+  ];
+  const r = await fetch(`${FC}/scrape`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ url: LOGIN_URL, formats: ["markdown", "links"], onlyMainContent: false, actions, waitFor: 1500 }),
+  });
+  const data = await r.json();
+  if (!r.ok) return { error: `NAA portal scrape failed [${r.status}]`, details: data };
+  const md: string = data?.data?.markdown ?? data?.markdown ?? "";
+  const meta = data?.data?.metadata ?? data?.metadata ?? {};
+  const links: string[] = (data?.data?.links ?? data?.links ?? []).slice(0, 60);
+  const trimmed = md.length > 14000 ? md.slice(0, 14000) + "\n\n[...truncated...]" : md;
+  const finalUrl = meta?.sourceURL ?? meta?.url ?? target;
+  const stillOnLogin = /outseta\.com\/auth/i.test(finalUrl) && md.length < 1200;
+  return { requestedUrl: target, finalUrl, title: meta?.title, loggedIn: !stillOnLogin, markdown: trimmed, links };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -582,6 +632,13 @@ Deno.serve(async (req: Request) => {
           } else {
             scrapesUsed++;
             result = await fcScrape(String(args.url ?? ""), FIRECRAWL_API_KEY);
+          }
+        } else if (fname === "naa_portal_fetch") {
+          if (scrapesUsed >= MAX_SCRAPES_PER_REQUEST) {
+            result = { error: `Scrape cap reached (${MAX_SCRAPES_PER_REQUEST}).` };
+          } else {
+            scrapesUsed++;
+            result = await fcNaaPortal(String(args.url ?? ""), FIRECRAWL_API_KEY);
           }
         } else {
           result = { error: `Unknown tool: ${fname}` };
