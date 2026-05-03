@@ -154,7 +154,7 @@ const Receipts: React.FC = () => {
     <div key={receipt.id} className="bg-card p-3 rounded-xl border border-border flex items-center gap-3 group">
       {receipt.image_url && (
         <div className="w-12 h-12 rounded-lg overflow-hidden border border-border flex-shrink-0">
-          <img src={receipt.image_url} alt="Receipt" className="w-full h-full object-cover" />
+          <SignedImage bucket="receipts" path={receipt.image_url} alt="Receipt" className="w-full h-full object-cover" />
         </div>
       )}
       <div className="flex-1 min-w-0">
