@@ -1,23 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { Json } from '@/integrations/supabase/types';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuthReady } from '@/hooks/useAuthReady';
 
-export type DbInvoice = {
-  id: string;
-  user_id: string;
-  project_id: string | null;
-  estimate_id: string | null;
-  contact_id: string | null;
-  line_items: Json | null;
-  subtotal: number | null;
-  tax_applied: number | null;
-  total: number | null;
-  due_date: string | null;
-  paid: boolean | null;
-  paid_date: string | null;
-  created_at: string | null;
-};
+export type DbInvoice = Database['public']['Tables']['invoices']['Row'];
+export type DbInvoiceInsert = Database['public']['Tables']['invoices']['Insert'];
 
 export const useInvoices = () => {
   const { user, isReady } = useAuthReady();
@@ -27,7 +14,7 @@ export const useInvoices = () => {
     queryFn: async () => {
       const { data, error } = await supabase.from('invoices').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return data as DbInvoice[];
+      return data;
     },
     enabled: isReady && !!user,
   });
@@ -39,9 +26,9 @@ export const useInvoice = (id: string) => {
   return useQuery({
     queryKey: ['invoices', id, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('invoices').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('invoices').select('*').eq('id', id).maybeSingle();
       if (error) throw error;
-      return data as DbInvoice;
+      return data;
     },
     enabled: isReady && !!user && !!id,
   });
@@ -50,26 +37,35 @@ export const useInvoice = (id: string) => {
 export const useSaveInvoice = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (invoice: Partial<DbInvoice>) => {
+    mutationFn: async (invoice: Partial<DbInvoice>): Promise<DbInvoice> => {
+      const payload = {
+        contact_id: invoice.contact_id ?? null,
+        project_id: invoice.project_id ?? null,
+        estimate_id: invoice.estimate_id ?? null,
+        line_items: invoice.line_items ?? [],
+        subtotal: invoice.subtotal ?? 0,
+        tax_rate: invoice.tax_rate ?? 0,
+        tax_applied: invoice.tax_applied ?? 0,
+        total: invoice.total ?? 0,
+        due_date: invoice.due_date ?? null,
+        paid: invoice.paid ?? false,
+        paid_date: invoice.paid_date ?? null,
+        notes: invoice.notes ?? null,
+        terms: invoice.terms ?? null,
+      };
       if (invoice.id) {
-        const { error } = await supabase.from('invoices').update({
-          contact_id: invoice.contact_id, project_id: invoice.project_id,
-          estimate_id: invoice.estimate_id, line_items: invoice.line_items,
-          subtotal: invoice.subtotal, tax_applied: invoice.tax_applied, total: invoice.total,
-          due_date: invoice.due_date, paid: invoice.paid, paid_date: invoice.paid_date,
-        }).eq('id', invoice.id);
+        const { data, error } = await supabase.from('invoices').update(payload).eq('id', invoice.id).select().single();
         if (error) throw error;
-      } else {
-        const { error } = await supabase.from('invoices').insert({
-          contact_id: invoice.contact_id, project_id: invoice.project_id,
-          estimate_id: invoice.estimate_id, line_items: invoice.line_items,
-          subtotal: invoice.subtotal, tax_applied: invoice.tax_applied, total: invoice.total,
-          due_date: invoice.due_date, paid: invoice.paid,
-        });
-        if (error) throw error;
+        return data;
       }
+      const { data, error } = await supabase.from('invoices').insert(payload as DbInvoiceInsert).select().single();
+      if (error) throw error;
+      return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      if (row?.id) qc.invalidateQueries({ queryKey: ['invoices', row.id] });
+    },
   });
 };
 
