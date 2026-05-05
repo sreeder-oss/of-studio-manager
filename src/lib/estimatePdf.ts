@@ -696,22 +696,25 @@ export function buildEstimatePdf(raw: EstimateDoc, opts: BuildEstimatePdfOptions
   y = renderTiers(ctx, y);
   renderBack(ctx, y);
 
-  // Sweep all pages and re-stamp footer with correct page numbers
+  // Sweep all pages and re-stamp footer with "Page X of Y"
   const total = doc.internal.pages.length - 1;
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, PAGE_H - 44, PAGE_W, 44, 'F');
-    drawFooter({ ...ctx, pageNum: p });
+    drawFooter({ ...ctx, pageNum: p }, total);
   }
   return doc;
 }
 
-/** Build and trigger a browser download. */
+/** Build and trigger a browser download. Filename keeps Unicode and is URL-safe. */
 export function downloadEstimatePdf(raw: EstimateDoc, opts: BuildEstimatePdfOptions = {}) {
   const doc = buildEstimatePdf(raw, opts);
-  const safeTitle = (raw.title || 'Estimate').replace(/[^a-z0-9]+/gi, '_').slice(0, 60);
-  const filename = opts.filename || `OF_Estimate_${safeTitle}.pdf`;
+  // Preserve unicode letters; strip control + filesystem-illegal characters only
+  const cleanTitle = (raw.title || 'Estimate')
+    .replace(/[\\/:*?"<>|]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80) || 'Estimate';
+  const filename = opts.filename || `OF_Estimate_${cleanTitle}.pdf`;
   doc.save(filename);
 }
 
