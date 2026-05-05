@@ -3,11 +3,21 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDbError } from "@/lib/formatDbError";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+  useLocation,
+} from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AIAssistantProvider } from "@/contexts/AIAssistantContext";
 import { AIContextProvider } from "@/contexts/AIContextProvider";
+import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "./components/AppLayout";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import Index from "./pages/Index";
 import Contacts from "./pages/Contacts";
 import ContactDetail from "./pages/ContactDetail";
@@ -34,15 +44,15 @@ const queryClient = new QueryClient({
   },
   mutationCache: new MutationCache({
     onError: (error, _vars, _ctx, mutation) => {
-      // Allow opt-out per mutation by setting meta.suppressErrorToast = true
       if ((mutation.meta as any)?.suppressErrorToast) return;
       toast.error(formatDbError(error as any));
     },
   }),
 });
 
-const ProtectedRoutes = () => {
+const RequireAuth: React.FC = () => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -52,29 +62,32 @@ const ProtectedRoutes = () => {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
 
   return (
-    <AppLayout>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/contacts" element={<Contacts />} />
-        <Route path="/contacts/:id" element={<ContactDetail />} />
-        <Route path="/projects" element={<Projects />} />
-        <Route path="/projects/:id" element={<ProjectDetail />} />
-        <Route path="/estimates" element={<Estimates />} />
-        <Route path="/estimates/new" element={<EstimateCreate />} />
-        <Route path="/estimates/:id/edit" element={<EstimateCreate />} />
-        <Route path="/estimates/:id" element={<EstimateDetail />} />
-        <Route path="/invoices" element={<Invoices />} />
-        <Route path="/invoices/:id" element={<InvoiceDetail />} />
-        <Route path="/receipts" element={<Receipts />} />
-        <Route path="/systems" element={<Systems />} />
-        <Route path="/reports/tax" element={<TaxSummary />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </AppLayout>
+    <AIAssistantProvider>
+      <AIContextProvider>
+        <Outlet />
+      </AIContextProvider>
+    </AIAssistantProvider>
   );
+};
+
+const SignedOutToastListener: React.FC = () => {
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        toast.message('Signed out');
+      }
+      if (event === 'TOKEN_REFRESHED') {
+        // silent
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+  return null;
 };
 
 const App = () => (
@@ -83,14 +96,31 @@ const App = () => (
       <Toaster position="top-right" closeButton />
       <BrowserRouter>
         <AuthProvider>
-          <AIAssistantProvider>
-            <AIContextProvider>
-              <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route path="/*" element={<ProtectedRoutes />} />
-              </Routes>
-            </AIContextProvider>
-          </AIAssistantProvider>
+          <SignedOutToastListener />
+          <AppErrorBoundary>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route element={<RequireAuth />}>
+                <Route element={<AppLayout />}>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/contacts" element={<Contacts />} />
+                  <Route path="/contacts/:id" element={<ContactDetail />} />
+                  <Route path="/projects" element={<Projects />} />
+                  <Route path="/projects/:id" element={<ProjectDetail />} />
+                  <Route path="/estimates" element={<Estimates />} />
+                  <Route path="/estimates/new" element={<EstimateCreate />} />
+                  <Route path="/estimates/:id/edit" element={<EstimateCreate />} />
+                  <Route path="/estimates/:id" element={<EstimateDetail />} />
+                  <Route path="/invoices" element={<Invoices />} />
+                  <Route path="/invoices/:id" element={<InvoiceDetail />} />
+                  <Route path="/receipts" element={<Receipts />} />
+                  <Route path="/systems" element={<Systems />} />
+                  <Route path="/reports/tax" element={<TaxSummary />} />
+                </Route>
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AppErrorBoundary>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
