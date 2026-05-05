@@ -116,27 +116,36 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
     update({ ...doc, sections });
   };
 
+  const navigate = useNavigate();
   const handleSave = async () => {
     if (!contactId) {
       toast.error('Select a client to save the estimate');
       return;
     }
     try {
-      await saveEstimate.mutateAsync({
+      const preTax = doc.direct_cost_subtotal + doc.overhead_amount + doc.profit_amount;
+      const taxFraction = (doc.tax_rate ?? 0) / 100;
+      const saved = await saveEstimate.mutateAsync({
         contact_id: contactId,
-        project_id: projectId || undefined,
+        project_id: projectId || null,
         line_items: doc as any, // store the full structured doc in jsonb
-        subtotal: doc.direct_cost_subtotal + doc.overhead_amount + doc.profit_amount,
-        tax_rate: doc.tax_rate / 100,
+        subtotal: preTax,
+        direct_cost_subtotal: doc.direct_cost_subtotal,
+        overhead_amount: doc.overhead_amount,
+        profit_amount: doc.profit_amount,
+        pre_tax_total: preTax,
+        tax_rate: taxFraction,
+        tax_amount: preTax * taxFraction,
         total: doc.total,
         status: 'Pending',
         valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
       });
       toast.success('Estimate saved');
       onClose();
-    } catch (e) {
+      if (saved?.id) navigate(`/estimates/${saved.id}`);
+    } catch (e: any) {
       console.error('Save estimate failed:', e);
-      toast.error('Failed to save estimate');
+      toast.error(e?.message || 'Failed to save estimate');
     }
   };
 
