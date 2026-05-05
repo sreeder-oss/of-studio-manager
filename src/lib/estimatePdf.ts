@@ -730,12 +730,15 @@ export function coerceToEstimateDoc(stored: unknown, fallback: {
   client_name?: string;
   total?: number;
   tax_rate?: number;
+  valid_until?: string;
 } = {}): EstimateDoc | null {
   if (!stored) return null;
 
   // Already a structured EstimateDoc?
   if (typeof stored === 'object' && stored !== null && 'sections' in (stored as any) && Array.isArray((stored as any).sections)) {
-    return stored as EstimateDoc;
+    const doc = stored as EstimateDoc;
+    if (!doc.valid_until && fallback.valid_until) doc.valid_until = fallback.valid_until;
+    return doc;
   }
 
   // Legacy flat array of { scope/description, materials, amount }
@@ -778,6 +781,7 @@ export function coerceToEstimateDoc(stored: unknown, fallback: {
       assumptions: [],
       exclusions: [],
       system_note: '',
+      valid_until: fallback.valid_until || '',
     };
   }
 
