@@ -46,19 +46,21 @@ export const useContact = (id: string) => {
 export const useSaveContact = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (contact: Partial<DbContact> & { name: string }) => {
+    mutationFn: async (contact: Partial<DbContact> & { name: string }): Promise<DbContact> => {
       if (contact.id) {
-        const { error } = await supabase.from('contacts').update({
+        const { data, error } = await supabase.from('contacts').update({
           name: contact.name, type: contact.type, status: contact.status,
           email: contact.email, phone: contact.phone, address: contact.address, notes: contact.notes,
-        }).eq('id', contact.id);
+        }).eq('id', contact.id).select().single();
         if (error) throw error;
+        return data as DbContact;
       } else {
-        const { error } = await supabase.from('contacts').insert({
+        const { data, error } = await supabase.from('contacts').insert({
           name: contact.name, type: contact.type, status: contact.status,
           email: contact.email, phone: contact.phone, address: contact.address, notes: contact.notes,
-        });
+        }).select().single();
         if (error) throw error;
+        return data as DbContact;
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['contacts'] }),
