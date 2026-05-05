@@ -1,73 +1,142 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, ChevronRight, X, Trash2, ShieldCheck } from 'lucide-react';
+import { Plus, Search, ChevronRight, Trash2 } from 'lucide-react';
 import { useContacts, useSaveContact, useDeleteContact } from '@/hooks/useContacts';
-import { PRIVACY_NOTICE } from '@/lib/legal';
 import { toast } from 'sonner';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
+type ContactType = 'Client' | 'Lead' | 'Vendor';
+
+const STATUS_BY_TYPE: Record<ContactType, string[]> = {
+  Client: ['Active', 'Inactive'],
+  Lead: ['Pending', 'Estimate', 'Inactive'],
+  Vendor: ['Active', 'Inactive'],
+};
+
+const DEFAULT_STATUS: Record<ContactType, string> = {
+  Client: 'Active',
+  Lead: 'Pending',
+  Vendor: 'Active',
+};
+
+const isValidEmail = (v: string) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 const Contacts: React.FC = () => {
   const navigate = useNavigate();
   const { data: contacts = [], isLoading } = useContacts();
   const saveContact = useSaveContact();
   const deleteContactMut = useDeleteContact();
+
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'Client' | 'Lead' | 'Vendor'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | ContactType>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    name: '', email: '', phone: '', address: '', notes: '', type: 'Client', status: 'Active'
+    name: '', email: '', phone: '', address: '', notes: '',
+    type: 'Client' as ContactType, status: 'Active',
   });
 
-  const filteredContacts = contacts.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || (c.email || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = activeFilter === 'all' || c.type === activeFilter;
-    return matchesSearch && matchesFilter;
-  });
+  const searchMatches = useMemo(() => {
+    const q = searchTerm.toLowerCase();
+    return contacts.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q)
+    );
+  }, [contacts, searchTerm]);
 
-  const contactCounts = {
-    all: contacts.length,
-    Client: contacts.filter(c => c.type === 'Client').length,
-    Lead: contacts.filter(c => c.type === 'Lead').length,
-    Vendor: contacts.filter(c => c.type === 'Vendor').length,
+  const filteredContacts = useMemo(
+    () => searchMatches.filter(c => activeFilter === 'all' || c.type === activeFilter),
+    [searchMatches, activeFilter],
+  );
+
+  // Counts respect the active search term.
+  const contactCounts = useMemo(() => ({
+    all: searchMatches.length,
+    Client: searchMatches.filter(c => c.type === 'Client').length,
+    Lead: searchMatches.filter(c => c.type === 'Lead').length,
+    Vendor: searchMatches.filter(c => c.type === 'Vendor').length,
+  }), [searchMatches]);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setFormData({
+      name: '', email: '', phone: '', address: '', notes: '',
+      type: 'Client', status: 'Active',
+    });
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    resetForm();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name) return;
+    const name = formData.name.trim();
+    const email = formData.email.trim();
+    const phone = formData.phone.trim();
+    const address = formData.address.trim();
+    const notes = formData.notes.trim();
+
+    if (!name) {
+      toast.error('Name is required');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      toast.error('Please enter a valid email');
+      return;
+    }
+
     try {
       await saveContact.mutateAsync({
         ...(editingId ? { id: editingId } : {}),
-        name: formData.name, email: formData.email || null, phone: formData.phone || null,
-        address: formData.address || null, notes: formData.notes || null,
-        type: formData.type, status: formData.status,
-        created_at: null,
+        name,
+        email: email || null,
+        phone: phone || null,
+        address: address || null,
+        notes: notes || null,
+        type: formData.type,
+        status: formData.status,
       });
       toast.success(editingId ? 'Contact updated' : 'Contact added');
       handleCloseModal();
-    } catch { toast.error('Failed to save contact'); }
+    } catch {
+      // Mutation cache surfaces a friendly toast already.
+    }
   };
 
   const handleEdit = (contact: typeof contacts[0]) => {
+    const type = (contact.type as ContactType) || 'Client';
     setFormData({
-      name: contact.name, email: contact.email || '', phone: contact.phone || '',
-      address: contact.address || '', notes: contact.notes || '',
-      type: contact.type || 'Client', status: contact.status || 'Active'
+      name: contact.name,
+      email: contact.email || '',
+      phone: contact.phone || '',
+      address: contact.address || '',
+      notes: contact.notes || '',
+      type,
+      status: contact.status || DEFAULT_STATUS[type],
     });
     setEditingId(contact.id);
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Delete this contact?')) {
-      await deleteContactMut.mutateAsync(id);
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    try {
+      await deleteContactMut.mutateAsync(pendingDeleteId);
       toast.success('Contact deleted');
+      setPendingDeleteId(null);
+      handleCloseModal();
+    } catch {
+      // global error toast
     }
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingId(null);
-    setFormData({ name: '', email: '', phone: '', address: '', notes: '', type: 'Client', status: 'Active' });
   };
 
   const StatusBadge = ({ status }: { status: string }) => {
@@ -91,6 +160,8 @@ const Contacts: React.FC = () => {
 
   if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading contacts...</div>;
 
+  const statusOptions = STATUS_BY_TYPE[formData.type];
+
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
       <header className="flex justify-between items-center">
@@ -98,7 +169,7 @@ const Contacts: React.FC = () => {
           <h2 className="text-xl font-serif text-foreground tracking-tight">Contacts</h2>
           <p className="text-muted-foreground text-[9px] uppercase tracking-widest mt-0.5 font-bold">{contacts.length} Total</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-primary hover:bg-accent hover:scale-105 transition-all shadow-glow">
+        <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-primary hover:bg-accent hover:scale-105 transition-all shadow-glow" aria-label="Add contact">
           <Plus size={20} />
         </button>
       </header>
@@ -151,79 +222,110 @@ const Contacts: React.FC = () => {
         )}
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-2xl w-full max-w-md overflow-hidden shadow-soft">
-            <div className="p-4 border-b border-border flex justify-between items-center">
-              <h3 className="text-lg font-serif text-foreground">{editingId ? 'Edit Contact' : 'New Contact'}</h3>
-              <button onClick={handleCloseModal} className="text-muted-foreground hover:text-foreground p-1.5 hover:bg-accent rounded-full"><X size={18} /></button>
+      <Dialog open={isModalOpen} onOpenChange={(o) => (o ? setIsModalOpen(true) : handleCloseModal())}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif">{editingId ? 'Edit Contact' : 'New Contact'}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar pr-1">
+            <div>
+              <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Full Name</label>
+              <input required type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
             </div>
-            <form onSubmit={handleSubmit} className="p-5 space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Full Name</label>
-                <input required type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Type</label>
-                  <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none">
-                    <option value="Client">Client</option>
-                    <option value="Lead">Lead</option>
-                    <option value="Vendor">Vendor</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Status</label>
-                  <select value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none">
-                    <option value="Active">Active</option>
-                    <option value="Estimate">Estimate</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Phone</label>
-                  <input type="tel" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Email</label>
-                  <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none" />
-                </div>
+                <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Type</label>
+                <select
+                  value={formData.type}
+                  onChange={e => {
+                    const nextType = e.target.value as ContactType;
+                    const nextStatusOptions = STATUS_BY_TYPE[nextType];
+                    setFormData(f => ({
+                      ...f,
+                      type: nextType,
+                      status: nextStatusOptions.includes(f.status) ? f.status : DEFAULT_STATUS[nextType],
+                    }));
+                  }}
+                  className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none">
+                  <option value="Client">Client</option>
+                  <option value="Lead">Lead</option>
+                  <option value="Vendor">Vendor</option>
+                </select>
               </div>
               <div>
-                <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Address</label>
-                <input type="text" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })}
+                <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Status</label>
+                <select value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none">
+                  {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Phone</label>
+                <input type="tel" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })}
                   className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none" />
               </div>
               <div>
-                <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Notes</label>
-                <textarea value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none h-16 resize-none" />
+                <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Email</label>
+                <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none" />
               </div>
-              <div className="pt-4 flex justify-between items-center gap-2">
-                {editingId && (
-                  <button type="button" onClick={() => handleDelete(editingId)} className="p-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all">
-                    <Trash2 size={16} />
-                  </button>
-                )}
-                <div className="flex gap-2 ml-auto">
-                  <button type="button" onClick={handleCloseModal} className="px-4 py-2 rounded-lg text-muted-foreground font-bold text-[10px] uppercase tracking-widest">Cancel</button>
-                  <button type="submit" disabled={saveContact.isPending} className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-bold text-[10px] uppercase tracking-widest shadow-glow disabled:opacity-50">
-                    {saveContact.isPending ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
+            </div>
+            <div>
+              <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Address</label>
+              <input type="text" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })}
+                className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none" />
+            </div>
+            <div>
+              <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Notes</label>
+              <textarea value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                className="w-full bg-accent border border-border rounded-lg p-2.5 text-xs text-foreground outline-none h-16 resize-none" />
+            </div>
+            <DialogFooter className="!justify-between !items-center gap-2 pt-2">
+              {editingId ? (
+                <button
+                  type="button"
+                  disabled={deleteContactMut.isPending}
+                  onClick={() => setPendingDeleteId(editingId)}
+                  className="p-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all disabled:opacity-50"
+                  aria-label="Delete contact"
+                >
+                  <Trash2 size={16} />
+                </button>
+              ) : <span />}
+              <div className="flex gap-2 ml-auto">
+                <button type="button" onClick={handleCloseModal} className="px-4 py-2 rounded-lg text-muted-foreground font-bold text-[10px] uppercase tracking-widest">Cancel</button>
+                <button type="submit" disabled={saveContact.isPending} className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-bold text-[10px] uppercase tracking-widest shadow-glow disabled:opacity-50">
+                  {saveContact.isPending ? 'Saving...' : 'Save'}
+                </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!pendingDeleteId} onOpenChange={(o) => !o && setPendingDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this contact?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the contact. Linked projects, estimates, and invoices will keep their history but lose the contact reference.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteContactMut.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); confirmDelete(); }}
+              disabled={deleteContactMut.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteContactMut.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

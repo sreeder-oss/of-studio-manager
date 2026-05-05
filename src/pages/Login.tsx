@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { lovable } from '@/integrations/lovable';
 import { useAuth } from '@/contexts/AuthContext';
 import logoSrc from '@/assets/of-letters.svg';
 
+interface LocationState { from?: { pathname?: string } }
+
 const Login: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const fromPath = (location.state as LocationState | null)?.from?.pathname || '/';
 
   useEffect(() => {
     if (user) {
@@ -18,9 +23,11 @@ const Login: React.FC = () => {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
+    const redirectTo = `${window.location.origin}${fromPath}`;
     const result = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
-    });
+      redirectTo,
+      redirect_uri: redirectTo,
+    } as any);
 
     if (result.error) {
       setError('Sign in failed. Please try again.');
@@ -42,7 +49,7 @@ const Login: React.FC = () => {
   }
 
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={fromPath} replace />;
   }
 
   return (
