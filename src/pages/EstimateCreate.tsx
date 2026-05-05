@@ -127,6 +127,20 @@ const EstimateCreate: React.FC = () => {
     }
   };
 
+  // Cmd/Ctrl+S to save when on the create/edit step
+  useEffect(() => {
+    if (step !== 'create') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (!saveEstimate.isPending) handleSave();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, selectedContactId, lineItems, taxRate, validUntil, notes, selectedProjectId, saveEstimate.isPending]);
+
   if (isEdit && loadingExisting) {
     return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
   }
