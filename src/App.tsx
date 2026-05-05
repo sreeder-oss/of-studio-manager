@@ -3,7 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDbError } from "@/lib/formatDbError";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import {
   BrowserRouter,
   Routes,
