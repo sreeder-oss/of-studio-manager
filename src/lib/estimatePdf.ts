@@ -30,8 +30,13 @@ const fmt = (n: number) =>
 const fmtCompact = (n: number) =>
   `$${Math.round(n || 0).toLocaleString('en-US')}`;
 
-const today = () =>
-  new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+const fmtDate = (iso?: string) => {
+  const d = iso ? new Date(iso) : new Date();
+  if (isNaN(d.getTime())) return '';
+  // Use UTC components so the rendered date is stable regardless of build-machine TZ
+  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(d);
+};
+const today = () => fmtDate(new Date().toISOString());
 
 interface CompanyInfo {
   name: string;
