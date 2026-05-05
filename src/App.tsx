@@ -106,28 +106,30 @@ const App = () => (
         <AuthProvider>
           <SignedOutToastListener />
           <AppErrorBoundary>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route element={<RequireAuth />}>
-                <Route element={<AppLayout />}>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/contacts" element={<Contacts />} />
-                  <Route path="/contacts/:id" element={<ContactDetail />} />
-                  <Route path="/projects" element={<Projects />} />
-                  <Route path="/projects/:id" element={<ProjectDetail />} />
-                  <Route path="/estimates" element={<Estimates />} />
-                  <Route path="/estimates/new" element={<EstimateCreate />} />
-                  <Route path="/estimates/:id/edit" element={<EstimateCreate />} />
-                  <Route path="/estimates/:id" element={<EstimateDetail />} />
-                  <Route path="/invoices" element={<Invoices />} />
-                  <Route path="/invoices/:id" element={<InvoiceDetail />} />
-                  <Route path="/receipts" element={<Receipts />} />
-                  <Route path="/systems" element={<Systems />} />
-                  <Route path="/reports/tax" element={<TaxSummary />} />
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route element={<RequireAuth />}>
+                  <Route element={<AppLayout />}>
+                    <Route path="/" element={<Index />} />
+                    <Route path="/contacts" element={<Contacts />} />
+                    <Route path="/contacts/:id" element={<ContactDetail />} />
+                    <Route path="/projects" element={<Projects />} />
+                    <Route path="/projects/:id" element={<ProjectDetail />} />
+                    <Route path="/estimates" element={<Estimates />} />
+                    <Route path="/estimates/new" element={<EstimateCreate />} />
+                    <Route path="/estimates/:id/edit" element={<EstimateCreate />} />
+                    <Route path="/estimates/:id" element={<EstimateDetail />} />
+                    <Route path="/invoices" element={<Invoices />} />
+                    <Route path="/invoices/:id" element={<InvoiceDetail />} />
+                    <Route path="/receipts" element={<Receipts />} />
+                    <Route path="/systems" element={<Systems />} />
+                    <Route path="/reports/tax" element={<TaxSummary />} />
+                  </Route>
                 </Route>
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
           </AppErrorBoundary>
         </AuthProvider>
       </BrowserRouter>
