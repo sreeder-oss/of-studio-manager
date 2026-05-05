@@ -17,11 +17,7 @@ const navItems = [
   { path: '/systems', label: 'Systems', icon: Layers },
 ];
 
-interface AppLayoutProps {
-  children: React.ReactNode;
-}
-
-const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
+const AppLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
