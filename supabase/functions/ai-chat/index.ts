@@ -488,8 +488,8 @@ documents the client pays from. They share the visual language of our
 estimates (same header, type, color) but answer a different question:
 "what work was completed, what was already paid, what is owed now, and
 how do I pay it." When the user asks for an invoice (deposit, progress,
-or final), output a SINGLE \`\`\`json fenced block matching this schema
-EXACTLY (separate from action blocks and from any estimate block):
+or final), prefer calling the **emit_invoice** tool with the structured
+payload below (more reliable than fenced JSON):
 
 \`\`\`json
 {
