@@ -390,6 +390,10 @@ RULES:
 ESTIMATING — Organic Finishes estimates are presentation-grade documents that
 clients sign and return with a deposit. They MUST match the depth of our
 reference estimates (Bauwerks Limewash on tilt panels; Biolime 3-coat on
+FasWall). When the user asks for an estimate, prefer calling the
+**emit_estimate** tool with the structured payload below (more reliable than
+fenced JSON). The schema fields match this shape exactly:
+reference estimates (Bauwerks Limewash on tilt panels; Biolime 3-coat on
 FasWall). When the user asks for an estimate, output a SINGLE \`\`\`json fenced
 block following EXACTLY this schema (separate from action blocks):
 
