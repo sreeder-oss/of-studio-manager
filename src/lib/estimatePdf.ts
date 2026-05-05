@@ -637,15 +637,19 @@ function renderBack(ctx: RenderCtx, y: number): number {
     y = py + 8;
   }
 
-  // Acceptance block
-  y = ensureSpace(ctx, y, 130);
+  // Acceptance block — measure prose first so the page break is accurate
+  const validText = est.valid_until
+    ? `until ${fmtDate(est.valid_until)}`
+    : 'for 30 days from the date of issue';
+  const acceptText =
+    `This estimate is valid ${validText} and covers the scope described above. ` +
+    `Please sign below to authorize work. A 50% deposit is due upon contract signing; ` +
+    `the balance is invoiced at project milestones.`;
+  const acceptLines = ctx.doc.splitTextToSize(acceptText, CONTENT_W) as string[];
+  const acceptH = acceptLines.length * (9 * 1.35) + 80; // text + signature lines
+  y = ensureSpace(ctx, y, acceptH);
   y = sectionLabel(ctx, y, 'Acceptance');
-  y = paragraph(
-    ctx,
-    y,
-    'This estimate is valid for 30 days from the date of issue and covers the scope described above. Please sign below to authorize work. A 30% deposit is due upon contract signing; the balance is invoiced at project milestones.',
-    { size: 9, color: NAVY_SOFT }
-  );
+  y = paragraph(ctx, y, acceptText, { size: 9, color: NAVY_SOFT });
   y += 16;
 
   // Signature lines
