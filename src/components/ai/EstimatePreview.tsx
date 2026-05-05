@@ -154,11 +154,40 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
             <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Client *</label>
-            <select value={contactId} onChange={(e) => setContactId(e.target.value)}
-              className="w-full bg-card border border-border rounded-lg py-1.5 px-2 text-[11px] text-foreground outline-none focus:ring-1 focus:ring-primary">
-              <option value="">Select client...</option>
-              {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            {!showNewClient ? (
+              <>
+                <select value={contactId} onChange={(e) => onClientChange(e.target.value)}
+                  className="w-full bg-card border border-border rounded-lg py-1.5 px-2 text-[11px] text-foreground outline-none focus:ring-1 focus:ring-primary">
+                  <option value="">Select client...</option>
+                  {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value={NEW_CLIENT}>+ Create new client...</option>
+                </select>
+                {!contactId && (
+                  <p className="text-[9px] text-muted-foreground mt-1 italic">Select a client to enable saving</p>
+                )}
+              </>
+            ) : (
+              <div className="space-y-1.5 bg-card border border-primary/30 rounded-lg p-2">
+                <input autoFocus placeholder="Name *" value={newClient.name}
+                  onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                  className="w-full bg-accent border border-border rounded px-2 py-1 text-[11px] text-foreground outline-none" />
+                <input placeholder="Email (optional)" value={newClient.email}
+                  onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                  className="w-full bg-accent border border-border rounded px-2 py-1 text-[11px] text-foreground outline-none" />
+                <input placeholder="Phone (optional)" value={newClient.phone}
+                  onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
+                  className="w-full bg-accent border border-border rounded px-2 py-1 text-[11px] text-foreground outline-none" />
+                {createError && <p className="text-[9px] text-destructive">{createError}</p>}
+                <div className="flex gap-1.5 pt-1">
+                  <button onClick={() => { setShowNewClient(false); setCreateError(null); }}
+                    className="flex-1 bg-accent text-foreground py-1 rounded text-[10px] font-bold uppercase tracking-widest">Cancel</button>
+                  <button onClick={handleCreateClient} disabled={saveContact.isPending}
+                    className="flex-1 bg-primary text-primary-foreground py-1 rounded text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">
+                    {saveContact.isPending ? 'Saving...' : 'Create'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Project</label>
