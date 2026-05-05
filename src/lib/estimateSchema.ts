@@ -51,6 +51,8 @@ export const estimateSchema = z.object({
   assumptions: z.array(z.string()).optional().default([]),
   exclusions: z.array(z.string()).optional().default([]),
   system_note: z.string().optional().default(''),
+  /** ISO date 'YYYY-MM-DD' — when this estimate expires */
+  valid_until: z.string().optional().default(''),
 });
 
 export type EstimateDoc = z.infer<typeof estimateSchema>;

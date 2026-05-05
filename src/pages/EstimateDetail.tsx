@@ -104,6 +104,7 @@ const EstimateDetail: React.FC = () => {
       client_name: contact?.name || '',
       total: Number(estimate.total || 0),
       tax_rate: Number(estimate.tax_rate || 0),
+      valid_until: estimate.valid_until || '',
     });
     if (!doc) { toast.error('No estimate data to export'); return; }
     if (!doc.client_name && contact?.name) doc.client_name = contact.name;

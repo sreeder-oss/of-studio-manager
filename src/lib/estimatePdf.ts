@@ -30,8 +30,13 @@ const fmt = (n: number) =>
 const fmtCompact = (n: number) =>
   `$${Math.round(n || 0).toLocaleString('en-US')}`;
 
-const today = () =>
-  new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+const fmtDate = (iso?: string) => {
+  const d = iso ? new Date(iso) : new Date();
+  if (isNaN(d.getTime())) return '';
+  // Use UTC components so the rendered date is stable regardless of build-machine TZ
+  return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(d);
+};
+const today = () => fmtDate(new Date().toISOString());
 
 interface CompanyInfo {
   name: string;
@@ -56,6 +61,9 @@ interface RenderCtx {
 // Header band on every page
 function drawHeader(ctx: RenderCtx) {
   const { doc, est, company } = ctx;
+  // Erase header band area in case overflow drew into it
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, PAGE_W, 56, 'F');
   // green accent rule
   doc.setFillColor(...GREEN);
   doc.rect(0, 0, PAGE_W, 4, 'F');
@@ -83,9 +91,13 @@ function drawHeader(ctx: RenderCtx) {
   doc.line(MARGIN, 52, PAGE_W - MARGIN, 52);
 }
 
-// Footer on every page
-function drawFooter(ctx: RenderCtx) {
+// Footer on every page (page count is stamped in a final pass)
+function drawFooter(ctx: RenderCtx, totalPages?: number) {
   const { doc, company, pageNum } = ctx;
+  // Erase any prior footer band before redrawing
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, PAGE_H - 44, PAGE_W, 44, 'F');
+
   doc.setDrawColor(...HAIRLINE);
   doc.setLineWidth(0.4);
   doc.line(MARGIN, PAGE_H - 36, PAGE_W - MARGIN, PAGE_H - 36);
@@ -93,9 +105,10 @@ function drawFooter(ctx: RenderCtx) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(...MUTED);
-  const left = `${company.name.replace('ORGANIC FINISHES LLC', 'Organic Finishes LLC')} | ${company.email}`;
+  const left = `Organic Finishes LLC | ${company.email}`;
   doc.text(left, MARGIN, PAGE_H - 22);
-  doc.text(`Page ${pageNum}`, PAGE_W - MARGIN, PAGE_H - 22, { align: 'right' });
+  const pageLabel = totalPages ? `Page ${pageNum} of ${totalPages}` : `Page ${pageNum}`;
+  doc.text(pageLabel, PAGE_W - MARGIN, PAGE_H - 22, { align: 'right' });
 }
 
 // Ensure y has room; add page if not
@@ -171,66 +184,72 @@ function renderCover(ctx: RenderCtx): number {
     y += 18;
   }
 
-  // Two-column info block (Project | Estimate Details)
+  // Two-column info block (Project | Estimate Details) — height auto-grows to fit
   const colW = (CONTENT_W - 16) / 2;
   const boxTop = y;
-  const boxH = 110;
-  doc.setFillColor(...PANEL);
-  doc.setDrawColor(...HAIRLINE);
-  doc.roundedRect(MARGIN, boxTop, colW, boxH, 4, 4, 'FD');
-  doc.roundedRect(MARGIN + colW + 16, boxTop, colW, boxH, 4, 4, 'FD');
 
-  // Left column — PROJECT
-  let ly = boxTop + 16;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(...GREEN);
-  doc.text('PROJECT', MARGIN + 12, ly);
-  ly += 14;
   const projRows: [string, string][] = [
     ['Client', est.client_name || '—'],
     ['Location', est.project_address || '—'],
     ['Substrate', est.substrate || '—'],
     ['System', est.system_name || '—'],
   ];
-  for (const [k, v] of projRows) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text(k.toUpperCase(), MARGIN + 12, ly);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
-    doc.setTextColor(...NAVY);
-    const vLines = doc.splitTextToSize(v, colW - 24) as string[];
-    doc.text(vLines[0] || '', MARGIN + 12, ly + 11);
-    ly += 22;
-  }
-
-  // Right column — ESTIMATE DETAILS
-  ly = boxTop + 16;
-  const rx = MARGIN + colW + 16 + 12;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(...GREEN);
-  doc.text('ESTIMATE DETAILS', rx, ly);
-  ly += 14;
+  const validText = est.valid_until
+    ? `Valid until ${fmtDate(est.valid_until)}`
+    : '30 days from date of issue';
   const detailRows: [string, string][] = [
     ['Date', today()],
     ['Net area', est.area_sf > 0 ? `${est.area_sf.toLocaleString()} SF` : '—'],
     ['Duration', est.duration_estimate || '—'],
-    ['Valid', '30 days from date of issue'],
+    ['Valid', validText],
   ];
-  for (const [k, v] of detailRows) {
+
+  // Pre-measure each row to compute box height
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  const lineH = 12;
+  const rowGap = 8;
+  const headerH = 16; // "PROJECT" label band
+  const measureRows = (rows: [string, string][]) =>
+    rows.reduce((sum, [, v]) => {
+      const lines = doc.splitTextToSize(v || '—', colW - 24) as string[];
+      return sum + 11 /* label */ + Math.max(lines.length, 1) * lineH + rowGap;
+    }, 0);
+  const leftH = measureRows(projRows);
+  const rightH = measureRows(detailRows);
+  const boxH = Math.max(leftH, rightH) + headerH + 16;
+
+  doc.setFillColor(...PANEL);
+  doc.setDrawColor(...HAIRLINE);
+  doc.roundedRect(MARGIN, boxTop, colW, boxH, 4, 4, 'FD');
+  doc.roundedRect(MARGIN + colW + 16, boxTop, colW, boxH, 4, 4, 'FD');
+
+  const drawCol = (rows: [string, string][], xLeft: number, label: string) => {
+    let ly = boxTop + 16;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text(k.toUpperCase(), rx, ly);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
-    doc.setTextColor(...NAVY);
-    doc.text(v, rx, ly + 11);
-    ly += 22;
-  }
+    doc.setTextColor(...GREEN);
+    doc.text(label, xLeft, ly);
+    ly += 14;
+    for (const [k, v] of rows) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text(k.toUpperCase(), xLeft, ly);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(...NAVY);
+      const vLines = doc.splitTextToSize(v || '—', colW - 24) as string[];
+      let vy = ly + 11;
+      for (const ln of vLines) {
+        doc.text(ln, xLeft, vy);
+        vy += lineH;
+      }
+      ly = vy + rowGap - lineH; // start of next label
+    }
+  };
+  drawCol(projRows, MARGIN + 12, 'PROJECT');
+  drawCol(detailRows, MARGIN + colW + 16 + 12, 'ESTIMATE DETAILS');
 
   y = boxTop + boxH + 18;
 
@@ -376,7 +395,7 @@ function renderPricingTable(ctx: RenderCtx, startY: number): number {
   if (est.tax_amount > 0) {
     body.push([
       {
-        content: `Sales tax on materials (est. ${est.tax_rate}%)`,
+        content: `Sales tax on materials (est. ${est.tax_rate.toFixed(2)}%)`,
         colSpan: 4,
         styles: { halign: 'right', fontSize: 9, fontStyle: 'italic', textColor: MUTED },
       },
@@ -425,7 +444,7 @@ function renderPricingTable(ctx: RenderCtx, startY: number): number {
 
   autoTable(doc, {
     startY,
-    margin: { left: MARGIN, right: MARGIN },
+    margin: { left: MARGIN, right: MARGIN, top: 72, bottom: 50 },
     head: [
       [
         { content: 'Description', styles: { halign: 'left' } },
@@ -544,29 +563,56 @@ function renderTiers(ctx: RenderCtx, y: number): number {
 function renderBack(ctx: RenderCtx, y: number): number {
   const { est } = ctx;
 
-  if (est.assumptions.length) {
-    y = sectionLabel(ctx, y, 'Key Assumptions');
-    for (const a of est.assumptions) {
-      y = ensureSpace(ctx, y, 18);
-      ctx.doc.setFillColor(...GREEN);
-      ctx.doc.circle(MARGIN + 3, y - 3, 1.4, 'F');
-      y = paragraph(ctx, y - 0, `   ${a}`, { size: 9, color: NAVY_SOFT });
+  // Bullet rendering: indent the wrapped paragraph and draw the marker
+  // aligned to the FIRST line of that paragraph (handles word-wrap correctly).
+  const bulletList = (
+    items: string[],
+    drawMarker: (yLine: number) => void,
+    indent: number
+  ): void => {
+    const size = 9;
+    const lineHeight = size * 1.35;
+    for (const item of items) {
+      const wrapped = ctx.doc.splitTextToSize(item, CONTENT_W - indent) as string[];
+      y = ensureSpace(ctx, y, lineHeight * wrapped.length + 2);
+      // Marker positioned on the first text baseline
+      drawMarker(y);
+      ctx.doc.setFont('helvetica', 'normal');
+      ctx.doc.setFontSize(size);
+      ctx.doc.setTextColor(...NAVY_SOFT);
+      for (const ln of wrapped) {
+        ctx.doc.text(ln, MARGIN + indent, y);
+        y += lineHeight;
+      }
       y += 2;
     }
-    y += 6;
+  };
+
+  if (est.assumptions.length) {
+    y = sectionLabel(ctx, y, 'Key Assumptions');
+    bulletList(
+      est.assumptions,
+      (yLine) => {
+        ctx.doc.setFillColor(...GREEN);
+        ctx.doc.circle(MARGIN + 4, yLine - 3, 1.6, 'F');
+      },
+      14
+    );
+    y += 4;
   }
 
   if (est.exclusions.length) {
     y = sectionLabel(ctx, y, 'Exclusions');
-    for (const e of est.exclusions) {
-      y = ensureSpace(ctx, y, 18);
-      ctx.doc.setDrawColor(...MUTED);
-      ctx.doc.setLineWidth(0.6);
-      ctx.doc.line(MARGIN + 1, y - 3, MARGIN + 5, y - 3);
-      y = paragraph(ctx, y, `   ${e}`, { size: 9, color: NAVY_SOFT });
-      y += 2;
-    }
-    y += 6;
+    bulletList(
+      est.exclusions,
+      (yLine) => {
+        ctx.doc.setDrawColor(...MUTED);
+        ctx.doc.setLineWidth(0.8);
+        ctx.doc.line(MARGIN + 2, yLine - 3, MARGIN + 8, yLine - 3);
+      },
+      14
+    );
+    y += 4;
   }
 
   if (est.system_note && est.system_note.trim()) {
@@ -591,15 +637,19 @@ function renderBack(ctx: RenderCtx, y: number): number {
     y = py + 8;
   }
 
-  // Acceptance block
-  y = ensureSpace(ctx, y, 130);
+  // Acceptance block — measure prose first so the page break is accurate
+  const validText = est.valid_until
+    ? `until ${fmtDate(est.valid_until)}`
+    : 'for 30 days from the date of issue';
+  const acceptText =
+    `This estimate is valid ${validText} and covers the scope described above. ` +
+    `Please sign below to authorize work. A 50% deposit is due upon contract signing; ` +
+    `the balance is invoiced at project milestones.`;
+  const acceptLines = ctx.doc.splitTextToSize(acceptText, CONTENT_W) as string[];
+  const acceptH = acceptLines.length * (9 * 1.35) + 80; // text + signature lines
+  y = ensureSpace(ctx, y, acceptH);
   y = sectionLabel(ctx, y, 'Acceptance');
-  y = paragraph(
-    ctx,
-    y,
-    'This estimate is valid for 30 days from the date of issue and covers the scope described above. Please sign below to authorize work. A 30% deposit is due upon contract signing; the balance is invoiced at project milestones.',
-    { size: 9, color: NAVY_SOFT }
-  );
+  y = paragraph(ctx, y, acceptText, { size: 9, color: NAVY_SOFT });
   y += 16;
 
   // Signature lines
@@ -646,22 +696,25 @@ export function buildEstimatePdf(raw: EstimateDoc, opts: BuildEstimatePdfOptions
   y = renderTiers(ctx, y);
   renderBack(ctx, y);
 
-  // Sweep all pages and re-stamp footer with correct page numbers
+  // Sweep all pages and re-stamp footer with "Page X of Y"
   const total = doc.internal.pages.length - 1;
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, PAGE_H - 44, PAGE_W, 44, 'F');
-    drawFooter({ ...ctx, pageNum: p });
+    drawFooter({ ...ctx, pageNum: p }, total);
   }
   return doc;
 }
 
-/** Build and trigger a browser download. */
+/** Build and trigger a browser download. Filename keeps Unicode and is URL-safe. */
 export function downloadEstimatePdf(raw: EstimateDoc, opts: BuildEstimatePdfOptions = {}) {
   const doc = buildEstimatePdf(raw, opts);
-  const safeTitle = (raw.title || 'Estimate').replace(/[^a-z0-9]+/gi, '_').slice(0, 60);
-  const filename = opts.filename || `OF_Estimate_${safeTitle}.pdf`;
+  // Preserve unicode letters; strip control + filesystem-illegal characters only
+  const cleanTitle = (raw.title || 'Estimate')
+    .replace(/[\\/:*?"<>|]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80) || 'Estimate';
+  const filename = opts.filename || `OF_Estimate_${cleanTitle}.pdf`;
   doc.save(filename);
 }
 
@@ -677,12 +730,15 @@ export function coerceToEstimateDoc(stored: unknown, fallback: {
   client_name?: string;
   total?: number;
   tax_rate?: number;
+  valid_until?: string;
 } = {}): EstimateDoc | null {
   if (!stored) return null;
 
   // Already a structured EstimateDoc?
   if (typeof stored === 'object' && stored !== null && 'sections' in (stored as any) && Array.isArray((stored as any).sections)) {
-    return stored as EstimateDoc;
+    const doc = stored as EstimateDoc;
+    if (!doc.valid_until && fallback.valid_until) doc.valid_until = fallback.valid_until;
+    return doc;
   }
 
   // Legacy flat array of { scope/description, materials, amount }
@@ -725,6 +781,7 @@ export function coerceToEstimateDoc(stored: unknown, fallback: {
       assumptions: [],
       exclusions: [],
       system_note: '',
+      valid_until: fallback.valid_until || '',
     };
   }
 
