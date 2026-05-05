@@ -23,7 +23,7 @@ const EstimateCreate: React.FC = () => {
   const { data: projects = [] } = useProjects();
   const saveEstimate = useSaveEstimate();
 
-  const [step, setStep] = useState<'select-client' | 'create'>(isEdit ? 'create' : 'select-client');
+  const [step, setStep] = useState<'select-context' | 'create'>(isEdit ? 'create' : 'select-context');
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [selectedContactId, setSelectedContactId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -131,7 +131,7 @@ const EstimateCreate: React.FC = () => {
     return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
   }
 
-  if (step === 'select-client') {
+  if (step === 'select-context') {
     return (
       <div className="space-y-4 animate-fade-in max-w-2xl mx-auto">
         <div className="flex items-center gap-4">
@@ -193,7 +193,7 @@ const EstimateCreate: React.FC = () => {
   return (
     <div className="animate-fade-in max-w-2xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
-        <button onClick={() => isEdit ? navigate(`/estimates/${editId}`) : setStep('select-client')} className="p-1.5 hover:bg-accent rounded-full text-muted-foreground"><ChevronLeft size={18} /></button>
+        <button onClick={() => isEdit ? navigate(`/estimates/${editId}`) : setStep('select-context')} className="p-1.5 hover:bg-accent rounded-full text-muted-foreground"><ChevronLeft size={18} /></button>
         <div className="text-center">
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{isEdit ? 'Edit Estimate' : 'New Estimate'}</p>
           <p className="text-xs text-foreground">{selectedContact?.name}</p>
