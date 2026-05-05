@@ -1,6 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { formatDbError } from "@/lib/formatDbError";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AIAssistantProvider } from "@/contexts/AIAssistantContext";
@@ -22,7 +24,22 @@ import TaxSummary from "./pages/TaxSummary";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+  mutationCache: new MutationCache({
+    onError: (error, _vars, _ctx, mutation) => {
+      // Allow opt-out per mutation by setting meta.suppressErrorToast = true
+      if ((mutation.meta as any)?.suppressErrorToast) return;
+      toast.error(formatDbError(error as any));
+    },
+  }),
+});
 
 const ProtectedRoutes = () => {
   const { user, loading } = useAuth();
