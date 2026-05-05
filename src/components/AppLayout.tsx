@@ -49,7 +49,7 @@ const AppLayout: React.FC = () => {
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 py-4 pb-24 no-scrollbar">
-          {children}
+          <Outlet />
         </main>
 
         <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-lg border-t border-border z-50">
