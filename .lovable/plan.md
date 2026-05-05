@@ -4,7 +4,9 @@ This plan addresses all 93 issues from the audit (10 Critical, 26 High, 36 Mediu
 
 ---
 
-## Phase 1 — Data model & security foundation (CRITICAL)
+## Phase 1 — Data model & security foundation (CRITICAL) ✅ COMPLETE
+
+> Status: applied 2026-05-05. Estimates/invoices pricing columns + CHECK constraints added (`tax_rate` is now a fraction 0–1; `subtotal` non-negative; new `direct_cost_subtotal`, `overhead_amount`, `profit_amount`, `pre_tax_total`, `tax_amount`, plus `notes`, `terms`, `updated_at`). Project-child FKs converted from CASCADE → SET NULL. `assert_owns()` SECURITY DEFINER function + BEFORE INSERT/UPDATE triggers on estimates/invoices/projects/receipts/documents/photos block cross-user references. `updated_at` auto-trigger on 7 tables. `app_role` enum + `user_roles` table + `has_role()` helper added. RLS tightened from `public` → `authenticated` everywhere. `of-photos` bucket made private with folder-owner storage policies. EXECUTE revoked from anon/authenticated on all internal SECURITY DEFINER helpers (only `has_role` retained for RLS). Code in `useEstimates`/PDF still treats `tax_rate` as fraction in some paths and percent in others — that fix lands in Phase 2.
 
 Migrations + RLS first, because every later phase depends on consistent units, FKs, and storage policies.
 
