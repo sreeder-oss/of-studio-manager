@@ -297,6 +297,7 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
           <FileDown size={14} /> PDF
         </button>
         <button onClick={handleSave} disabled={saveEstimate.isPending || !contactId}
+          title={!contactId ? 'Select a client to enable saving' : undefined}
           className="flex-1 bg-primary text-primary-foreground py-2.5 rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-glow disabled:opacity-50 flex items-center justify-center gap-2">
           <Save size={14} /> {saveEstimate.isPending ? 'Saving...' : 'Save Estimate'}
         </button>
