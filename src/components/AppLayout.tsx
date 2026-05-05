@@ -9,7 +9,7 @@ import { FloatingAIButton } from '@/components/ai/FloatingAIButton';
 import { AIAssistant } from '@/components/ai/AIAssistant';
 
 const navItems = [
-  { path: '/', label: 'Home', icon: LayoutDashboard },
+  { path: '/', label: 'Home', icon: LuminaIcon },
   { path: '/contacts', label: 'Contacts', icon: Users },
   { path: '/projects', label: 'Projects', icon: FolderKanban },
   { path: '/estimates', label: 'Estimates', icon: FileText },
