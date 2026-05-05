@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Search, Trash2, Shield } from 'lucide-react';
 import { useContacts } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
-import { useSaveEstimate } from '@/hooks/useEstimates';
+import { useSaveEstimate, useEstimate } from '@/hooks/useEstimates';
 import { LEGAL_TERMS, COMPANY_INFO } from '@/lib/legal';
 import { toast } from 'sonner';
 
@@ -16,10 +16,14 @@ interface LineItem {
 
 const EstimateCreate: React.FC = () => {
   const navigate = useNavigate();
+  const { id: editId } = useParams<{ id: string }>();
+  const isEdit = !!editId;
+  const { data: existing, isLoading: loadingExisting } = useEstimate(editId || '');
   const { data: contacts = [] } = useContacts();
   const { data: projects = [] } = useProjects();
   const saveEstimate = useSaveEstimate();
-  const [step, setStep] = useState<'select-client' | 'create'>('select-client');
+
+  const [step, setStep] = useState<'select-client' | 'create'>(isEdit ? 'create' : 'select-client');
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [selectedContactId, setSelectedContactId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -28,21 +32,48 @@ const EstimateCreate: React.FC = () => {
   ]);
   const [notes, setNotes] = useState('50% deposit required to schedule.');
   const [taxRate, setTaxRate] = useState(8.75);
+  const [validUntil, setValidUntil] = useState<string>(
+    new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+  );
   const [showTerms, setShowTerms] = useState(false);
+
+  // Hydrate from existing estimate when editing
+  useEffect(() => {
+    if (!isEdit || !existing) return;
+    setSelectedContactId(existing.contact_id || '');
+    setSelectedProjectId(existing.project_id || '');
+    const items = Array.isArray(existing.line_items) ? (existing.line_items as any[]) : [];
+    if (items.length) {
+      setLineItems(items.map((li: any, i) => ({
+        id: String(li.id ?? i + 1),
+        scope: li.scope ?? li.description ?? '',
+        materials: li.materials ?? '',
+        amount: Number(li.amount ?? 0),
+      })));
+    }
+    setNotes(existing.notes ?? '50% deposit required to schedule.');
+    setTaxRate(Number(existing.tax_rate ?? 0) * 100);
+    if (existing.valid_until) setValidUntil(existing.valid_until);
+  }, [isEdit, existing]);
 
   const filteredContacts = contacts.filter(c =>
     c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || (c.email || '').toLowerCase().includes(clientSearchTerm.toLowerCase())
   );
 
   const selectedContact = contacts.find(c => c.id === selectedContactId);
+  const filteredProjects = useMemo(
+    () => projects.filter(p =>
+      (p.status === 'Active' || p.status === 'Bidding') &&
+      (!selectedContactId || !p.contact_id || p.contact_id === selectedContactId)
+    ),
+    [projects, selectedContactId]
+  );
 
   const handleProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId);
     if (projectId) {
       const project = projects.find(p => p.id === projectId);
-      if (project?.contact_id) {
-        setSelectedContactId(project.contact_id);
-      }
+      if (project?.contact_id) setSelectedContactId(project.contact_id);
     }
   };
 
@@ -52,31 +83,53 @@ const EstimateCreate: React.FC = () => {
     setLineItems(newItems);
   };
 
-  const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
-  const tax = subtotal * (taxRate / 100);
+  const subtotal = useMemo(() => lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [lineItems]);
+  const taxFraction = (Number(taxRate) || 0) / 100;
+  const tax = subtotal * taxFraction;
   const total = subtotal + tax;
   const deposit = total * 0.5;
 
   const handleSave = async () => {
-    if (!selectedContactId || lineItems.length === 0) return;
+    if (!selectedContactId) {
+      toast.error('Select a client first');
+      return;
+    }
+    if (!lineItems.length || lineItems.every(li => !li.scope && !li.amount)) {
+      toast.error('Add at least one line item');
+      return;
+    }
     try {
       const items = lineItems.map(li => ({
         id: li.id,
         description: `${li.scope || ''}${li.materials ? `\nMaterials: ${li.materials}` : ''}`,
-        scope: li.scope, materials: li.materials, amount: li.amount,
+        scope: li.scope, materials: li.materials, amount: Number(li.amount) || 0,
       }));
-      await saveEstimate.mutateAsync({
+      const saved = await saveEstimate.mutateAsync({
+        ...(isEdit && existing ? { id: existing.id } : {}),
         contact_id: selectedContactId,
-        project_id: selectedProjectId || undefined,
+        project_id: selectedProjectId || null,
         line_items: items as any,
-        subtotal, tax_rate: taxRate / 100, total,
-        status: 'Pending',
-        valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        subtotal,
+        tax_rate: taxFraction,
+        tax_amount: tax,
+        pre_tax_total: subtotal,
+        total,
+        notes: notes || null,
+        status: existing?.status ?? 'Pending',
+        valid_until: validUntil || null,
       });
-      toast.success('Estimate saved');
-      navigate('/estimates');
-    } catch { toast.error('Failed to save estimate'); }
+      toast.success(isEdit ? 'Estimate updated' : 'Estimate saved');
+      if (saved?.id) navigate(`/estimates/${saved.id}`);
+      else navigate('/estimates');
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Failed to save estimate');
+    }
   };
+
+  if (isEdit && loadingExisting) {
+    return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
+  }
 
   if (step === 'select-client') {
     return (
@@ -86,19 +139,17 @@ const EstimateCreate: React.FC = () => {
           <h2 className="text-xl font-serif text-foreground">New Estimate</h2>
         </div>
 
-        {/* Project picker first */}
         <div>
           <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Project (optional)</label>
           <select value={selectedProjectId} onChange={e => handleProjectChange(e.target.value)}
             className="w-full bg-card border border-border rounded-xl py-2.5 px-4 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary">
             <option value="">No Project</option>
-            {projects.filter(p => p.status === 'Active' || p.status === 'Bidding').map(p => (
+            {filteredProjects.map(p => (
               <option key={p.id} value={p.id}>{p.name}{contacts.find(c => c.id === p.contact_id) ? ` — ${contacts.find(c => c.id === p.contact_id)!.name}` : ''}</option>
             ))}
           </select>
         </div>
 
-        {/* If project selected with a contact, skip client selection */}
         {selectedProjectId && selectedContactId ? (
           <div className="space-y-3">
             <div className="p-4 bg-card border border-primary/20 rounded-xl">
@@ -142,15 +193,15 @@ const EstimateCreate: React.FC = () => {
   return (
     <div className="animate-fade-in max-w-2xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
-        <button onClick={() => setStep('select-client')} className="p-1.5 hover:bg-accent rounded-full text-muted-foreground"><ChevronLeft size={18} /></button>
+        <button onClick={() => isEdit ? navigate(`/estimates/${editId}`) : setStep('select-client')} className="p-1.5 hover:bg-accent rounded-full text-muted-foreground"><ChevronLeft size={18} /></button>
         <div className="text-center">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">New Estimate</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{isEdit ? 'Edit Estimate' : 'New Estimate'}</p>
           <p className="text-xs text-foreground">{selectedContact?.name}</p>
           {selectedProjectId && <p className="text-[9px] text-primary">{projects.find(p => p.id === selectedProjectId)?.name}</p>}
         </div>
         <button onClick={handleSave} disabled={saveEstimate.isPending}
           className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg font-bold text-[10px] uppercase tracking-widest shadow-glow disabled:opacity-50">
-          {saveEstimate.isPending ? 'Saving...' : 'Save'}
+          {saveEstimate.isPending ? 'Saving...' : isEdit ? 'Update' : 'Save'}
         </button>
       </div>
 
@@ -163,8 +214,9 @@ const EstimateCreate: React.FC = () => {
               <input placeholder="Materials..." className="flex-1 bg-accent border border-border rounded-lg p-2 text-foreground text-[11px] outline-none"
                 value={item.materials} onChange={e => updateItem(index, 'materials', e.target.value)} />
               <span className="text-muted-foreground text-[10px]">$</span>
-              <input type="number" className="bg-accent border border-border rounded-lg p-1.5 text-right text-primary font-mono text-xs w-20 outline-none"
-                value={item.amount} onChange={e => updateItem(index, 'amount', parseFloat(e.target.value) || 0)} />
+              <input type="number" inputMode="decimal" className="bg-accent border border-border rounded-lg p-1.5 text-right text-primary font-mono text-xs w-20 outline-none"
+                value={Number.isFinite(item.amount) ? item.amount : 0}
+                onChange={e => updateItem(index, 'amount', e.target.value === '' ? 0 : parseFloat(e.target.value))} />
               <button onClick={() => setLineItems(lineItems.filter((_, i) => i !== index))} className="text-destructive p-1.5"><Trash2 size={14} /></button>
             </div>
           </div>
@@ -176,8 +228,13 @@ const EstimateCreate: React.FC = () => {
       <div className="bg-card p-4 rounded-xl space-y-2 border border-border">
         <div className="flex justify-between items-center text-[10px]">
           <span className="text-muted-foreground font-bold uppercase tracking-widest">Tax (%)</span>
-          <input type="number" className="bg-accent border border-border rounded px-2 py-1 text-right w-16 text-xs text-foreground outline-none"
-            value={taxRate} onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} />
+          <input type="number" inputMode="decimal" className="bg-accent border border-border rounded px-2 py-1 text-right w-16 text-xs text-foreground outline-none"
+            value={taxRate} onChange={e => setTaxRate(e.target.value === '' ? 0 : parseFloat(e.target.value))} />
+        </div>
+        <div className="flex justify-between items-center text-[10px]">
+          <span className="text-muted-foreground font-bold uppercase tracking-widest">Valid Until</span>
+          <input type="date" className="bg-accent border border-border rounded px-2 py-1 text-xs text-foreground outline-none"
+            value={validUntil} onChange={e => setValidUntil(e.target.value)} />
         </div>
         <div className="flex justify-between text-lg font-serif text-primary pt-2 border-t border-border">
           <span className="text-sm">Estimate Total</span>
