@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { X, Save, Trash2, Plus, FileDown } from 'lucide-react';
 import { recalcEstimate, type EstimateDoc } from '@/lib/estimateSchema';
 import { downloadEstimatePdf } from '@/lib/estimatePdf';
-import { useContacts } from '@/hooks/useContacts';
+import { useContacts, useSaveContact } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useSaveEstimate } from '@/hooks/useEstimates';
 import { toast } from 'sonner';
@@ -14,22 +14,79 @@ interface Props {
 
 const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+const NEW_CLIENT = '__new__';
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+
 export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
   const [doc, setDoc] = useState<EstimateDoc>(() => recalcEstimate(initial));
   const { data: contacts = [] } = useContacts();
   const { data: projects = [] } = useProjects();
   const saveEstimate = useSaveEstimate();
+  const saveContact = useSaveContact();
 
-  // try to auto-match a contact / project by name
+  // Tiered fuzzy match: exact CI → normalized → token-subset (only auto-select on unique match)
   const matchedContactId = useMemo(() => {
     if (!doc.client_name) return '';
-    const c = contacts.find((x) => x.name.toLowerCase() === doc.client_name.toLowerCase());
-    return c?.id ?? '';
+    const target = doc.client_name;
+    const exact = contacts.filter((c) => c.name.toLowerCase() === target.toLowerCase());
+    if (exact.length === 1) return exact[0].id;
+    const nt = norm(target);
+    const normalized = contacts.filter((c) => norm(c.name) === nt);
+    if (normalized.length === 1) return normalized[0].id;
+    const tokens = nt.split(' ').filter(Boolean);
+    if (tokens.length) {
+      const tokenMatch = contacts.filter((c) => {
+        const cn = norm(c.name);
+        return tokens.every((t) => cn.includes(t));
+      });
+      if (tokenMatch.length === 1) return tokenMatch[0].id;
+    }
+    return '';
   }, [contacts, doc.client_name]);
+
   const [contactId, setContactId] = useState<string>('');
   const [projectId, setProjectId] = useState<string>('');
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [newClient, setNewClient] = useState({ name: '', email: '', phone: '' });
+  const [createError, setCreateError] = useState<string | null>(null);
 
-  React.useEffect(() => { if (matchedContactId && !contactId) setContactId(matchedContactId); }, [matchedContactId, contactId]);
+  React.useEffect(() => {
+    if (matchedContactId && !contactId) setContactId(matchedContactId);
+  }, [matchedContactId, contactId]);
+
+  const onClientChange = (val: string) => {
+    if (val === NEW_CLIENT) {
+      setNewClient({ name: doc.client_name || '', email: '', phone: '' });
+      setShowNewClient(true);
+      setCreateError(null);
+    } else {
+      setContactId(val);
+      setShowNewClient(false);
+    }
+  };
+
+  const handleCreateClient = async () => {
+    if (!newClient.name.trim()) {
+      setCreateError('Name is required');
+      return;
+    }
+    try {
+      const created = await saveContact.mutateAsync({
+        name: newClient.name.trim(),
+        email: newClient.email.trim() || null,
+        phone: newClient.phone.trim() || null,
+        type: 'Client',
+        status: 'Active',
+      });
+      setContactId(created.id);
+      setShowNewClient(false);
+      setCreateError(null);
+      toast.success('Client created');
+    } catch (e: any) {
+      console.error('Create contact failed:', e);
+      setCreateError(e?.message || 'Failed to create client');
+    }
+  };
 
   const update = (next: EstimateDoc) => setDoc(recalcEstimate(next));
 
@@ -77,6 +134,7 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
       toast.success('Estimate saved');
       onClose();
     } catch (e) {
+      console.error('Save estimate failed:', e);
       toast.error('Failed to save estimate');
     }
   };
