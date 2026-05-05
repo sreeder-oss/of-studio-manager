@@ -184,66 +184,72 @@ function renderCover(ctx: RenderCtx): number {
     y += 18;
   }
 
-  // Two-column info block (Project | Estimate Details)
+  // Two-column info block (Project | Estimate Details) — height auto-grows to fit
   const colW = (CONTENT_W - 16) / 2;
   const boxTop = y;
-  const boxH = 110;
-  doc.setFillColor(...PANEL);
-  doc.setDrawColor(...HAIRLINE);
-  doc.roundedRect(MARGIN, boxTop, colW, boxH, 4, 4, 'FD');
-  doc.roundedRect(MARGIN + colW + 16, boxTop, colW, boxH, 4, 4, 'FD');
 
-  // Left column — PROJECT
-  let ly = boxTop + 16;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(...GREEN);
-  doc.text('PROJECT', MARGIN + 12, ly);
-  ly += 14;
   const projRows: [string, string][] = [
     ['Client', est.client_name || '—'],
     ['Location', est.project_address || '—'],
     ['Substrate', est.substrate || '—'],
     ['System', est.system_name || '—'],
   ];
-  for (const [k, v] of projRows) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text(k.toUpperCase(), MARGIN + 12, ly);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
-    doc.setTextColor(...NAVY);
-    const vLines = doc.splitTextToSize(v, colW - 24) as string[];
-    doc.text(vLines[0] || '', MARGIN + 12, ly + 11);
-    ly += 22;
-  }
-
-  // Right column — ESTIMATE DETAILS
-  ly = boxTop + 16;
-  const rx = MARGIN + colW + 16 + 12;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(...GREEN);
-  doc.text('ESTIMATE DETAILS', rx, ly);
-  ly += 14;
+  const validText = est.valid_until
+    ? `Valid until ${fmtDate(est.valid_until)}`
+    : '30 days from date of issue';
   const detailRows: [string, string][] = [
     ['Date', today()],
     ['Net area', est.area_sf > 0 ? `${est.area_sf.toLocaleString()} SF` : '—'],
     ['Duration', est.duration_estimate || '—'],
-    ['Valid', '30 days from date of issue'],
+    ['Valid', validText],
   ];
-  for (const [k, v] of detailRows) {
+
+  // Pre-measure each row to compute box height
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  const lineH = 12;
+  const rowGap = 8;
+  const headerH = 16; // "PROJECT" label band
+  const measureRows = (rows: [string, string][]) =>
+    rows.reduce((sum, [, v]) => {
+      const lines = doc.splitTextToSize(v || '—', colW - 24) as string[];
+      return sum + 11 /* label */ + Math.max(lines.length, 1) * lineH + rowGap;
+    }, 0);
+  const leftH = measureRows(projRows);
+  const rightH = measureRows(detailRows);
+  const boxH = Math.max(leftH, rightH) + headerH + 16;
+
+  doc.setFillColor(...PANEL);
+  doc.setDrawColor(...HAIRLINE);
+  doc.roundedRect(MARGIN, boxTop, colW, boxH, 4, 4, 'FD');
+  doc.roundedRect(MARGIN + colW + 16, boxTop, colW, boxH, 4, 4, 'FD');
+
+  const drawCol = (rows: [string, string][], xLeft: number, label: string) => {
+    let ly = boxTop + 16;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text(k.toUpperCase(), rx, ly);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
-    doc.setTextColor(...NAVY);
-    doc.text(v, rx, ly + 11);
-    ly += 22;
-  }
+    doc.setTextColor(...GREEN);
+    doc.text(label, xLeft, ly);
+    ly += 14;
+    for (const [k, v] of rows) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text(k.toUpperCase(), xLeft, ly);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(...NAVY);
+      const vLines = doc.splitTextToSize(v || '—', colW - 24) as string[];
+      let vy = ly + 11;
+      for (const ln of vLines) {
+        doc.text(ln, xLeft, vy);
+        vy += lineH;
+      }
+      ly = vy + rowGap - lineH; // start of next label
+    }
+  };
+  drawCol(projRows, MARGIN + 12, 'PROJECT');
+  drawCol(detailRows, MARGIN + colW + 16 + 12, 'ESTIMATE DETAILS');
 
   y = boxTop + boxH + 18;
 
