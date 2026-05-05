@@ -88,9 +88,13 @@ function drawHeader(ctx: RenderCtx) {
   doc.line(MARGIN, 52, PAGE_W - MARGIN, 52);
 }
 
-// Footer on every page
-function drawFooter(ctx: RenderCtx) {
+// Footer on every page (page count is stamped in a final pass)
+function drawFooter(ctx: RenderCtx, totalPages?: number) {
   const { doc, company, pageNum } = ctx;
+  // Erase any prior footer band before redrawing
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, PAGE_H - 44, PAGE_W, 44, 'F');
+
   doc.setDrawColor(...HAIRLINE);
   doc.setLineWidth(0.4);
   doc.line(MARGIN, PAGE_H - 36, PAGE_W - MARGIN, PAGE_H - 36);
@@ -98,9 +102,10 @@ function drawFooter(ctx: RenderCtx) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(...MUTED);
-  const left = `${company.name.replace('ORGANIC FINISHES LLC', 'Organic Finishes LLC')} | ${company.email}`;
+  const left = `Organic Finishes LLC | ${company.email}`;
   doc.text(left, MARGIN, PAGE_H - 22);
-  doc.text(`Page ${pageNum}`, PAGE_W - MARGIN, PAGE_H - 22, { align: 'right' });
+  const pageLabel = totalPages ? `Page ${pageNum} of ${totalPages}` : `Page ${pageNum}`;
+  doc.text(pageLabel, PAGE_W - MARGIN, PAGE_H - 22, { align: 'right' });
 }
 
 // Ensure y has room; add page if not
