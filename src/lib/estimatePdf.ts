@@ -61,6 +61,9 @@ interface RenderCtx {
 // Header band on every page
 function drawHeader(ctx: RenderCtx) {
   const { doc, est, company } = ctx;
+  // Erase header band area in case overflow drew into it
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, PAGE_W, 56, 'F');
   // green accent rule
   doc.setFillColor(...GREEN);
   doc.rect(0, 0, PAGE_W, 4, 'F');
