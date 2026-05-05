@@ -1,21 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { Json } from '@/integrations/supabase/types';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuthReady } from '@/hooks/useAuthReady';
 
-export type DbEstimate = {
-  id: string;
-  user_id: string;
-  project_id: string | null;
-  contact_id: string | null;
-  line_items: Json | null;
-  subtotal: number | null;
-  tax_rate: number | null;
-  total: number | null;
-  status: string | null;
-  valid_until: string | null;
-  created_at: string | null;
-};
+export type DbEstimate = Database['public']['Tables']['estimates']['Row'];
+export type DbEstimateInsert = Database['public']['Tables']['estimates']['Insert'];
+export type DbEstimateUpdate = Database['public']['Tables']['estimates']['Update'];
 
 export const useEstimates = () => {
   const { user, isReady } = useAuthReady();
@@ -25,7 +15,7 @@ export const useEstimates = () => {
     queryFn: async () => {
       const { data, error } = await supabase.from('estimates').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return data as DbEstimate[];
+      return data;
     },
     enabled: isReady && !!user,
   });
@@ -37,37 +27,61 @@ export const useEstimate = (id: string) => {
   return useQuery({
     queryKey: ['estimates', id, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('estimates').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('estimates').select('*').eq('id', id).maybeSingle();
       if (error) throw error;
-      return data as DbEstimate;
+      return data;
     },
     enabled: isReady && !!user && !!id,
   });
 };
 
+type SaveEstimateInput = Partial<DbEstimate> &
+  Pick<DbEstimateInsert, 'contact_id' | 'line_items' | 'subtotal' | 'total'>;
+
 export const useSaveEstimate = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (estimate: Partial<DbEstimate> & { contact_id: string; line_items: Json; subtotal: number; total: number }) => {
+    mutationFn: async (estimate: SaveEstimateInput): Promise<DbEstimate> => {
+      const payload = {
+        contact_id: estimate.contact_id,
+        project_id: estimate.project_id ?? null,
+        line_items: estimate.line_items,
+        subtotal: estimate.subtotal,
+        tax_rate: estimate.tax_rate,
+        total: estimate.total,
+        status: estimate.status ?? 'Pending',
+        valid_until: estimate.valid_until ?? null,
+        notes: estimate.notes ?? null,
+        terms: estimate.terms ?? null,
+        direct_cost_subtotal: estimate.direct_cost_subtotal,
+        overhead_amount: estimate.overhead_amount,
+        profit_amount: estimate.profit_amount,
+        pre_tax_total: estimate.pre_tax_total,
+        tax_amount: estimate.tax_amount,
+      };
+
       if (estimate.id) {
-        const { error } = await supabase.from('estimates').update({
-          contact_id: estimate.contact_id, project_id: estimate.project_id,
-          line_items: estimate.line_items, subtotal: estimate.subtotal,
-          tax_rate: estimate.tax_rate, total: estimate.total,
-          status: estimate.status, valid_until: estimate.valid_until,
-        }).eq('id', estimate.id);
+        const { data, error } = await supabase
+          .from('estimates')
+          .update(payload)
+          .eq('id', estimate.id)
+          .select()
+          .single();
         if (error) throw error;
-      } else {
-        const { error } = await supabase.from('estimates').insert({
-          contact_id: estimate.contact_id, project_id: estimate.project_id,
-          line_items: estimate.line_items, subtotal: estimate.subtotal,
-          tax_rate: estimate.tax_rate, total: estimate.total,
-          status: estimate.status || 'Pending', valid_until: estimate.valid_until,
-        });
-        if (error) throw error;
+        return data;
       }
+      const { data, error } = await supabase
+        .from('estimates')
+        .insert(payload as DbEstimateInsert)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimates'] }),
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: ['estimates'] });
+      if (row?.id) qc.invalidateQueries({ queryKey: ['estimates', row.id] });
+    },
   });
 };
 

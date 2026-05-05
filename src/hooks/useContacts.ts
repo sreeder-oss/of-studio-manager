@@ -1,19 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuthReady } from '@/hooks/useAuthReady';
 
-export type DbContact = {
-  id: string;
-  user_id: string;
-  name: string;
-  type: string | null;
-  status: string | null;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
-  notes: string | null;
-  created_at: string | null;
-};
+export type DbContact = Database['public']['Tables']['contacts']['Row'];
+export type DbContactInsert = Database['public']['Tables']['contacts']['Insert'];
 
 export const useContacts = () => {
   const { user, isReady } = useAuthReady();
@@ -23,7 +14,7 @@ export const useContacts = () => {
     queryFn: async () => {
       const { data, error } = await supabase.from('contacts').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return data as DbContact[];
+      return data;
     },
     enabled: isReady && !!user,
   });
@@ -35,9 +26,9 @@ export const useContact = (id: string) => {
   return useQuery({
     queryKey: ['contacts', id, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('contacts').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('contacts').select('*').eq('id', id).maybeSingle();
       if (error) throw error;
-      return data as DbContact;
+      return data;
     },
     enabled: isReady && !!user && !!id,
   });
@@ -47,21 +38,25 @@ export const useSaveContact = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (contact: Partial<DbContact> & { name: string }): Promise<DbContact> => {
+      const payload = {
+        name: contact.name,
+        type: contact.type ?? null,
+        status: contact.status ?? null,
+        email: contact.email ?? null,
+        phone: contact.phone ?? null,
+        address: contact.address ?? null,
+        notes: contact.notes ?? null,
+      };
       if (contact.id) {
-        const { data, error } = await supabase.from('contacts').update({
-          name: contact.name, type: contact.type, status: contact.status,
-          email: contact.email, phone: contact.phone, address: contact.address, notes: contact.notes,
-        }).eq('id', contact.id).select().single();
+        const { data, error } = await supabase
+          .from('contacts').update(payload).eq('id', contact.id).select().single();
         if (error) throw error;
-        return data as DbContact;
-      } else {
-        const { data, error } = await supabase.from('contacts').insert({
-          name: contact.name, type: contact.type, status: contact.status,
-          email: contact.email, phone: contact.phone, address: contact.address, notes: contact.notes,
-        }).select().single();
-        if (error) throw error;
-        return data as DbContact;
+        return data;
       }
+      const { data, error } = await supabase
+        .from('contacts').insert(payload as DbContactInsert).select().single();
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['contacts'] }),
   });
