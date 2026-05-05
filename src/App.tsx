@@ -47,6 +47,7 @@ const ProtectedRoutes = () => {
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/estimates" element={<Estimates />} />
         <Route path="/estimates/new" element={<EstimateCreate />} />
+        <Route path="/estimates/:id/edit" element={<EstimateCreate />} />
         <Route path="/estimates/:id" element={<EstimateDetail />} />
         <Route path="/invoices" element={<Invoices />} />
         <Route path="/invoices/:id" element={<InvoiceDetail />} />
