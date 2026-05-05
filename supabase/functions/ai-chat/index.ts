@@ -914,6 +914,16 @@ Deno.serve(async (req: Request) => {
                     send({ choices: [{ delta: { content: `_⚠️ NAA portal login failed (${(result as any).reason ?? "auth error"}). Continuing with public sources only._\n` } }] });
                   }
                 }
+              } else if (fname === "emit_estimate" || fname === "emit_invoice") {
+                // Structured emit: serialize to the same fenced JSON the client parser expects,
+                // then ack the tool call so the model can append its prose summary.
+                try {
+                  const fenced = "```json\n" + JSON.stringify(args, null, 2) + "\n```\n";
+                  send({ choices: [{ delta: { content: fenced } }] });
+                  result = { ok: true, emitted: fname };
+                } catch (e) {
+                  result = { error: `emit failed: ${(e as Error).message}` };
+                }
               } else {
                 result = { error: `Unknown tool: ${fname}` };
               }
