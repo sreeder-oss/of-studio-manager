@@ -6,5 +6,7 @@ export const useAuthReady = () => {
   return {
     user,
     isReady: !loading,
+    isLoading: loading,
+    isAuthed: !loading && !!user,
   };
 };
