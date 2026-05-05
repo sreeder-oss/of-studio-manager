@@ -25,6 +25,7 @@ export type Database = {
           phone: string | null
           status: string | null
           type: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -37,6 +38,7 @@ export type Database = {
           phone?: string | null
           status?: string | null
           type?: string | null
+          updated_at?: string
           user_id?: string
         }
         Update: {
@@ -49,6 +51,7 @@ export type Database = {
           phone?: string | null
           status?: string | null
           type?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -60,6 +63,7 @@ export type Database = {
           label: string
           project_id: string | null
           type: string | null
+          updated_at: string
           uploaded_at: string | null
           user_id: string
         }
@@ -69,6 +73,7 @@ export type Database = {
           label: string
           project_id?: string | null
           type?: string | null
+          updated_at?: string
           uploaded_at?: string | null
           user_id?: string
         }
@@ -78,6 +83,7 @@ export type Database = {
           label?: string
           project_id?: string | null
           type?: string | null
+          updated_at?: string
           uploaded_at?: string | null
           user_id?: string
         }
@@ -95,39 +101,63 @@ export type Database = {
         Row: {
           contact_id: string | null
           created_at: string | null
+          direct_cost_subtotal: number
           id: string
-          line_items: Json | null
+          line_items: Json
+          notes: string | null
+          overhead_amount: number
+          pre_tax_total: number
+          profit_amount: number
           project_id: string | null
-          status: string | null
-          subtotal: number | null
-          tax_rate: number | null
-          total: number | null
+          status: string
+          subtotal: number
+          tax_amount: number
+          tax_rate: number
+          terms: string | null
+          total: number
+          updated_at: string
           user_id: string
           valid_until: string | null
         }
         Insert: {
           contact_id?: string | null
           created_at?: string | null
+          direct_cost_subtotal?: number
           id?: string
-          line_items?: Json | null
+          line_items?: Json
+          notes?: string | null
+          overhead_amount?: number
+          pre_tax_total?: number
+          profit_amount?: number
           project_id?: string | null
-          status?: string | null
-          subtotal?: number | null
-          tax_rate?: number | null
-          total?: number | null
+          status?: string
+          subtotal?: number
+          tax_amount?: number
+          tax_rate?: number
+          terms?: string | null
+          total?: number
+          updated_at?: string
           user_id?: string
           valid_until?: string | null
         }
         Update: {
           contact_id?: string | null
           created_at?: string | null
+          direct_cost_subtotal?: number
           id?: string
-          line_items?: Json | null
+          line_items?: Json
+          notes?: string | null
+          overhead_amount?: number
+          pre_tax_total?: number
+          profit_amount?: number
           project_id?: string | null
-          status?: string | null
-          subtotal?: number | null
-          tax_rate?: number | null
-          total?: number | null
+          status?: string
+          subtotal?: number
+          tax_amount?: number
+          tax_rate?: number
+          terms?: string | null
+          total?: number
+          updated_at?: string
           user_id?: string
           valid_until?: string | null
         }
@@ -155,13 +185,17 @@ export type Database = {
           due_date: string | null
           estimate_id: string | null
           id: string
-          line_items: Json | null
-          paid: boolean | null
+          line_items: Json
+          notes: string | null
+          paid: boolean
           paid_date: string | null
           project_id: string | null
-          subtotal: number | null
-          tax_applied: number | null
-          total: number | null
+          subtotal: number
+          tax_applied: number
+          tax_rate: number
+          terms: string | null
+          total: number
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -170,13 +204,17 @@ export type Database = {
           due_date?: string | null
           estimate_id?: string | null
           id?: string
-          line_items?: Json | null
-          paid?: boolean | null
+          line_items?: Json
+          notes?: string | null
+          paid?: boolean
           paid_date?: string | null
           project_id?: string | null
-          subtotal?: number | null
-          tax_applied?: number | null
-          total?: number | null
+          subtotal?: number
+          tax_applied?: number
+          tax_rate?: number
+          terms?: string | null
+          total?: number
+          updated_at?: string
           user_id?: string
         }
         Update: {
@@ -185,13 +223,17 @@ export type Database = {
           due_date?: string | null
           estimate_id?: string | null
           id?: string
-          line_items?: Json | null
-          paid?: boolean | null
+          line_items?: Json
+          notes?: string | null
+          paid?: boolean
           paid_date?: string | null
           project_id?: string | null
-          subtotal?: number | null
-          tax_applied?: number | null
-          total?: number | null
+          subtotal?: number
+          tax_applied?: number
+          tax_rate?: number
+          terms?: string | null
+          total?: number
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -226,6 +268,7 @@ export type Database = {
           phase: string | null
           project_id: string | null
           taken_at: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -235,6 +278,7 @@ export type Database = {
           phase?: string | null
           project_id?: string | null
           taken_at?: string | null
+          updated_at?: string
           user_id?: string
         }
         Update: {
@@ -244,6 +288,7 @@ export type Database = {
           phase?: string | null
           project_id?: string | null
           taken_at?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -268,6 +313,7 @@ export type Database = {
           notes: string | null
           start_date: string | null
           status: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -281,6 +327,7 @@ export type Database = {
           notes?: string | null
           start_date?: string | null
           status?: string | null
+          updated_at?: string
           user_id?: string
         }
         Update: {
@@ -294,6 +341,7 @@ export type Database = {
           notes?: string | null
           start_date?: string | null
           status?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -318,6 +366,7 @@ export type Database = {
           receipt_date: string
           tax_deductible: boolean | null
           tax_year: string | null
+          updated_at: string
           user_id: string
           vendor: string | null
         }
@@ -332,6 +381,7 @@ export type Database = {
           receipt_date: string
           tax_deductible?: boolean | null
           tax_year?: string | null
+          updated_at?: string
           user_id?: string
           vendor?: string | null
         }
@@ -346,6 +396,7 @@ export type Database = {
           receipt_date?: string
           tax_deductible?: boolean | null
           tax_year?: string | null
+          updated_at?: string
           user_id?: string
           vendor?: string | null
         }
@@ -416,15 +467,46 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      assert_owns: {
+        Args: { _id: string; _table: unknown; _user: string }
+        Returns: undefined
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "manager" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -551,6 +633,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "manager", "user"],
+    },
   },
 } as const
