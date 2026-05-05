@@ -4,6 +4,10 @@ This plan addresses all 93 issues from the audit (10 Critical, 26 High, 36 Mediu
 
 ---
 
+## Phase 2 — AI estimate generation ✅ COMPLETE
+
+> Status: applied 2026-05-05. Added `emit_estimate` and `emit_invoice` tool definitions to `ai-chat` edge function. When the model calls these tools, the args are serialized as a fenced ```json block back to the client (so existing `parseEstimateFromText` / `parseInvoiceFromText` parsers pick them up unchanged). System prompt updated to prefer tool-calling over inline JSON for both estimates and invoices. Tightened `estimateSchema.ts` with non-negative / range constraints on numerics and exported sub-types (`LineItem`, `EstimateSection`, `BidRange`). Replaced hand-rolled `DbContact`/`DbProject`/`DbEstimate` types in `useContacts`/`useProjects`/`useEstimates` with generated `Database['public']['Tables'][...]['Row']` types so future schema changes propagate automatically. `useSaveEstimate` now `.select().single()` and returns the saved row. `useEstimate`/`useContact` switched to `.maybeSingle()`. Edge function deployed.
+
 ## Phase 1 — Data model & security foundation (CRITICAL) ✅ COMPLETE
 
 > Status: applied 2026-05-05. Estimates/invoices pricing columns + CHECK constraints added (`tax_rate` is now a fraction 0–1; `subtotal` non-negative; new `direct_cost_subtotal`, `overhead_amount`, `profit_amount`, `pre_tax_total`, `tax_amount`, plus `notes`, `terms`, `updated_at`). Project-child FKs converted from CASCADE → SET NULL. `assert_owns()` SECURITY DEFINER function + BEFORE INSERT/UPDATE triggers on estimates/invoices/projects/receipts/documents/photos block cross-user references. `updated_at` auto-trigger on 7 tables. `app_role` enum + `user_roles` table + `has_role()` helper added. RLS tightened from `public` → `authenticated` everywhere. `of-photos` bucket made private with folder-owner storage policies. EXECUTE revoked from anon/authenticated on all internal SECURITY DEFINER helpers (only `has_role` retained for RLS). Code in `useEstimates`/PDF still treats `tax_rate` as fraction in some paths and percent in others — that fix lands in Phase 2.

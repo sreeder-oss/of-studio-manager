@@ -8,12 +8,24 @@ export const lineItemSchema = z.object({
   unit_cost: z.number(),
   total: z.number(),
 });
+export type LineItem = z.infer<typeof lineItemSchema>;
 
 export const sectionSchema = z.object({
   label: z.string(),
   line_items: z.array(lineItemSchema),
   subtotal: z.number(),
 });
+export type EstimateSection = z.infer<typeof sectionSchema>;
+
+export const bidRangeSchema = z.object({
+  low: z.number(),
+  low_note: z.string().optional().default(''),
+  mid: z.number(),
+  mid_note: z.string().optional().default(''),
+  high: z.number(),
+  high_note: z.string().optional().default(''),
+});
+export type BidRange = z.infer<typeof bidRangeSchema>;
 
 export const estimateSchema = z.object({
   title: z.string(),
@@ -21,24 +33,21 @@ export const estimateSchema = z.object({
   project_address: z.string().optional().default(''),
   substrate: z.string().optional().default(''),
   system_name: z.string().optional().default(''),
-  area_sf: z.number().optional().default(0),
+  area_sf: z.number().nonnegative().optional().default(0),
   area_note: z.string().optional().default(''),
   duration_estimate: z.string().optional().default(''),
   sections: z.array(sectionSchema),
-  direct_cost_subtotal: z.number().optional().default(0),
-  overhead_pct: z.number().optional().default(8),
-  overhead_amount: z.number().optional().default(0),
-  profit_pct: z.number().optional().default(10),
-  profit_amount: z.number().optional().default(0),
-  tax_rate: z.number().optional().default(8.75),
-  tax_amount: z.number().optional().default(0),
-  total: z.number().optional().default(0),
-  per_sf: z.number().optional().default(0),
-  bid_range: z.object({
-    low: z.number(), low_note: z.string().optional().default(''),
-    mid: z.number(), mid_note: z.string().optional().default(''),
-    high: z.number(), high_note: z.string().optional().default(''),
-  }).optional(),
+  direct_cost_subtotal: z.number().nonnegative().optional().default(0),
+  overhead_pct: z.number().min(0).max(100).optional().default(8),
+  overhead_amount: z.number().nonnegative().optional().default(0),
+  profit_pct: z.number().min(0).max(100).optional().default(10),
+  profit_amount: z.number().nonnegative().optional().default(0),
+  /** percent (e.g. 8.75 for 8.75%) — converted to fraction (0.0875) before persisting */
+  tax_rate: z.number().min(0).max(100).optional().default(8.75),
+  tax_amount: z.number().nonnegative().optional().default(0),
+  total: z.number().nonnegative().optional().default(0),
+  per_sf: z.number().nonnegative().optional().default(0),
+  bid_range: bidRangeSchema.optional(),
   assumptions: z.array(z.string()).optional().default([]),
   exclusions: z.array(z.string()).optional().default([]),
   system_note: z.string().optional().default(''),
