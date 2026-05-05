@@ -563,29 +563,56 @@ function renderTiers(ctx: RenderCtx, y: number): number {
 function renderBack(ctx: RenderCtx, y: number): number {
   const { est } = ctx;
 
-  if (est.assumptions.length) {
-    y = sectionLabel(ctx, y, 'Key Assumptions');
-    for (const a of est.assumptions) {
-      y = ensureSpace(ctx, y, 18);
-      ctx.doc.setFillColor(...GREEN);
-      ctx.doc.circle(MARGIN + 3, y - 3, 1.4, 'F');
-      y = paragraph(ctx, y - 0, `   ${a}`, { size: 9, color: NAVY_SOFT });
+  // Bullet rendering: indent the wrapped paragraph and draw the marker
+  // aligned to the FIRST line of that paragraph (handles word-wrap correctly).
+  const bulletList = (
+    items: string[],
+    drawMarker: (yLine: number) => void,
+    indent: number
+  ): void => {
+    const size = 9;
+    const lineHeight = size * 1.35;
+    for (const item of items) {
+      const wrapped = ctx.doc.splitTextToSize(item, CONTENT_W - indent) as string[];
+      y = ensureSpace(ctx, y, lineHeight * wrapped.length + 2);
+      // Marker positioned on the first text baseline
+      drawMarker(y);
+      ctx.doc.setFont('helvetica', 'normal');
+      ctx.doc.setFontSize(size);
+      ctx.doc.setTextColor(...NAVY_SOFT);
+      for (const ln of wrapped) {
+        ctx.doc.text(ln, MARGIN + indent, y);
+        y += lineHeight;
+      }
       y += 2;
     }
-    y += 6;
+  };
+
+  if (est.assumptions.length) {
+    y = sectionLabel(ctx, y, 'Key Assumptions');
+    bulletList(
+      est.assumptions,
+      (yLine) => {
+        ctx.doc.setFillColor(...GREEN);
+        ctx.doc.circle(MARGIN + 4, yLine - 3, 1.6, 'F');
+      },
+      14
+    );
+    y += 4;
   }
 
   if (est.exclusions.length) {
     y = sectionLabel(ctx, y, 'Exclusions');
-    for (const e of est.exclusions) {
-      y = ensureSpace(ctx, y, 18);
-      ctx.doc.setDrawColor(...MUTED);
-      ctx.doc.setLineWidth(0.6);
-      ctx.doc.line(MARGIN + 1, y - 3, MARGIN + 5, y - 3);
-      y = paragraph(ctx, y, `   ${e}`, { size: 9, color: NAVY_SOFT });
-      y += 2;
-    }
-    y += 6;
+    bulletList(
+      est.exclusions,
+      (yLine) => {
+        ctx.doc.setDrawColor(...MUTED);
+        ctx.doc.setLineWidth(0.8);
+        ctx.doc.line(MARGIN + 2, yLine - 3, MARGIN + 8, yLine - 3);
+      },
+      14
+    );
+    y += 4;
   }
 
   if (est.system_note && est.system_note.trim()) {
