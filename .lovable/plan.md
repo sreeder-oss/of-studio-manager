@@ -4,6 +4,10 @@ This plan addresses all 93 issues from the audit (10 Critical, 26 High, 36 Mediu
 
 ---
 
+## Phase 3 — Estimates round-trip ✅ COMPLETE
+
+> Status: applied 2026-05-05. `useSaveEstimate` already returned the row from Phase 2; both `EstimateCreate` and `EstimatePreview` now navigate to `/estimates/:id` after save. New `/estimates/:id/edit` route reuses `EstimateCreate`, hydrating from the existing estimate (line items, tax_rate as %, valid_until, notes, project, contact). `EstimateDetail` got: status selector (Pending/Approved/Invoiced/Declined/Expired), Edit button, project + contact link cards, valid_until display, persisted notes display, and "Convert to Invoice" CTA on Approved estimates that creates an invoice with `estimate_id` FK + flips status to Invoiced. `useInvoices` rewritten to use generated `Database` row types and now `.select().single()` returns the inserted row + `.maybeSingle()` for fetch. Project picker in EstimateCreate filters by selected client. Number inputs gracefully handle empty strings (no zero-on-backspace). `recalcEstimate` callsites memoized. Editable `valid_until` on create/edit (default +30 days). Tax stored as fraction; UI converts to/from %.
+
 ## Phase 2 — AI estimate generation ✅ COMPLETE
 
 > Status: applied 2026-05-05. Added `emit_estimate` and `emit_invoice` tool definitions to `ai-chat` edge function. When the model calls these tools, the args are serialized as a fenced ```json block back to the client (so existing `parseEstimateFromText` / `parseInvoiceFromText` parsers pick them up unchanged). System prompt updated to prefer tool-calling over inline JSON for both estimates and invoices. Tightened `estimateSchema.ts` with non-negative / range constraints on numerics and exported sub-types (`LineItem`, `EstimateSection`, `BidRange`). Replaced hand-rolled `DbContact`/`DbProject`/`DbEstimate` types in `useContacts`/`useProjects`/`useEstimates` with generated `Database['public']['Tables'][...]['Row']` types so future schema changes propagate automatically. `useSaveEstimate` now `.select().single()` and returns the saved row. `useEstimate`/`useContact` switched to `.maybeSingle()`. Edge function deployed.
