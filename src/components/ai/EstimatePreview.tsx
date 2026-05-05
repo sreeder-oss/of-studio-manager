@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, Save, Trash2, Plus, FileDown } from 'lucide-react';
 import { recalcEstimate, type EstimateDoc } from '@/lib/estimateSchema';
 import { downloadEstimatePdf } from '@/lib/estimatePdf';
