@@ -92,6 +92,9 @@ export const useDeleteEstimate = () => {
       const { error } = await supabase.from('estimates').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimates'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['estimates'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+    },
   });
 };
