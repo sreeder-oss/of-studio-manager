@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, FolderKanban, FileText, FileSpreadsheet, Receipt, Layers, LogOut } from 'lucide-react';
+import { Users, FolderKanban, FileText, FileSpreadsheet, Receipt, Layers, LogOut } from 'lucide-react';
+import LuminaIcon from '@/components/icons/LuminaIcon';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import logoSrc from '@/assets/of-letters.svg';
