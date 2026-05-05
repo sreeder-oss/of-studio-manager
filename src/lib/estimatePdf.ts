@@ -395,7 +395,7 @@ function renderPricingTable(ctx: RenderCtx, startY: number): number {
   if (est.tax_amount > 0) {
     body.push([
       {
-        content: `Sales tax on materials (est. ${est.tax_rate}%)`,
+        content: `Sales tax on materials (est. ${est.tax_rate.toFixed(2)}%)`,
         colSpan: 4,
         styles: { halign: 'right', fontSize: 9, fontStyle: 'italic', textColor: MUTED },
       },
