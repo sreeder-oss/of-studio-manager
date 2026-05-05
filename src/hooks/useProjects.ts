@@ -56,6 +56,13 @@ export const useDeleteProject = () => {
       const { error } = await supabase.from('projects').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.invalidateQueries({ queryKey: ['estimates'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['receipts'] });
+      qc.invalidateQueries({ queryKey: ['photos'] });
+      qc.invalidateQueries({ queryKey: ['documents'] });
+    },
   });
 };
