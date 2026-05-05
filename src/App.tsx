@@ -18,21 +18,29 @@ import { AIContextProvider } from "@/contexts/AIContextProvider";
 import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "./components/AppLayout";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
-import Index from "./pages/Index";
-import Contacts from "./pages/Contacts";
-import ContactDetail from "./pages/ContactDetail";
-import Projects from "./pages/Projects";
-import ProjectDetail from "./pages/ProjectDetail";
-import Estimates from "./pages/Estimates";
-import EstimateDetail from "./pages/EstimateDetail";
-import EstimateCreate from "./pages/EstimateCreate";
-import Invoices from "./pages/Invoices";
-import InvoiceDetail from "./pages/InvoiceDetail";
-import Receipts from "./pages/Receipts";
-import Systems from "./pages/Systems";
-import TaxSummary from "./pages/TaxSummary";
-import Login from "./pages/Login";
-import NotFound from "./pages/NotFound";
+import { Suspense, lazy } from "react";
+
+const Index = lazy(() => import("./pages/Index"));
+const Contacts = lazy(() => import("./pages/Contacts"));
+const ContactDetail = lazy(() => import("./pages/ContactDetail"));
+const Projects = lazy(() => import("./pages/Projects"));
+const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
+const Estimates = lazy(() => import("./pages/Estimates"));
+const EstimateDetail = lazy(() => import("./pages/EstimateDetail"));
+const EstimateCreate = lazy(() => import("./pages/EstimateCreate"));
+const Invoices = lazy(() => import("./pages/Invoices"));
+const InvoiceDetail = lazy(() => import("./pages/InvoiceDetail"));
+const Receipts = lazy(() => import("./pages/Receipts"));
+const Systems = lazy(() => import("./pages/Systems"));
+const TaxSummary = lazy(() => import("./pages/TaxSummary"));
+const Login = lazy(() => import("./pages/Login"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+const RouteFallback = () => (
+  <div className="min-h-[40vh] flex items-center justify-center">
+    <div className="animate-pulse text-muted-foreground text-sm">Loading...</div>
+  </div>
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
