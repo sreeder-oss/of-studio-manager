@@ -80,4 +80,4 @@ const AppLayout: React.FC = () => {
   );
 };
 
-export default AppLayout;
+export default React.memo(AppLayout);
