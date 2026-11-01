@@ -8,10 +8,13 @@ import { PRIVACY_NOTICE } from '@/lib/legal';
 import { useSettings, renderTerms } from '@/hooks/useSettings';
 import { downloadInvoicePdf, coerceToInvoiceDoc } from '@/lib/invoicePdf';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 const InvoiceDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { settings } = useSettings();
   const { data: invoice, isLoading } = useInvoice(id!);
   const { data: contact } = useContact(invoice?.contact_id || '');
@@ -99,6 +102,19 @@ const InvoiceDetail: React.FC = () => {
   };
 
   const togglePaid = async () => {
+    if (!invoice.paid) {
+      // Mark as Paid: explicit four-column update only.
+      const { error } = await supabase.from('invoices').update({
+        status: 'paid',
+        paid: true,
+        paid_date: new Date().toISOString().split('T')[0],
+        amount_paid: +(Number(invoice.total || 0) - Number(invoice.deposit_applied || 0)).toFixed(2),
+      }).eq('id', invoice.id);
+      if (error) { toast.error('Failed to update invoice'); return; }
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Marked as paid');
+      return;
+    }
     try {
       await saveInvoice.mutateAsync({
         id: invoice.id,
