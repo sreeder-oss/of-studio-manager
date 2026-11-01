@@ -325,6 +325,8 @@ const EstimateCreate: React.FC = () => {
         </div>
       </div>
 
+      <CostBreakdown b={pricing} systemName={selectedSystem?.name} />
+
       <div>
         <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Notes</label>
         <textarea value={notes} onChange={e => setNotes(e.target.value)}
