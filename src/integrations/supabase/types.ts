@@ -99,6 +99,7 @@ export type Database = {
       }
       estimates: {
         Row: {
+          area_sf: number | null
           contact_id: string | null
           created_at: string | null
           direct_cost_subtotal: number
@@ -111,6 +112,7 @@ export type Database = {
           project_id: string | null
           status: string
           subtotal: number
+          system_id: string | null
           tax_amount: number
           tax_rate: number
           terms: string | null
@@ -120,6 +122,7 @@ export type Database = {
           valid_until: string | null
         }
         Insert: {
+          area_sf?: number | null
           contact_id?: string | null
           created_at?: string | null
           direct_cost_subtotal?: number
@@ -132,6 +135,7 @@ export type Database = {
           project_id?: string | null
           status?: string
           subtotal?: number
+          system_id?: string | null
           tax_amount?: number
           tax_rate?: number
           terms?: string | null
@@ -141,6 +145,7 @@ export type Database = {
           valid_until?: string | null
         }
         Update: {
+          area_sf?: number | null
           contact_id?: string | null
           created_at?: string | null
           direct_cost_subtotal?: number
@@ -153,6 +158,7 @@ export type Database = {
           project_id?: string | null
           status?: string
           subtotal?: number
+          system_id?: string | null
           tax_amount?: number
           tax_rate?: number
           terms?: string | null
@@ -174,6 +180,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_system_id_fkey"
+            columns: ["system_id"]
+            isOneToOne: false
+            referencedRelation: "systems"
             referencedColumns: ["id"]
           },
         ]
@@ -447,11 +460,15 @@ export type Database = {
           is_active: boolean | null
           labor_rate_per_sf: number | null
           manufacturer: string | null
+          min_charge: number | null
           name: string
+          prep_tier_notes: string | null
           substrate_notes: string | null
+          sundries_pct: number
           typical_equipment: string | null
           updated_at: string | null
           user_id: string
+          waste_factor: number
         }
         Insert: {
           application_notes?: string | null
@@ -465,11 +482,15 @@ export type Database = {
           is_active?: boolean | null
           labor_rate_per_sf?: number | null
           manufacturer?: string | null
+          min_charge?: number | null
           name: string
+          prep_tier_notes?: string | null
           substrate_notes?: string | null
+          sundries_pct?: number
           typical_equipment?: string | null
           updated_at?: string | null
           user_id?: string
+          waste_factor?: number
         }
         Update: {
           application_notes?: string | null
@@ -483,11 +504,15 @@ export type Database = {
           is_active?: boolean | null
           labor_rate_per_sf?: number | null
           manufacturer?: string | null
+          min_charge?: number | null
           name?: string
+          prep_tier_notes?: string | null
           substrate_notes?: string | null
+          sundries_pct?: number
           typical_equipment?: string | null
           updated_at?: string | null
           user_id?: string
+          waste_factor?: number
         }
         Relationships: []
       }
