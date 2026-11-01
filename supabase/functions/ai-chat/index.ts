@@ -31,18 +31,6 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
   }
 }
 
-// Whitelist of OpenRouter model slugs the client may request. Anything else
-// falls back to GPT-5 high-reasoning on Lovable AI.
-const OPENROUTER_MODELS = new Set([
-  "openai/gpt-5",
-  "openai/gpt-5-pro",
-  "anthropic/claude-opus-4.5",
-  "anthropic/claude-sonnet-4.5",
-  "anthropic/claude-sonnet-4-6",
-  "google/gemini-3-pro-preview",
-  "x-ai/grok-4",
-  "deepseek/deepseek-v3.2-exp",
-]);
 
 interface IncomingMessage {
   role: "user" | "assistant";
@@ -710,7 +698,7 @@ Deno.serve(async (req: Request) => {
               if (!lastIsNudge) {
                 conversation.push({
                   role: "user",
-                  content: "STOP researching. You have enough. Produce the final answer NOW using what you have — emit the estimate JSON block (or whatever the user asked for) with clear assumption notes for any unknowns. Do not call any more tools.",
+                  content: "STOP researching. You have enough. Produce the final answer NOW using what you have — call emit_scope for estimates (no prices), or produce whatever else the user asked for. Do not call any more tools.",
                   _wrapUpNudge: true,
                 } as any);
               }

@@ -105,11 +105,13 @@ export type Database = {
           direct_cost_subtotal: number
           id: string
           line_items: Json
+          model_used: string | null
           notes: string | null
           overhead_amount: number
           pre_tax_total: number
           profit_amount: number
           project_id: string | null
+          prompt: string | null
           status: string
           subtotal: number
           system_id: string | null
@@ -128,11 +130,13 @@ export type Database = {
           direct_cost_subtotal?: number
           id?: string
           line_items?: Json
+          model_used?: string | null
           notes?: string | null
           overhead_amount?: number
           pre_tax_total?: number
           profit_amount?: number
           project_id?: string | null
+          prompt?: string | null
           status?: string
           subtotal?: number
           system_id?: string | null
@@ -151,11 +155,13 @@ export type Database = {
           direct_cost_subtotal?: number
           id?: string
           line_items?: Json
+          model_used?: string | null
           notes?: string | null
           overhead_amount?: number
           pre_tax_total?: number
           profit_amount?: number
           project_id?: string | null
+          prompt?: string | null
           status?: string
           subtotal?: number
           system_id?: string | null
