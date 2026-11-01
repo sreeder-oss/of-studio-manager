@@ -10,7 +10,6 @@ import { ChatMessage } from './ChatMessage';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { EstimatePreview } from './EstimatePreview';
 import { InvoicePreview } from './InvoicePreview';
-import { ModelPicker } from './ModelPicker';
 import { parseEstimateFromText, type EstimateDoc } from '@/lib/estimateSchema';
 import { parseInvoiceFromText, type InvoiceDoc } from '@/lib/invoiceSchema';
 import { parseScopeFromText, type EstimateScope } from '@/lib/scopeSchema';
@@ -165,7 +164,7 @@ export const AIChat: React.FC = () => {
             >
               <Plus size={14} />
             </button>
-            <ModelPicker />
+            <span className="text-[9px] text-muted-foreground normal-case tracking-normal">Claude Sonnet 4.5</span>
           </div>
         </div>
         {historyOpen && <ChatHistoryPanel onClose={() => setHistoryOpen(false)} />}
