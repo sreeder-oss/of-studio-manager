@@ -89,7 +89,7 @@ export function depositCollected(lineItems: unknown): number {
 export const useConvertEstimateToInvoice = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (estimate: Database['public']['Tables']['estimates']['Row']): Promise<{ id: string; existed: boolean }> => {
+    mutationFn: async ({ estimate, depositPct }: { estimate: Database['public']['Tables']['estimates']['Row']; depositPct: number }): Promise<{ id: string; existed: boolean }> => {
       const { data: found, error: findErr } = await supabase.from('invoices')
         .select('id').eq('estimate_id', estimate.id).order('created_at').limit(1).maybeSingle();
       if (findErr) throw findErr;
@@ -108,7 +108,7 @@ export const useConvertEstimateToInvoice = () => {
         line_items: estimate.line_items,
         subtotal, tax_rate, tax_amount: tax, tax_applied: tax,
         total: Number(estimate.total || 0),
-        deposit_applied: depositCollected(estimate.line_items),
+        deposit_applied: depositCollected(estimate.line_items) || +(Number(estimate.total || 0) * depositPct).toFixed(2),
         invoice_number,
         status: 'draft',
         notes: estimate.notes, terms: estimate.terms,

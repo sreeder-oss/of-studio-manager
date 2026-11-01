@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Search, ChevronRight, FileSpreadsheet, CheckCircle, Clock, AlertCircle, Shield } from 'lucide-react';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useContacts } from '@/hooks/useContacts';
-import { LEGAL_TERMS, PRIVACY_NOTICE } from '@/lib/legal';
+import { PRIVACY_NOTICE } from '@/lib/legal';
+import { useSettings, renderTerms } from '@/hooks/useSettings';
 
 const Invoices: React.FC = () => {
   const navigate = useNavigate();
+  const { settings } = useSettings();
   const { data: invoices = [], isLoading } = useInvoices();
   const { data: contacts = [] } = useContacts();
   const [searchTerm, setSearchTerm] = useState('');
@@ -117,7 +119,7 @@ const Invoices: React.FC = () => {
           <Shield size={12} className="text-primary" />
           <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Terms & Privacy</span>
         </div>
-        <p className="text-[9px] text-muted-foreground leading-relaxed">{LEGAL_TERMS.paymentTerms}</p>
+        {renderTerms(settings).map((t, i) => <p key={i} className="text-[9px] text-muted-foreground leading-relaxed">{t}</p>)}
         <p className="text-[9px] text-muted-foreground/60 leading-relaxed italic">{PRIVACY_NOTICE}</p>
       </div>
     </div>

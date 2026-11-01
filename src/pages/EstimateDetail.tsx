@@ -6,7 +6,7 @@ import { useContact } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useConvertEstimateToInvoice } from '@/hooks/useInvoices';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
-import { LEGAL_TERMS } from '@/lib/legal';
+import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSettings';
 import { downloadEstimatePdf, coerceToEstimateDoc } from '@/lib/estimatePdf';
 import { toast } from 'sonner';
 
@@ -22,6 +22,7 @@ const EstimateDetail: React.FC = () => {
   const deleteEstimate = useDeleteEstimate();
   const saveEstimate = useSaveEstimate();
   const convertInvoice = useConvertEstimateToInvoice();
+  const { settings } = useSettings();
 
   useAIPageContext(estimate ? {
     kind: 'estimate', id: estimate.id,
@@ -46,7 +47,7 @@ const EstimateDetail: React.FC = () => {
   const taxRate = Number(estimate.tax_rate || 0);
   const tax = Number(estimate.tax_amount || subtotal * taxRate);
   const total = Number(estimate.total || 0);
-  const deposit = total * 0.5;
+  const deposit = depositAmount(total, settings.default_deposit_pct);
 
   const getStatusInfo = (status: string | null) => {
     if (status === 'Approved') return { classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
@@ -77,7 +78,7 @@ const EstimateDetail: React.FC = () => {
 
   const handleConvertToInvoice = async () => {
     try {
-      const res = await convertInvoice.mutateAsync(estimate);
+      const res = await convertInvoice.mutateAsync({ estimate, depositPct: settings.default_deposit_pct });
       toast.success(res.existed ? 'Opening existing invoice' : 'Invoice created');
       navigate(`/invoices/${res.id}`);
     } catch (e) {
@@ -97,7 +98,7 @@ const EstimateDetail: React.FC = () => {
     if (!doc.client_name && contact?.name) doc.client_name = contact.name;
     if (!doc.project_address && contact?.address) doc.project_address = contact.address;
     try {
-      downloadEstimatePdf(doc);
+      downloadEstimatePdf(doc, { depositPct: settings.default_deposit_pct, company: { name: settings.company_name.toUpperCase() } });
       toast.success('PDF downloaded');
     } catch (e) {
       console.error(e);
@@ -208,7 +209,7 @@ const EstimateDetail: React.FC = () => {
             <span className="text-base font-bold">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>50% Deposit</span>
+            <span>{pctLabel(settings.default_deposit_pct)}% Deposit (requested)</span>
             <span>${deposit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
@@ -226,7 +227,7 @@ const EstimateDetail: React.FC = () => {
           <Shield size={12} className="text-primary" />
           <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Terms & Conditions</span>
         </div>
-        {Object.entries(LEGAL_TERMS).map(([key, text]) => (
+        {renderTerms(settings).map((text, key) => (
           <p key={key} className="text-[9px] text-muted-foreground leading-relaxed">{text}</p>
         ))}
       </div>

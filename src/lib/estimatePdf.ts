@@ -56,6 +56,7 @@ interface RenderCtx {
   est: EstimateDoc;
   company: CompanyInfo;
   pageNum: number;
+  depositPct: number;
 }
 
 // Header band on every page
@@ -643,7 +644,7 @@ function renderBack(ctx: RenderCtx, y: number): number {
     : 'for 30 days from the date of issue';
   const acceptText =
     `This estimate is valid ${validText} and covers the scope described above. ` +
-    `Please sign below to authorize work. A 50% deposit is due upon contract signing; ` +
+    `Please sign below to authorize work. A ${+(ctx.depositPct * 100).toFixed(2)}% deposit is due upon contract signing; ` +
     `the balance is invoiced at project milestones.`;
   const acceptLines = ctx.doc.splitTextToSize(acceptText, CONTENT_W) as string[];
   const acceptH = acceptLines.length * (9 * 1.35) + 80; // text + signature lines
@@ -677,6 +678,8 @@ function renderBack(ctx: RenderCtx, y: number): number {
 export interface BuildEstimatePdfOptions {
   company?: Partial<CompanyInfo>;
   filename?: string;
+  /** Deposit as a fraction (0.5 = 50%). */
+  depositPct?: number;
 }
 
 /** Build the jsPDF document in memory (no I/O). */
@@ -685,7 +688,7 @@ export function buildEstimatePdf(raw: EstimateDoc, opts: BuildEstimatePdfOptions
   const est = recalcEstimate(raw);
 
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const ctx: RenderCtx = { doc, est, company, pageNum: 1 };
+  const ctx: RenderCtx = { doc, est, company, pageNum: 1, depositPct: opts.depositPct ?? 0.5 };
 
   drawHeader(ctx);
   drawFooter(ctx);
