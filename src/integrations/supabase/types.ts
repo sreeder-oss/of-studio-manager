@@ -180,17 +180,25 @@ export type Database = {
       }
       invoices: {
         Row: {
+          amount_paid: number
+          balance_due: number | null
           contact_id: string | null
           created_at: string | null
+          deposit_applied: number
           due_date: string | null
           estimate_id: string | null
           id: string
+          invoice_date: string
+          invoice_number: string | null
           line_items: Json
           notes: string | null
           paid: boolean
           paid_date: string | null
+          payment_terms: string | null
           project_id: string | null
+          status: string
           subtotal: number
+          tax_amount: number
           tax_applied: number
           tax_rate: number
           terms: string | null
@@ -199,17 +207,25 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          amount_paid?: number
+          balance_due?: number | null
           contact_id?: string | null
           created_at?: string | null
+          deposit_applied?: number
           due_date?: string | null
           estimate_id?: string | null
           id?: string
+          invoice_date?: string
+          invoice_number?: string | null
           line_items?: Json
           notes?: string | null
           paid?: boolean
           paid_date?: string | null
+          payment_terms?: string | null
           project_id?: string | null
+          status?: string
           subtotal?: number
+          tax_amount?: number
           tax_applied?: number
           tax_rate?: number
           terms?: string | null
@@ -218,17 +234,25 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          amount_paid?: number
+          balance_due?: number | null
           contact_id?: string | null
           created_at?: string | null
+          deposit_applied?: number
           due_date?: string | null
           estimate_id?: string | null
           id?: string
+          invoice_date?: string
+          invoice_number?: string | null
           line_items?: Json
           notes?: string | null
           paid?: boolean
           paid_date?: string | null
+          payment_terms?: string | null
           project_id?: string | null
+          status?: string
           subtotal?: number
+          tax_amount?: number
           tax_applied?: number
           tax_rate?: number
           terms?: string | null
