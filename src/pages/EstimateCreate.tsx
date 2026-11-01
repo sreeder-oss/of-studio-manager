@@ -7,6 +7,9 @@ const NEW_PROJECT = '__new_project__';
 import { useContacts } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useSaveEstimate, useEstimate } from '@/hooks/useEstimates';
+import { useSystems } from '@/hooks/useSystems';
+import { computeEstimatePricing } from '@/lib/pricing';
+import { CostBreakdown } from '@/components/CostBreakdown';
 import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSettings';
 import { toast } from 'sonner';
 
@@ -31,6 +34,9 @@ const EstimateCreate: React.FC = () => {
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [selectedContactId, setSelectedContactId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const { data: systems = [] } = useSystems();
+  const [systemId, setSystemId] = useState('');
+  const [areaSf, setAreaSf] = useState<number>(0);
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [lineItems, setLineItems] = useState<LineItem[]>([
@@ -56,6 +62,8 @@ const EstimateCreate: React.FC = () => {
     if (!isEdit || !existing) return;
     setSelectedContactId(existing.contact_id || '');
     setSelectedProjectId(existing.project_id || '');
+    setSystemId(existing.system_id || '');
+    setAreaSf(Number(existing.area_sf || 0));
     const items = Array.isArray(existing.line_items) ? (existing.line_items as any[]) : [];
     if (items.length) {
       setLineItems(items.map((li: any, i) => ({
@@ -99,8 +107,12 @@ const EstimateCreate: React.FC = () => {
 
   const subtotal = useMemo(() => lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [lineItems]);
   const taxFraction = (Number(taxRate) || 0) / 100;
-  const tax = subtotal * taxFraction;
-  const total = subtotal + tax;
+  const selectedSystem = systems.find(s => s.id === systemId) || null;
+  const pricing = useMemo(() => computeEstimatePricing({
+    system: selectedSystem as any, area_sf: areaSf, settings, extra_direct: subtotal, tax_rate: taxFraction,
+  }), [selectedSystem, areaSf, settings, subtotal, taxFraction]);
+  const tax = pricing.tax_amount;
+  const total = pricing.total;
   const deposit = depositAmount(total, settings.default_deposit_pct);
 
   const handleSave = async () => {
@@ -108,8 +120,12 @@ const EstimateCreate: React.FC = () => {
       toast.error('Select a client first');
       return;
     }
-    if (!lineItems.length || lineItems.every(li => !li.scope && !li.amount)) {
-      toast.error('Add at least one line item');
+    if (!systemId && (!lineItems.length || lineItems.every(li => !li.scope && !li.amount))) {
+      toast.error('Pick a system and area, or add a line item');
+      return;
+    }
+    if (systemId && !(areaSf > 0)) {
+      toast.error('Enter the square footage for this system');
       return;
     }
     try {
@@ -123,11 +139,16 @@ const EstimateCreate: React.FC = () => {
         contact_id: selectedContactId,
         project_id: selectedProjectId || null,
         line_items: items as any,
-        subtotal,
+        system_id: systemId || null,
+        area_sf: areaSf > 0 ? areaSf : null,
+        subtotal: pricing.pre_tax_total,
         tax_rate: taxFraction,
-        tax_amount: tax,
-        pre_tax_total: subtotal,
-        total,
+        direct_cost_subtotal: pricing.direct_cost_subtotal,
+        overhead_amount: pricing.overhead_amount,
+        profit_amount: pricing.profit_amount,
+        pre_tax_total: pricing.pre_tax_total,
+        tax_amount: pricing.tax_amount,
+        total: pricing.total,
         notes: notes || null,
         status: existing?.status ?? 'Pending',
         valid_until: validUntil || null,
@@ -153,7 +174,7 @@ const EstimateCreate: React.FC = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, selectedContactId, lineItems, taxRate, validUntil, notes, selectedProjectId, saveEstimate.isPending]);
+  }, [step, selectedContactId, lineItems, systemId, areaSf, pricing, taxRate, validUntil, notes, selectedProjectId, saveEstimate.isPending]);
 
   if (isEdit && loadingExisting) {
     return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
@@ -243,6 +264,26 @@ const EstimateCreate: React.FC = () => {
         </button>
       </div>
 
+      <div className="bg-card p-3 rounded-xl border border-border space-y-2">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">System & Area</p>
+        <div className="flex gap-2">
+          <select value={systemId} onChange={e => setSystemId(e.target.value)}
+            className="flex-1 bg-accent border border-border rounded-lg p-2 text-foreground text-xs outline-none">
+            <option value="">No system (line items only)</option>
+            {systems.filter(s => s.is_active !== false || s.id === systemId).map(s => (
+              <option key={s.id} value={s.id}>{s.name}{s.manufacturer ? ` — ${s.manufacturer}` : ''}</option>
+            ))}
+          </select>
+          <input type="number" inputMode="decimal" min="0" placeholder="SF"
+            className="w-24 bg-accent border border-border rounded-lg p-2 text-right text-foreground text-xs outline-none"
+            value={areaSf || ''} onChange={e => setAreaSf(e.target.value === '' ? 0 : parseFloat(e.target.value))} />
+        </div>
+        {selectedSystem && !(Number(selectedSystem.coverage_rate) > 0 && Number(selectedSystem.cost_per_unit) >= 0 && selectedSystem.labor_rate_per_sf != null) && (
+          <p className="text-[10px] text-warning">This system is missing coverage, cost per unit or labor rate — fill them in on the Systems page for accurate pricing.</p>
+        )}
+        <p className="text-[10px] text-muted-foreground">Line items below are added as extra direct costs before overhead and profit.</p>
+      </div>
+
       <div className="space-y-3">
         {lineItems.map((item, index) => (
           <div key={item.id} className="bg-card p-3 rounded-xl border border-border">
@@ -283,6 +324,8 @@ const EstimateCreate: React.FC = () => {
           <span>${deposit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
         </div>
       </div>
+
+      <CostBreakdown b={pricing} systemName={selectedSystem?.name} />
 
       <div>
         <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Notes</label>

@@ -17,6 +17,10 @@ export type DbSystem = {
   substrate_notes: string | null;
   application_notes: string | null;
   is_active: boolean | null;
+  waste_factor: number | null;
+  sundries_pct: number | null;
+  min_charge: number | null;
+  prep_tier_notes: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -44,6 +48,8 @@ export const useSaveSystem = () => {
         cost_per_unit: s.cost_per_unit, labor_rate_per_sf: s.labor_rate_per_sf,
         typical_equipment: s.typical_equipment, substrate_notes: s.substrate_notes,
         application_notes: s.application_notes, is_active: s.is_active ?? true,
+        waste_factor: s.waste_factor ?? 0.12, sundries_pct: s.sundries_pct ?? 0.05,
+        min_charge: s.min_charge ?? null, prep_tier_notes: s.prep_tier_notes ?? null,
       };
       if (s.id) {
         const { error } = await supabase.from('systems').update(payload).eq('id', s.id);
@@ -68,7 +74,7 @@ export const useDeleteSystem = () => {
   });
 };
 
-export const SEED_SYSTEMS: Array<Omit<DbSystem, 'id' | 'user_id' | 'created_at' | 'updated_at'>> = [
+export const SEED_SYSTEMS: Array<Omit<DbSystem, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'waste_factor' | 'sundries_pct' | 'min_charge' | 'prep_tier_notes'> & Partial<Pick<DbSystem, 'waste_factor' | 'sundries_pct' | 'min_charge' | 'prep_tier_notes'>>> = [
   {
     name: 'Biolime 3-Coat Exterior',
     manufacturer: 'Biolime',

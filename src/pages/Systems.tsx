@@ -109,6 +109,12 @@ const Systems: React.FC = () => {
                 <Field label="Cost/unit ($)" type="number" value={String(editing.cost_per_unit ?? '')} onChange={(v) => setEditing({ ...editing, cost_per_unit: Number(v) || 0 })} />
                 <Field label="Labor $/SF" type="number" value={String(editing.labor_rate_per_sf ?? '')} onChange={(v) => setEditing({ ...editing, labor_rate_per_sf: Number(v) || 0 })} />
               </div>
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="Waste %" type="number" value={editing.waste_factor != null ? String(+(Number(editing.waste_factor) * 100).toFixed(2)) : '12'} onChange={(v) => setEditing({ ...editing, waste_factor: (Number(v) || 0) / 100 })} />
+                <Field label="Sundries %" type="number" value={editing.sundries_pct != null ? String(+(Number(editing.sundries_pct) * 100).toFixed(2)) : '5'} onChange={(v) => setEditing({ ...editing, sundries_pct: (Number(v) || 0) / 100 })} />
+                <Field label="Min charge ($)" type="number" value={String(editing.min_charge ?? '')} onChange={(v) => setEditing({ ...editing, min_charge: v === '' ? null : Number(v) || 0 })} />
+              </div>
+              <Field label="Prep tier notes" value={editing.prep_tier_notes ?? ''} onChange={(v) => setEditing({ ...editing, prep_tier_notes: v })} multiline />
               <Field label="Typical equipment" value={editing.typical_equipment ?? ''} onChange={(v) => setEditing({ ...editing, typical_equipment: v })} />
               <Field label="Substrate notes" value={editing.substrate_notes ?? ''} onChange={(v) => setEditing({ ...editing, substrate_notes: v })} />
               <Field label="Application notes" value={editing.application_notes ?? ''} onChange={(v) => setEditing({ ...editing, application_notes: v })} multiline />
