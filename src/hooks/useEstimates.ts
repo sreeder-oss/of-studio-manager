@@ -60,6 +60,8 @@ export const useSaveEstimate = () => {
         tax_amount: estimate.tax_amount,
         system_id: estimate.system_id,
         area_sf: estimate.area_sf,
+        model_used: estimate.model_used,
+        prompt: estimate.prompt,
       };
 
       if (estimate.id) {

@@ -9,6 +9,8 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+/** Single pinned model for all assistant calls (deterministic scope extraction). */
+const PINNED_MODEL = "anthropic/claude-sonnet-4.5";
 const FC = "https://api.firecrawl.dev/v2";
 const MAX_TOOL_ROUNDS = 16;
 const RESEARCH_SOFT_CAP = 6; // after this many tool rounds, force the model to wrap up
@@ -29,18 +31,6 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
   }
 }
 
-// Whitelist of OpenRouter model slugs the client may request. Anything else
-// falls back to GPT-5 high-reasoning on Lovable AI.
-const OPENROUTER_MODELS = new Set([
-  "openai/gpt-5",
-  "openai/gpt-5-pro",
-  "anthropic/claude-opus-4.5",
-  "anthropic/claude-sonnet-4.5",
-  "anthropic/claude-sonnet-4-6",
-  "google/gemini-3-pro-preview",
-  "x-ai/grok-4",
-  "deepseek/deepseek-v3.2-exp",
-]);
 
 interface IncomingMessage {
   role: "user" | "assistant";
@@ -99,68 +89,35 @@ const tools = [
   {
     type: "function",
     function: {
-      name: "emit_estimate",
-      description: "Emit the FINAL structured estimate document. Call this exactly once when the estimate is complete. Do NOT also output a ```json fenced estimate block — calling this tool replaces it. After this call, write a 1–3 sentence prose summary for the user.",
+      name: "emit_scope",
+      description: "Emit the structured SCOPE of an estimate. You NEVER set prices — the app prices it from the Systems Library. Call exactly once when the user asks for an estimate. After this call, write a 1–2 sentence summary (no dollar amounts).",
+      strict: true,
       parameters: {
         type: "object",
+        additionalProperties: false,
+        required: ["title", "client_name", "project_address", "areas"],
         properties: {
-          title: { type: "string" },
-          client_name: { type: "string" },
-          project_address: { type: "string" },
-          substrate: { type: "string" },
-          system_name: { type: "string" },
-          area_sf: { type: "number" },
-          area_note: { type: "string" },
-          duration_estimate: { type: "string" },
-          sections: {
+          title: { type: "string", description: "Short project title, e.g. 'Primary Shower — Tadelakt'. Never the user's raw prompt." },
+          client_name: { type: "string", description: "Client name if stated, else empty string." },
+          project_address: { type: "string", description: "Address/city if stated, else empty string." },
+          areas: {
             type: "array",
+            minItems: 1,
             items: {
               type: "object",
+              additionalProperties: false,
+              required: ["name", "area_sf", "system_id", "substrate", "prep_tier", "notes"],
               properties: {
-                label: { type: "string" },
-                line_items: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      description: { type: "string" },
-                      sub_note: { type: "string" },
-                      qty: { type: "number" },
-                      unit: { type: "string" },
-                      unit_cost: { type: "number" },
-                      total: { type: "number" },
-                    },
-                    required: ["description", "qty", "unit", "unit_cost", "total"],
-                  },
-                },
-                subtotal: { type: "number" },
+                name: { type: "string", description: "Short area name, e.g. 'Entryway'. Max ~6 words." },
+                area_sf: { type: "number", minimum: 0 },
+                system_id: { type: ["string", "null"], description: "id of the matching Systems Library row (match by name/manufacturer). null if no match." },
+                substrate: { type: "string" },
+                prep_tier: { type: "string", enum: ["light", "standard", "heavy"] },
+                notes: { type: "string", description: "Concise client-facing scope note (inclusions/exclusions). Never paste the user's prompt; never include prices." },
               },
-              required: ["label", "line_items", "subtotal"],
             },
           },
-          direct_cost_subtotal: { type: "number" },
-          overhead_pct: { type: "number" },
-          overhead_amount: { type: "number" },
-          profit_pct: { type: "number" },
-          profit_amount: { type: "number" },
-          tax_rate: { type: "number", description: "Sales tax as a percent (e.g. 8.75 for 8.75%)" },
-          tax_amount: { type: "number" },
-          total: { type: "number" },
-          per_sf: { type: "number" },
-          bid_range: {
-            type: "object",
-            properties: {
-              low: { type: "number" }, low_note: { type: "string" },
-              mid: { type: "number" }, mid_note: { type: "string" },
-              high: { type: "number" }, high_note: { type: "string" },
-            },
-            required: ["low", "mid", "high"],
-          },
-          assumptions: { type: "array", items: { type: "string" } },
-          exclusions: { type: "array", items: { type: "string" } },
-          system_note: { type: "string" },
         },
-        required: ["title", "sections"],
       },
     },
   },
@@ -242,6 +199,31 @@ const tools = [
   },
 ];
 
+type ScopeArea = { name: string; area_sf: number; system_id: string | null; substrate: string; prep_tier: "light" | "standard" | "heavy"; notes: string };
+function validateScope(raw: any, validIds: Set<string>, nameToId: Map<string, string>):
+  { ok: true; scope: { title: string; client_name: string; project_address: string; areas: ScopeArea[] } } | { ok: false; error: string } {
+  if (!raw || typeof raw !== "object") return { ok: false, error: "payload must be an object" };
+  const allowedTop = new Set(["title", "client_name", "project_address", "areas"]);
+  for (const k of Object.keys(raw)) if (!allowedTop.has(k)) return { ok: false, error: `unexpected field ${k}` };
+  if (!Array.isArray(raw.areas) || raw.areas.length === 0) return { ok: false, error: "areas must be a non-empty array" };
+  const areas: ScopeArea[] = [];
+  for (const [i, a] of raw.areas.entries()) {
+    if (!a || typeof a !== "object") return { ok: false, error: `areas[${i}] must be an object` };
+    const allowed = new Set(["name", "area_sf", "system_id", "substrate", "prep_tier", "notes"]);
+    for (const k of Object.keys(a)) if (!allowed.has(k)) return { ok: false, error: `areas[${i}] unexpected field ${k}` };
+    if (typeof a.name !== "string" || !a.name.trim()) return { ok: false, error: `areas[${i}].name required` };
+    if (typeof a.area_sf !== "number" || !Number.isFinite(a.area_sf) || a.area_sf < 0) return { ok: false, error: `areas[${i}].area_sf must be a number >= 0` };
+    if (!["light", "standard", "heavy"].includes(a.prep_tier)) return { ok: false, error: `areas[${i}].prep_tier must be light|standard|heavy` };
+    let sid: string | null = typeof a.system_id === "string" ? a.system_id : null;
+    if (sid && !validIds.has(sid)) sid = nameToId.get(sid.toLowerCase()) ?? null; // model passed a name
+    areas.push({
+      name: a.name.trim().slice(0, 80), area_sf: a.area_sf, system_id: sid,
+      substrate: String(a.substrate ?? "").slice(0, 200), prep_tier: a.prep_tier, notes: String(a.notes ?? "").slice(0, 600),
+    });
+  }
+  return { ok: true, scope: { title: String(raw.title ?? "").slice(0, 120), client_name: String(raw.client_name ?? ""), project_address: String(raw.project_address ?? ""), areas } };
+}
+
 function buildSystemPrompt(systemsLibrary: unknown[], settings: { overhead_pct: number; profit_pct: number; tax_rate: number; estimate_valid_days: number; }, currentPage?: string, currentRecord?: unknown) {
   return `You are the AI assistant for OF Manager, the business management app for
 Organic Finishes LLC, a specialty plaster and paint company in Tulsa, Oklahoma.
@@ -251,26 +233,12 @@ CURRENT CONTEXT:
 - Page: ${currentPage || "unknown"}
 - Active record: ${currentRecord ? JSON.stringify(currentRecord) : "none"}
 
-COMPANY DEFAULTS:
-- Overhead: ${settings.overhead_pct}%
-- Profit: ${settings.profit_pct}%
-- Sales tax rate: ${settings.tax_rate}%
-- Estimate valid for: ${settings.estimate_valid_days} days
-
-SYSTEMS LIBRARY (use these specs when estimating; never invent costs/coverage):
+SYSTEMS LIBRARY (match areas to these rows by name/manufacturer and use their id):
 ${JSON.stringify(systemsLibrary, null, 2)}
 
-PRICING RULES — NON-NEGOTIABLE:
-TADELAKT PRICING FLOOR: Any estimate involving Tadelakt finish — regardless of which
-manufacturer's product is used (Earthhaus Tadelakt, New Age Artisans, traditional lime,
-or any other) — must always price the total project at a minimum of $55.00 per square
-foot and a maximum of $60.00 per square foot all-in. This is the market rate for
-authentic hand-burnished Tadelakt in the Tulsa Oklahoma market and reflects the true
-skilled labor cost of this application. If the line-item math produces a number below
-$55/SF, adjust the labor rates in Section C upward until the total lands in the
-$55–$60/SF range. Never go below $55/SF for Tadelakt under any circumstances regardless
-of scope size, substrate, or material brand. The mid-range bid should always target
-$57–$58/SF. Document the adjustment transparently in the assumptions section.
+PRICING — YOU DO NOT PRICE ESTIMATES. Never state, compute, or suggest dollar
+amounts, rates, or totals for an estimate. The app computes all pricing from the
+Systems Library and the owner's Settings (including the Tadelakt $55–$60/SF rule).
 
 WEB BROWSING — be a relentless researcher:
 You can call web_search and web_scrape to look up info on the open web.
@@ -387,101 +355,21 @@ RULES:
 
 
 
-ESTIMATING — Organic Finishes estimates are presentation-grade documents that
-clients sign and return with a deposit. They MUST match the depth of our
-reference estimates (Bauwerks Limewash on tilt panels; Biolime 3-coat on
-FasWall). When the user asks for an estimate, prefer calling the
-**emit_estimate** tool with the structured payload below (more reliable than
-fenced JSON). The schema fields match this shape exactly:
-reference estimates (Bauwerks Limewash on tilt panels; Biolime 3-coat on
-FasWall). When the user asks for an estimate, output a SINGLE \`\`\`json fenced
-block following EXACTLY this schema (separate from action blocks):
-
-\`\`\`json
-{
-  "title": "Bauwerks Limewash on Exterior Tilt Panels — LDF Project",
-  "client_name": "string", "project_address": "string, City, ST",
-  "substrate": "specific surface (e.g., 'New tilt concrete panels (TP-3)')",
-  "system_name": "exact product + coat count (e.g., 'Bauwerks limewash, 2-coat system')",
-  "area_sf": 0,
-  "area_note": "2–4 sentence TAKEOFF BASIS: how the SF was derived (which elevations / drawings used, scale, wall heights from callouts, bay spacing, opening deduction %, what's in/out of scope). This is the 'show your work' paragraph the client reads to trust the number.",
-  "duration_estimate": "e.g., '5–6 weeks (weather dependent)' or '7 working days'",
-  "sections": [
-    { "label": "A — Surface Preparation", "line_items": [
-      {"description":"Tilt panel surface inspection & prep","sub_note":"Wipe down, remove form release residue, check for laitance — critical step on new tilt concrete before any mineral paint application","qty":3360,"unit":"SF","unit_cost":0.35,"total":1176}
-    ], "subtotal": 0 },
-    { "label": "B — Materials", "line_items": [], "subtotal": 0 },
-    { "label": "C — Labor", "line_items": [], "subtotal": 0 },
-    { "label": "D — Equipment & Site", "line_items": [], "subtotal": 0 },
-    { "label": "E — Overhead & Profit", "line_items": [
-      {"description":"Overhead — insurance, fuel, vehicle, admin, warranty reserve","sub_note":"~${settings.overhead_pct}% of direct costs","qty":1,"unit":"lot","unit_cost":0,"total":0},
-      {"description":"Profit margin","sub_note":"Specialty applicator premium — ~${settings.profit_pct}% of direct costs","qty":1,"unit":"lot","unit_cost":0,"total":0}
-    ], "subtotal": 0 }
-  ],
-  "direct_cost_subtotal": 0,
-  "overhead_pct": ${settings.overhead_pct}, "overhead_amount": 0,
-  "profit_pct": ${settings.profit_pct}, "profit_amount": 0,
-  "tax_rate": ${settings.tax_rate}, "tax_amount": 0,
-  "total": 0, "per_sf": 0,
-  "bid_range": {
-    "low": 0,  "low_note":  "Lean crew / owner supplies some materials / no finish sealer",
-    "mid": 0,  "mid_note":  "As estimated above — recommended scope",
-    "high": 0, "high_note": "Premium finish, integrally pigmented coat, extended cure monitoring"
-  },
-  "assumptions": ["8–12 specific bullets"],
-  "exclusions": ["4–8 specific bullets"],
-  "system_note": "2–4 sentence prose paragraph educating the client on WHY this material/system suits this substrate (chemistry, vapor permeability, durability, climate fit). Written as confident expert prose."
-}
-\`\`\`
-
-QUALITY BAR — every estimate must hit ALL of these or it is not done:
-
-1. **Every line item has a sub_note** — one sentence of plain-English rationale
-   explaining WHY this line exists, what's included, or why the qty/cost is what
-   it is (e.g., "Limewash applied by brush and sponge for authentic mineral
-   texture; roller for field, brush for cut-in and panel edges"). No empty notes.
-
-2. **area_note is the takeoff paragraph** — not a single word. It cites which
-   drawings/elevations were used, how heights and bay lengths were measured,
-   what % was deducted for openings, and what is/isn't in scope. If you
-   estimated rather than measured, say so and offer to revise once dimensions
-   are confirmed.
-
-3. **Sections A–D are fully populated.** Typical content:
-   - **A Prep**: surface inspection, cleaning/patching, masking, primer/bonding labor
-   - **B Materials**: each product line w/ coverage rate in sub_note (gal or bag count w/ SF/unit), aggregate, mesh, beads, primer material, brushes/buckets allowance
-   - **C Labor**: lead applicator + tender, broken out by days × day-rate; sub_note explains technique demand (wet-edge, multi-coat cure windows, etc.)
-   - **D Equipment**: lift rental + delivery, mortar mixer, water/utility, masking lot, dumpster if relevant
-   - **E Overhead & Profit**: as scaffolded above
-
-4. **assumptions** must include: substrate condition, cure window for new
-   substrates, weather constraints (temp/wind/rain limits for lime), sales tax
-   handling, color/finish caveats, schedule contingency, recommendation of test
-   panel on Day 1, and validity period.
-
-5. **exclusions** must explicitly call out: structural repair, flashing/window
-   work, painting beyond included sealer, interior surfaces, debris hauling
-   beyond normal waste, change-order policy for unforeseen substrate conditions.
-
-6. **system_note** is a real paragraph, not a tagline. Reference vapor
-   permeability, mineral bond, UV stability, breathability, low maintenance,
-   climate suitability — whatever applies to the product chosen.
-
-7. **bid_range** ALWAYS present. mid = estimate total. low ≈ 0.85×mid (with
-   low_note explaining what got cut). high ≈ 1.18×mid (with high_note explaining
-   the premium).
-
-8. **Numbers must reconcile.** Each line total = qty × unit_cost. Each section
-   subtotal = sum of its lines. direct_cost_subtotal = A+B+C+D. overhead =
-   direct × overhead_pct. profit = (direct + overhead) × profit_pct.
-   tax = (direct + overhead + profit) × tax_rate. total = pre-tax + tax.
-   per_sf = total / area_sf. The client app re-runs these calcs but yours
-   should already match.
-
-If you don't have enough info to hit the quality bar (e.g., no drawings, no
-substrate confirmation), ASK ONE focused clarifying question first instead of
-guessing. Better to spend one turn confirming wall heights than to ship a
-half-baked estimate.
+ESTIMATING — When the user asks for an estimate, your ONLY job is to extract
+structured scope and call the **emit_scope** tool exactly once:
+- Split the work into areas (e.g. "Entryway 450 SF", "Entertainment room 450 SF").
+  If the user gives one total, use one area.
+- area_sf = net square footage the user stated. Never invent square footage — if
+  it is missing, ask ONE short question instead of calling emit_scope.
+- system_id = the id of the Systems Library row matching the finish the user named
+  (match by name/manufacturer, case-insensitive). If nothing matches, use null and
+  say which system is missing so the owner can add it on the Systems page.
+- prep_tier: light (sound, clean substrate), standard (typical patch/prime), heavy
+  (significant repair, waterproofing, or board prep).
+- name and notes are short, professional, client-facing text. NEVER copy the user's
+  message into any field.
+- Do NOT output prices, line-item costs, overhead, profit, tax or totals — not in
+  the tool call and not in your prose. Do not output a \`\`\`json estimate block.
 
 INVOICING — Organic Finishes invoices are presentation-grade billing
 documents the client pays from. They share the visual language of our
@@ -742,20 +630,27 @@ Deno.serve(async (req: Request) => {
       Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
     );
 
-    // Provider routing. Default = Lovable AI / GPT-5 with high reasoning.
-    // If client passed an OpenRouter-whitelisted slug, use OpenRouter instead.
+    // Pinned model: always Claude Sonnet 4.5 via OpenRouter, temperature 0. Client model choice is ignored.
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
-    const requestedModel = body.model?.trim() || "";
-    const useOpenRouter = !!requestedModel && OPENROUTER_MODELS.has(requestedModel) && !!OPENROUTER_API_KEY;
-    const model = useOpenRouter
-      ? requestedModel
-      : (requestedModel.startsWith("google/") || requestedModel.startsWith("openai/") ? requestedModel : "openai/gpt-5");
-
-    const upstreamUrl = useOpenRouter ? OPENROUTER_URL : GATEWAY_URL;
-    const upstreamKey = useOpenRouter ? OPENROUTER_API_KEY : LOVABLE_API_KEY;
-    const upstreamExtraHeaders: Record<string, string> = useOpenRouter
-      ? { "HTTP-Referer": "https://of-manager.lovable.app", "X-Title": "OF Manager" }
-      : {};
+    if (!OPENROUTER_API_KEY) {
+      return new Response(JSON.stringify({ error: "OPENROUTER_API_KEY is not configured" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const useOpenRouter = true;
+    const model = PINNED_MODEL;
+    const upstreamUrl = OPENROUTER_URL;
+    const upstreamKey = OPENROUTER_API_KEY;
+    const upstreamExtraHeaders: Record<string, string> = { "HTTP-Referer": "https://of-manager.lovable.app", "X-Title": "OF Manager" };
+    const lastUserMsg = [...body.messages].reverse().find((m) => m.role === "user");
+    const userPromptText = !lastUserMsg ? "" : typeof lastUserMsg.content === "string"
+      ? lastUserMsg.content
+      : lastUserMsg.content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("\n");
+    const systemIds = new Map<string, string>(); // lowercased name -> id
+    const validSystemIds = new Set<string>();
+    for (const sy of systemsLibrary as Array<{ id?: string; name?: string }>) {
+      if (sy?.id) { validSystemIds.add(sy.id); if (sy.name) systemIds.set(sy.name.toLowerCase(), sy.id); }
+    }
 
     console.log("ai-chat routing", { provider: useOpenRouter ? "openrouter" : "lovable", model });
 
@@ -803,7 +698,7 @@ Deno.serve(async (req: Request) => {
               if (!lastIsNudge) {
                 conversation.push({
                   role: "user",
-                  content: "STOP researching. You have enough. Produce the final answer NOW using what you have — emit the estimate JSON block (or whatever the user asked for) with clear assumption notes for any unknowns. Do not call any more tools.",
+                  content: "STOP researching. You have enough. Produce the final answer NOW using what you have — call emit_scope for estimates (no prices), or produce whatever else the user asked for. Do not call any more tools.",
                   _wrapUpNudge: true,
                 } as any);
               }
@@ -812,13 +707,11 @@ Deno.serve(async (req: Request) => {
               model,
               messages: conversation.map(({ _wrapUpNudge, ...m }: any) => m),
               stream: false,
+              temperature: 0,
             };
             if (!forceWrapUp) {
               reqBody.tools = tools;
               reqBody.tool_choice = "auto";
-            }
-            if (model.startsWith("openai/gpt-5")) {
-              reqBody.reasoning = { effort: "high" };
             }
 
             console.log("ai-chat round", round, "scrapes_used", scrapesUsed);
@@ -918,7 +811,16 @@ Deno.serve(async (req: Request) => {
                     send({ choices: [{ delta: { content: `_⚠️ NAA portal login failed (${(result as any).reason ?? "auth error"}). Continuing with public sources only._\n` } }] });
                   }
                 }
-              } else if (fname === "emit_estimate" || fname === "emit_invoice") {
+              } else if (fname === "emit_scope") {
+                const v = validateScope(args, validSystemIds, systemIds);
+                if (!v.ok) {
+                  result = { error: `Invalid scope: ${v.error}. Call emit_scope again with a corrected payload.` };
+                } else {
+                  const payload = { kind: "estimate_scope", model_used: model, prompt: userPromptText.slice(0, 8000), ...v.scope };
+                  send({ choices: [{ delta: { content: "```json\n" + JSON.stringify(payload, null, 2) + "\n```\n" } }] });
+                  result = { ok: true, note: "Scope accepted. The app will price it. Do not state any prices." };
+                }
+              } else if (fname === "emit_invoice") {
                 // Structured emit: serialize to the same fenced JSON the client parser expects,
                 // then ack the tool call so the model can append its prose summary.
                 try {
