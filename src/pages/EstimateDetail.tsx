@@ -5,6 +5,8 @@ import { useEstimate, useDeleteEstimate, useSaveEstimate } from '@/hooks/useEsti
 import { useContact } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useConvertEstimateToInvoice } from '@/hooks/useInvoices';
+import { useSystems } from '@/hooks/useSystems';
+import { CostBreakdown } from '@/components/CostBreakdown';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSettings';
 import { downloadEstimatePdf, coerceToEstimateDoc } from '@/lib/estimatePdf';
@@ -23,6 +25,7 @@ const EstimateDetail: React.FC = () => {
   const saveEstimate = useSaveEstimate();
   const convertInvoice = useConvertEstimateToInvoice();
   const { settings } = useSettings();
+  const { data: systems = [] } = useSystems();
 
   useAIPageContext(estimate ? {
     kind: 'estimate', id: estimate.id,
@@ -221,6 +224,20 @@ const EstimateDetail: React.FC = () => {
           </div>
         )}
       </div>
+
+      {Number(estimate.direct_cost_subtotal) > 0 && (
+        <CostBreakdown systemName={systems.find(s => s.id === estimate.system_id)?.name}
+          b={{
+            area_sf: estimate.area_sf != null ? Number(estimate.area_sf) : undefined,
+            direct_cost_subtotal: Number(estimate.direct_cost_subtotal),
+            overhead_amount: Number(estimate.overhead_amount),
+            profit_amount: Number(estimate.profit_amount),
+            pre_tax_total: Number(estimate.pre_tax_total),
+            tax_rate: Number(estimate.tax_rate), tax_amount: Number(estimate.tax_amount),
+            total: Number(estimate.total),
+            per_sf: Number(estimate.area_sf) > 0 ? +(Number(estimate.total) / Number(estimate.area_sf)).toFixed(2) : 0,
+          }} />
+      )}
 
       <div className="bg-card/50 border border-border rounded-xl p-4 space-y-2">
         <div className="flex items-center gap-2 mb-2">

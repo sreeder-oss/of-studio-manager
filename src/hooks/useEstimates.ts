@@ -58,6 +58,8 @@ export const useSaveEstimate = () => {
         profit_amount: estimate.profit_amount,
         pre_tax_total: estimate.pre_tax_total,
         tax_amount: estimate.tax_amount,
+        system_id: estimate.system_id,
+        area_sf: estimate.area_sf,
       };
 
       if (estimate.id) {
