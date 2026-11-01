@@ -129,7 +129,7 @@ const EstimateCreate: React.FC = () => {
       return;
     }
     try {
-      const items = lineItems.map(li => ({
+      const items = lineItems.filter(li => (Number(li.amount) || 0) !== 0).map(li => ({
         id: li.id,
         description: `${li.scope || ''}${li.materials ? `\nMaterials: ${li.materials}` : ''}`,
         scope: li.scope, materials: li.materials, amount: Number(li.amount) || 0,

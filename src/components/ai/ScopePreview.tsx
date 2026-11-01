@@ -167,7 +167,7 @@ export const ScopePreview: React.FC<{ initial: EstimateScope; onClose: () => voi
           <div className="flex justify-between text-muted-foreground"><span>{pctLabel(settings.default_deposit_pct)}% Deposit</span><span>{money(depositAmount(pricing.total, settings.default_deposit_pct))}</span></div>
         </div>
 
-        <CostBreakdown b={{ ...pricing, min_charge_adjustment: pricing.min_charge_adjustment + pricing.rule_adjustment }} />
+        <CostBreakdown b={pricing} ruleAdjustment={pricing.rule_adjustment} />
         <p className="text-[9px] text-muted-foreground">Scope read by {initial.model_used}. Prices calculated by the app from your Systems and Settings.</p>
       </div>
       <div className="p-3 border-t border-border">

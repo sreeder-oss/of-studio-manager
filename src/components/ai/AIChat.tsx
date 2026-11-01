@@ -13,6 +13,8 @@ import { InvoicePreview } from './InvoicePreview';
 import { ModelPicker } from './ModelPicker';
 import { parseEstimateFromText, type EstimateDoc } from '@/lib/estimateSchema';
 import { parseInvoiceFromText, type InvoiceDoc } from '@/lib/invoiceSchema';
+import { parseScopeFromText, type EstimateScope } from '@/lib/scopeSchema';
+import { ScopePreview } from './ScopePreview';
 import type { ChatAttachment } from '@/contexts/AIAssistantContext';
 
 const HANDS_FREE_KEY = 'of-ai-handsfree';
@@ -128,6 +130,8 @@ export const AIChat: React.FC = () => {
   };
 
   const openEstimate = (text: string) => {
+    const sc = parseScopeFromText(text);
+    if (sc) { setPreviewInvoice(null); setPreviewEstimate(null); setPreviewScope(sc); return; }
     const e = parseEstimateFromText(text);
     if (e) setPreviewEstimate(e);
   };
@@ -140,7 +144,7 @@ export const AIChat: React.FC = () => {
   return (
     <div className="flex h-full">
       {/* Chat column */}
-      <div className={`relative flex flex-col h-full ${(previewEstimate || previewInvoice) ? 'hidden md:flex md:w-1/2 md:border-r md:border-border' : 'w-full'}`}>
+      <div className={`relative flex flex-col h-full ${(previewEstimate || previewInvoice || previewScope) ? 'hidden md:flex md:w-1/2 md:border-r md:border-border' : 'w-full'}`}>
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border">
           <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             <Sparkles size={11} className="text-primary" /> Assistant
@@ -258,12 +262,17 @@ export const AIChat: React.FC = () => {
       </div>
 
       {/* Preview pane (estimate or invoice) */}
-      {previewEstimate && (
+      {previewScope && (
+        <div className="flex-1 md:w-1/2">
+          <ScopePreview key={JSON.stringify(previewScope).length} initial={previewScope} onClose={() => setPreviewScope(null)} />
+        </div>
+      )}
+      {previewEstimate && !previewScope && (
         <div className="flex-1 md:w-1/2">
           <EstimatePreview initial={previewEstimate} onClose={() => setPreviewEstimate(null)} />
         </div>
       )}
-      {previewInvoice && !previewEstimate && (
+      {previewInvoice && !previewEstimate && !previewScope && (
         <div className="flex-1 md:w-1/2">
           <InvoicePreview initial={previewInvoice} onClose={() => setPreviewInvoice(null)} />
         </div>

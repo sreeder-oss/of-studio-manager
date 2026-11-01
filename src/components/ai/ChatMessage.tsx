@@ -4,6 +4,7 @@ import { Sparkles, FileText } from 'lucide-react';
 import type { ChatMessage as Msg } from '@/contexts/AIAssistantContext';
 import { parseEstimateFromText } from '@/lib/estimateSchema';
 import { parseInvoiceFromText } from '@/lib/invoiceSchema';
+import { parseScopeFromText } from '@/lib/scopeSchema';
 import { parseActionsFromText, stripActionBlocks } from '@/lib/actionSchema';
 import { ActionCard } from './ActionCard';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
@@ -17,7 +18,7 @@ interface Props {
 export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenInvoice }) => {
   const { markActionApplied } = useAIAssistant();
   const isUser = message.role === 'user';
-  const hasEstimate = !isUser && !!parseEstimateFromText(message.content);
+  const hasEstimate = !isUser && (!!parseScopeFromText(message.content) || !!parseEstimateFromText(message.content));
   const hasInvoice = !isUser && !hasEstimate && !!parseInvoiceFromText(message.content);
   const actions = isUser ? [] : parseActionsFromText(message.content);
 
