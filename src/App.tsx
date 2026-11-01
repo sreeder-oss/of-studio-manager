@@ -21,6 +21,7 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { Suspense, lazy } from "react";
 
 const Index = lazy(() => import("./pages/Index"));
+const Settings = lazy(() => import("./pages/Settings"));
 const Contacts = lazy(() => import("./pages/Contacts"));
 const ContactDetail = lazy(() => import("./pages/ContactDetail"));
 const Projects = lazy(() => import("./pages/Projects"));
@@ -124,6 +125,7 @@ const App = () => (
                     <Route path="/invoices/:id" element={<InvoiceDetail />} />
                     <Route path="/receipts" element={<Receipts />} />
                     <Route path="/systems" element={<Systems />} />
+                    <Route path="/settings" element={<Settings />} />
                     <Route path="/reports/tax" element={<TaxSummary />} />
                   </Route>
                 </Route>
