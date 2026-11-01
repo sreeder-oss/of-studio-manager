@@ -7,6 +7,7 @@ import { useContacts, useSaveContact } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useSaveEstimate } from '@/hooks/useEstimates';
 import { toast } from 'sonner';
+import { useSettings } from '@/hooks/useSettings';
 
 interface Props {
   initial: EstimateDoc;
@@ -24,6 +25,7 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
   const { data: projects = [] } = useProjects();
   const saveEstimate = useSaveEstimate();
   const saveContact = useSaveContact();
+  const { settings } = useSettings();
 
   // Tiered fuzzy match: exact CI → normalized → token-subset (only auto-select on unique match)
   const matchedContactId = useMemo(() => {
@@ -295,7 +297,7 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
         <button
           onClick={() => {
             try {
-              downloadEstimatePdf(doc);
+              downloadEstimatePdf(doc, { depositPct: settings.default_deposit_pct, company: { name: settings.company_name.toUpperCase() } });
               toast.success('PDF downloaded');
             } catch (e) {
               console.error(e);

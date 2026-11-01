@@ -512,6 +512,63 @@ export type Database = {
         }
         Relationships: []
       }
+      user_settings: {
+        Row: {
+          company_address: string | null
+          company_name: string
+          created_at: string
+          default_deposit_pct: number
+          default_overhead_pct: number
+          default_profit_pct: number
+          default_tax_rate: number
+          default_waste_factor: number
+          id: string
+          license_number: string | null
+          minimum_charge: number
+          mobilization_fee: number
+          sundries_pct: number
+          terms_text: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_address?: string | null
+          company_name?: string
+          created_at?: string
+          default_deposit_pct?: number
+          default_overhead_pct?: number
+          default_profit_pct?: number
+          default_tax_rate?: number
+          default_waste_factor?: number
+          id?: string
+          license_number?: string | null
+          minimum_charge?: number
+          mobilization_fee?: number
+          sundries_pct?: number
+          terms_text?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          company_address?: string | null
+          company_name?: string
+          created_at?: string
+          default_deposit_pct?: number
+          default_overhead_pct?: number
+          default_profit_pct?: number
+          default_tax_rate?: number
+          default_waste_factor?: number
+          id?: string
+          license_number?: string | null
+          minimum_charge?: number
+          mobilization_fee?: number
+          sundries_pct?: number
+          terms_text?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

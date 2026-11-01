@@ -4,13 +4,15 @@ import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle, FileDown, Trash2 
 import { useInvoice, useSaveInvoice, useDeleteInvoice, useRecordInvoicePayment } from '@/hooks/useInvoices';
 import { useContact } from '@/hooks/useContacts';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
-import { LEGAL_TERMS, PRIVACY_NOTICE } from '@/lib/legal';
+import { PRIVACY_NOTICE } from '@/lib/legal';
+import { useSettings, renderTerms } from '@/hooks/useSettings';
 import { downloadInvoicePdf, coerceToInvoiceDoc } from '@/lib/invoicePdf';
 import { toast } from 'sonner';
 
 const InvoiceDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { settings } = useSettings();
   const { data: invoice, isLoading } = useInvoice(id!);
   const { data: contact } = useContact(invoice?.contact_id || '');
   const saveInvoice = useSaveInvoice();
@@ -215,7 +217,7 @@ const InvoiceDetail: React.FC = () => {
           <Shield size={12} className="text-primary" />
           <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Terms & Privacy</span>
         </div>
-        <p className="text-[9px] text-muted-foreground leading-relaxed">{LEGAL_TERMS.paymentTerms}</p>
+        {renderTerms(settings).map((t, i) => <p key={i} className="text-[9px] text-muted-foreground leading-relaxed">{t}</p>)}
         <p className="text-[9px] text-muted-foreground/60 leading-relaxed italic">{PRIVACY_NOTICE}</p>
       </div>
     </div>
