@@ -34,6 +34,7 @@ export const AIChat: React.FC = () => {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [previewEstimate, setPreviewEstimate] = useState<EstimateDoc | null>(null);
+  const [previewScope, setPreviewScope] = useState<EstimateScope | null>(null);
   const [previewInvoice, setPreviewInvoice] = useState<InvoiceDoc | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [handsFree, setHandsFree] = useState<boolean>(() => {
