@@ -25,6 +25,7 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
   const { data: projects = [] } = useProjects();
   const saveEstimate = useSaveEstimate();
   const saveContact = useSaveContact();
+  const { settings } = useSettings();
 
   // Tiered fuzzy match: exact CI → normalized → token-subset (only auto-select on unique match)
   const matchedContactId = useMemo(() => {
