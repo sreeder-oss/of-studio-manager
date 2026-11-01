@@ -17,15 +17,19 @@ const Invoices: React.FC = () => {
   });
 
   const totals = invoices.reduce((acc, inv) => {
-    const total = Number(inv.total || 0);
-    if (inv.paid) acc.paid += total;
-    else { acc.outstanding += total; acc.unpaidCount += 1; }
+    if (inv.status === 'paid') acc.paid += Number(inv.total || 0);
+    else {
+      acc.paid += Number(inv.amount_paid || 0) + Number(inv.deposit_applied || 0);
+      acc.outstanding += Number(inv.balance_due ?? inv.total ?? 0);
+      acc.unpaidCount += 1;
+    }
     return acc;
   }, { paid: 0, outstanding: 0, unpaidCount: 0 });
 
   const getStatusInfo = (inv: typeof invoices[0]) => {
-    const isOverdue = !inv.paid && inv.due_date && new Date(inv.due_date) < new Date();
-    if (inv.paid) return { label: 'Paid', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
+    const isOverdue = inv.status === 'overdue' || (inv.status !== 'paid' && inv.due_date && new Date(inv.due_date) < new Date());
+    if (inv.status === 'paid') return { label: 'Paid', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
+    if (inv.status === 'partial' && !isOverdue) return { label: 'Partial', classes: 'bg-warning/10 text-warning border-warning/20', icon: <Clock size={10} className="mr-1" /> };
     if (isOverdue) return { label: 'Overdue', classes: 'bg-destructive/10 text-destructive border-destructive/20', icon: <AlertCircle size={10} className="mr-1" /> };
     return { label: 'Pending', classes: 'bg-warning/10 text-warning border-warning/20', icon: <Clock size={10} className="mr-1" /> };
   };

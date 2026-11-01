@@ -69,6 +69,37 @@ export const useSaveInvoice = () => {
   });
 };
 
+/** Pure helper: new amount_paid + status after recording a payment. */
+export function applyPayment(
+  inv: { total: number; amount_paid: number; deposit_applied: number },
+  amount: number,
+) {
+  const amount_paid = +(Number(inv.amount_paid || 0) + amount).toFixed(2);
+  const balance = +(Number(inv.total || 0) - amount_paid - Number(inv.deposit_applied || 0)).toFixed(2);
+  const status = balance <= 0 ? 'paid' : amount_paid > 0 ? 'partial' : 'sent';
+  return { amount_paid, balance, status };
+}
+
+export const useRecordInvoicePayment = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ invoice, amount }: { invoice: DbInvoice; amount: number }) => {
+      if (!(amount > 0)) throw new Error('Payment amount must be greater than 0');
+      const { amount_paid, status } = applyPayment(
+        { total: Number(invoice.total), amount_paid: Number(invoice.amount_paid), deposit_applied: Number(invoice.deposit_applied) },
+        amount,
+      );
+      const paid = status === 'paid';
+      const { data, error } = await supabase.from('invoices')
+        .update({ amount_paid, status, paid, paid_date: paid ? new Date().toISOString().split('T')[0] : null })
+        .eq('id', invoice.id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
+  });
+};
+
 export const useDeleteInvoice = () => {
   const qc = useQueryClient();
   return useMutation({
