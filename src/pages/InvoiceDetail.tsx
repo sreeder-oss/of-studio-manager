@@ -115,13 +115,14 @@ const InvoiceDetail: React.FC = () => {
       toast.success('Marked as paid');
       return;
     }
-    // Mark as Unpaid: explicit update, keyed by invoice id, writing only
-    // status / paid / paid_date. amount_paid is deliberately NOT in the
-    // payload so recorded payments are never erased.
+    // Mark as Unpaid: explicit four-column update keyed by invoice id.
+    // amount_paid is written back as the stored value so recorded payments
+    // are never erased. No form or component state is spread in.
     const { error } = await supabase.from('invoices').update({
       status: 'draft',
       paid: false,
       paid_date: null,
+      amount_paid: invoice.amount_paid,
     }).eq('id', invoice.id);
     if (error) { toast.error('Failed to update invoice'); return; }
     queryClient.invalidateQueries({ queryKey: ['invoices'] });
