@@ -1,7 +1,7 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle, FileDown, Trash2 } from 'lucide-react';
-import { useInvoice, useSaveInvoice, useDeleteInvoice } from '@/hooks/useInvoices';
+import { useInvoice, useSaveInvoice, useDeleteInvoice, useRecordInvoicePayment } from '@/hooks/useInvoices';
 import { useContact } from '@/hooks/useContacts';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { LEGAL_TERMS, PRIVACY_NOTICE } from '@/lib/legal';
@@ -15,6 +15,20 @@ const InvoiceDetail: React.FC = () => {
   const { data: contact } = useContact(invoice?.contact_id || '');
   const saveInvoice = useSaveInvoice();
   const deleteInvoice = useDeleteInvoice();
+  const recordPay = useRecordInvoicePayment();
+  const [payAmount, setPayAmount] = React.useState('');
+
+  const recordPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!invoice) return;
+    const amount = parseFloat(payAmount);
+    if (!(amount > 0)) { toast.error('Enter a payment amount'); return; }
+    try {
+      const row = await recordPay.mutateAsync({ invoice, amount });
+      setPayAmount('');
+      toast.success(row.status === 'paid' ? 'Paid in full' : 'Payment recorded');
+    } catch { /* global toast */ }
+  };
 
   const handleDelete = async () => {
     if (!invoice) return;
@@ -161,7 +175,24 @@ const InvoiceDetail: React.FC = () => {
             <span className="text-sm">Total</span>
             <span className="text-base font-bold">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
+          {Number(invoice.deposit_applied) > 0 && (
+            <div className="flex justify-between text-xs text-muted-foreground"><span>Deposit applied</span><span>-${Number(invoice.deposit_applied).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+          )}
+          <div className="flex justify-between text-xs text-muted-foreground"><span>Paid</span><span>-${Number(invoice.amount_paid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+          <div className="flex justify-between text-sm font-bold text-foreground"><span>Balance due</span><span>${Number(invoice.balance_due ?? total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
         </div>
+
+        {invoice.status !== 'paid' && (
+          <form onSubmit={recordPayment} className="mt-4 pt-3 border-t border-border flex gap-2 items-center">
+            <input type="number" step="0.01" min="0.01" inputMode="decimal" placeholder="Payment amount"
+              value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
+              className="flex-1 bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
+            <button type="submit" disabled={recordPay.isPending || !payAmount}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest disabled:opacity-50">
+              Record Payment
+            </button>
+          </form>
+        )}
 
         <div className="mt-4 pt-3 border-t border-border flex gap-2">
           <button onClick={handleDownload}
