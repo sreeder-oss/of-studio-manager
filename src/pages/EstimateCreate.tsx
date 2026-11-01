@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Search, Trash2, Shield } from 'lucide-react';
+import { ChevronLeft, Search, Trash2, Shield, UserPlus } from 'lucide-react';
+import { QuickContactDialog, QuickProjectDialog } from '@/components/QuickCreateDialogs';
+
+const NEW_PROJECT = '__new_project__';
 import { useContacts } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useSaveEstimate, useEstimate } from '@/hooks/useEstimates';
@@ -27,6 +30,8 @@ const EstimateCreate: React.FC = () => {
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [selectedContactId, setSelectedContactId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { id: '1', scope: '', materials: '', amount: 0 }
   ]);
@@ -155,13 +160,19 @@ const EstimateCreate: React.FC = () => {
 
         <div>
           <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Project (optional)</label>
-          <select value={selectedProjectId} onChange={e => handleProjectChange(e.target.value)}
+          <select value={selectedProjectId} onChange={e => e.target.value === NEW_PROJECT ? setProjectDialogOpen(true) : handleProjectChange(e.target.value)}
             className="w-full bg-card border border-border rounded-xl py-2.5 px-4 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary">
             <option value="">No Project</option>
             {filteredProjects.map(p => (
               <option key={p.id} value={p.id}>{p.name}{contacts.find(c => c.id === p.contact_id) ? ` — ${contacts.find(c => c.id === p.contact_id)!.name}` : ''}</option>
             ))}
+            <option value={NEW_PROJECT}>+ Add new project…</option>
           </select>
+          <QuickProjectDialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen} contacts={contacts}
+            defaultContactId={selectedContactId}
+            onCreated={(p) => { setSelectedProjectId(p.id); if (p.contact_id) setSelectedContactId(p.contact_id); }} />
+          <QuickContactDialog open={contactDialogOpen} onOpenChange={setContactDialogOpen} initialName={clientSearchTerm}
+            onCreated={(c) => { setSelectedContactId(c.id); setClientSearchTerm(''); setStep('create'); }} />
         </div>
 
         {selectedProjectId && selectedContactId ? (
@@ -184,8 +195,12 @@ const EstimateCreate: React.FC = () => {
                 className="w-full bg-card border border-border rounded-xl py-2.5 pl-10 pr-4 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
             </div>
             {filteredContacts.length === 0 ? (
-              <div className="text-center py-10 bg-card rounded-xl border border-dashed border-border">
-                <p className="text-muted-foreground text-[11px]">No contacts yet. Add a contact first.</p>
+              <div className="text-center py-10 bg-card rounded-xl border border-dashed border-border space-y-3">
+                <p className="text-muted-foreground text-[11px]">{contacts.length === 0 ? 'No contacts yet.' : 'No matching contacts.'}</p>
+                <button type="button" onClick={() => setContactDialogOpen(true)}
+                  className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-glow">
+                  <UserPlus size={14} /> Add Contact
+                </button>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
