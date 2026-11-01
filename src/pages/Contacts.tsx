@@ -15,7 +15,7 @@ type ContactType = 'Client' | 'Lead' | 'Vendor';
 
 const STATUS_BY_TYPE: Record<ContactType, string[]> = {
   Client: ['Active', 'Inactive'],
-  Lead: ['Pending', 'Estimate', 'Inactive'],
+  Lead: ['Pending', 'Inactive'],
   Vendor: ['Active', 'Inactive'],
 };
 
