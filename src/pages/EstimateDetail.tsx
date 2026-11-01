@@ -4,7 +4,7 @@ import { ChevronLeft, Shield, CheckCircle, Clock, Send, FileDown, Pencil, ArrowR
 import { useEstimate, useDeleteEstimate, useSaveEstimate } from '@/hooks/useEstimates';
 import { useContact } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
-import { useSaveInvoice } from '@/hooks/useInvoices';
+import { useConvertEstimateToInvoice } from '@/hooks/useInvoices';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { LEGAL_TERMS } from '@/lib/legal';
 import { downloadEstimatePdf, coerceToEstimateDoc } from '@/lib/estimatePdf';
@@ -21,7 +21,7 @@ const EstimateDetail: React.FC = () => {
   const project = projects.find(p => p.id === estimate?.project_id);
   const deleteEstimate = useDeleteEstimate();
   const saveEstimate = useSaveEstimate();
-  const saveInvoice = useSaveInvoice();
+  const convertInvoice = useConvertEstimateToInvoice();
 
   useAIPageContext(estimate ? {
     kind: 'estimate', id: estimate.id,
@@ -77,24 +77,11 @@ const EstimateDetail: React.FC = () => {
 
   const handleConvertToInvoice = async () => {
     try {
-      const created: any = await saveInvoice.mutateAsync({
-        contact_id: estimate.contact_id,
-        project_id: estimate.project_id,
-        estimate_id: estimate.id,
-        line_items: estimate.line_items as any,
-        subtotal,
-        tax_applied: tax,
-        total,
-        due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        paid: false,
-      });
-      await saveEstimate.mutateAsync({ id: estimate.id, status: 'Invoiced', contact_id: estimate.contact_id, line_items: estimate.line_items as any, subtotal, total });
-      toast.success('Invoice created');
-      if (created?.id) navigate(`/invoices/${created.id}`);
-      else navigate('/invoices');
-    } catch (e: any) {
+      const res = await convertInvoice.mutateAsync(estimate);
+      toast.success(res.existed ? 'Opening existing invoice' : 'Invoice created');
+      navigate(`/invoices/${res.id}`);
+    } catch (e) {
       console.error(e);
-      toast.error(e?.message || 'Failed to convert to invoice');
     }
   };
 
@@ -131,12 +118,12 @@ const EstimateDetail: React.FC = () => {
           <button onClick={handleDownload} className="flex items-center gap-1 text-primary hover:text-primary/80 text-[10px] font-bold uppercase tracking-widest">
             <FileDown size={14} /> PDF
           </button>
-          {estimate.status === 'Approved' && (
-            <button onClick={handleConvertToInvoice} disabled={saveInvoice.isPending}
-              className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest shadow-glow disabled:opacity-50">
-              Convert to Invoice <ArrowRight size={12} />
-            </button>
-          )}
+          <button onClick={handleConvertToInvoice}
+            disabled={convertInvoice.isPending || !(estimate.status === 'Approved' || estimate.status === 'Invoiced')}
+            title={estimate.status === 'Approved' || estimate.status === 'Invoiced' ? undefined : 'Set status to Approved to convert'}
+            className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest shadow-glow disabled:opacity-40 disabled:shadow-none">
+            {estimate.status === 'Invoiced' ? 'Open Invoice' : convertInvoice.isPending ? 'Converting…' : 'Convert to Invoice'} <ArrowRight size={12} />
+          </button>
           <button onClick={handleDelete} className="text-[10px] text-destructive/60 hover:text-destructive font-bold uppercase tracking-widest">
             Delete
           </button>
