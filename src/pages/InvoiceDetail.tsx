@@ -115,14 +115,17 @@ const InvoiceDetail: React.FC = () => {
       toast.success('Marked as paid');
       return;
     }
-    try {
-      await saveInvoice.mutateAsync({
-        id: invoice.id,
-        paid: !invoice.paid,
-        paid_date: !invoice.paid ? new Date().toISOString().split('T')[0] : null,
-      });
-      toast.success(invoice.paid ? 'Marked as unpaid' : 'Marked as paid');
-    } catch { toast.error('Failed to update invoice'); }
+    // Mark as Unpaid: explicit update, keyed by invoice id, writing only
+    // status / paid / paid_date. amount_paid is deliberately NOT in the
+    // payload so recorded payments are never erased.
+    const { error } = await supabase.from('invoices').update({
+      status: 'draft',
+      paid: false,
+      paid_date: null,
+    }).eq('id', invoice.id);
+    if (error) { toast.error('Failed to update invoice'); return; }
+    queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    toast.success('Marked as unpaid');
   };
 
   return (
