@@ -22,7 +22,9 @@ export const addSystemDataSchema = z.object({
 
 export const createContactSchema = z.object({
   name: z.string().min(1),
-  type: nstr, status: nstr, email: nstr, phone: nstr, address: nstr, notes: nstr,
+  type: z.enum(['Client', 'Vendor', 'Lead']).nullish(),
+  status: z.enum(['Active', 'Inactive', 'Pending']).nullish(),
+  email: nstr, phone: nstr, address: nstr, notes: nstr,
 });
 
 export const updateContactSchema = createContactSchema.partial().extend({

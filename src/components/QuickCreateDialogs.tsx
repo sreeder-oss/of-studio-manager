@@ -23,7 +23,7 @@ export const QuickContactDialog: React.FC<{
     const email = f.email.trim();
     if (email && !/^\S+@\S+\.\S+$/.test(email)) { toast.error('Enter a valid email'); return; }
     try {
-      const row = await save.mutateAsync({ name, email: email || null, phone: f.phone.trim() || null, address: f.address.trim() || null, type: 'Client', status: 'Lead Pending' });
+      const row = await save.mutateAsync({ name, email: email || null, phone: f.phone.trim() || null, address: f.address.trim() || null, type: 'Client', status: 'Pending' });
       toast.success('Contact added');
       onCreated(row);
       onOpenChange(false);
