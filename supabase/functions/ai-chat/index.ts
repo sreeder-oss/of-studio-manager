@@ -90,7 +90,7 @@ const tools = [
     type: "function",
     function: {
       name: "emit_scope",
-      description: "Emit the structured SCOPE of an estimate. You NEVER set prices — the app prices it from the Systems Library. Call exactly once when the user asks for an estimate. After this call, write a 1–2 sentence summary (no dollar amounts).",
+      description: "Emit the structured SCOPE of an estimate. You NEVER set prices — the app prices it from the SERVICES price book. Call exactly once when the user asks for an estimate. After this call, write a 1–2 sentence summary (no dollar amounts).",
       strict: true,
       parameters: {
         type: "object",
@@ -106,11 +106,13 @@ const tools = [
             items: {
               type: "object",
               additionalProperties: false,
-              required: ["name", "area_sf", "system_id", "substrate", "prep_tier", "notes"],
+              required: ["name", "service_id", "qty", "unit", "system_id", "substrate", "prep_tier", "notes"],
               properties: {
                 name: { type: "string", description: "Short area name, e.g. 'Entryway'. Max ~6 words." },
-                area_sf: { type: "number", minimum: 0 },
-                system_id: { type: ["string", "null"], description: "id of the matching Systems Library row (match by name/manufacturer). null if no match." },
+                service_id: { type: ["string", "null"], description: "id of the matching SERVICES row (match by name, case-insensitive). null if no match." },
+                qty: { type: "number", minimum: 0, description: "Square feet when unit is SF, number of days when unit is day." },
+                unit: { type: "string", enum: ["SF", "day"], description: "Use the matched service's pricing_unit (sf -> SF, day -> day)." },
+                system_id: { type: ["string", "null"], description: "Optional, materials only: id of the matching Systems Library row. null if not needed or no match." },
                 substrate: { type: "string" },
                 prep_tier: { type: "string", enum: ["light", "standard", "heavy"] },
                 notes: { type: "string", description: "Concise client-facing scope note (inclusions/exclusions). Never paste the user's prompt; never include prices." },
@@ -199,8 +201,8 @@ const tools = [
   },
 ];
 
-type ScopeArea = { name: string; area_sf: number; system_id: string | null; substrate: string; prep_tier: "light" | "standard" | "heavy"; notes: string };
-function validateScope(raw: any, validIds: Set<string>, nameToId: Map<string, string>):
+type ScopeArea = { name: string; service_id: string | null; unmatched_service: string | null; qty: number; unit: "SF" | "day"; system_id: string | null; substrate: string; prep_tier: "light" | "standard" | "heavy"; notes: string };
+function validateScope(raw: any, validIds: Set<string>, nameToId: Map<string, string>, validServiceIds: Set<string>, serviceNameToId: Map<string, string>):
   { ok: true; scope: { title: string; client_name: string; project_address: string; areas: ScopeArea[] } } | { ok: false; error: string } {
   if (!raw || typeof raw !== "object") return { ok: false, error: "payload must be an object" };
   const allowedTop = new Set(["title", "client_name", "project_address", "areas"]);
@@ -209,22 +211,30 @@ function validateScope(raw: any, validIds: Set<string>, nameToId: Map<string, st
   const areas: ScopeArea[] = [];
   for (const [i, a] of raw.areas.entries()) {
     if (!a || typeof a !== "object") return { ok: false, error: `areas[${i}] must be an object` };
-    const allowed = new Set(["name", "area_sf", "system_id", "substrate", "prep_tier", "notes"]);
+    const allowed = new Set(["name", "service_id", "qty", "unit", "system_id", "substrate", "prep_tier", "notes"]);
     for (const k of Object.keys(a)) if (!allowed.has(k)) return { ok: false, error: `areas[${i}] unexpected field ${k}` };
     if (typeof a.name !== "string" || !a.name.trim()) return { ok: false, error: `areas[${i}].name required` };
-    if (typeof a.area_sf !== "number" || !Number.isFinite(a.area_sf) || a.area_sf < 0) return { ok: false, error: `areas[${i}].area_sf must be a number >= 0` };
+    if (typeof a.qty !== "number" || !Number.isFinite(a.qty) || a.qty < 0) return { ok: false, error: `areas[${i}].qty must be a number >= 0` };
+    if (a.unit !== "SF" && a.unit !== "day") return { ok: false, error: `areas[${i}].unit must be SF|day` };
     if (!["light", "standard", "heavy"].includes(a.prep_tier)) return { ok: false, error: `areas[${i}].prep_tier must be light|standard|heavy` };
     let sid: string | null = typeof a.system_id === "string" ? a.system_id : null;
     if (sid && !validIds.has(sid)) sid = nameToId.get(sid.toLowerCase()) ?? null; // model passed a name
+    let svc: string | null = typeof a.service_id === "string" && a.service_id.trim() ? a.service_id.trim() : null;
+    let unmatched: string | null = null;
+    if (svc && !validServiceIds.has(svc)) {
+      const byName = serviceNameToId.get(svc.toLowerCase()) ?? null; // model passed a name
+      if (!byName) unmatched = svc.slice(0, 80);
+      svc = byName;
+    }
     areas.push({
-      name: a.name.trim().slice(0, 80), area_sf: a.area_sf, system_id: sid,
+      name: a.name.trim().slice(0, 80), service_id: svc, unmatched_service: unmatched, qty: a.qty, unit: a.unit, system_id: sid,
       substrate: String(a.substrate ?? "").slice(0, 200), prep_tier: a.prep_tier, notes: String(a.notes ?? "").slice(0, 600),
     });
   }
   return { ok: true, scope: { title: String(raw.title ?? "").slice(0, 120), client_name: String(raw.client_name ?? ""), project_address: String(raw.project_address ?? ""), areas } };
 }
 
-function buildSystemPrompt(systemsLibrary: unknown[], settings: { overhead_pct: number; profit_pct: number; tax_rate: number; estimate_valid_days: number; }, currentPage?: string, currentRecord?: unknown) {
+function buildSystemPrompt(systemsLibrary: unknown[], services: unknown[], settings: { tax_rate: number; estimate_valid_days: number; }, currentPage?: string, currentRecord?: unknown) {
   return `You are the AI assistant for OF Manager, the business management app for
 Organic Finishes LLC, a specialty plaster and paint company in Tulsa, Oklahoma.
 The owner is Shawn. You can perform any action in the app through conversation.
@@ -233,12 +243,15 @@ CURRENT CONTEXT:
 - Page: ${currentPage || "unknown"}
 - Active record: ${currentRecord ? JSON.stringify(currentRecord) : "none"}
 
-SYSTEMS LIBRARY (match areas to these rows by name/manufacturer and use their id):
+SYSTEMS LIBRARY (materials spec — use only for an area's optional materials system_id):
 ${JSON.stringify(systemsLibrary, null, 2)}
+
+SERVICES (the owner's price book — match each estimate area to one of these by name and use its id):
+${JSON.stringify(services, null, 2)}
 
 PRICING — YOU DO NOT PRICE ESTIMATES. Never state, compute, or suggest dollar
 amounts, rates, or totals for an estimate. The app computes all pricing from the
-Systems Library and the owner's Settings (including the Tadelakt $55–$60/SF rule).
+SERVICES price book.
 
 WEB BROWSING — be a relentless researcher:
 You can call web_search and web_scrape to look up info on the open web.
@@ -359,11 +372,14 @@ ESTIMATING — When the user asks for an estimate, your ONLY job is to extract
 structured scope and call the **emit_scope** tool exactly once:
 - Split the work into areas (e.g. "Entryway 450 SF", "Entertainment room 450 SF").
   If the user gives one total, use one area.
-- area_sf = net square footage the user stated. Never invent square footage — if
-  it is missing, ask ONE short question instead of calling emit_scope.
-- system_id = the id of the Systems Library row matching the finish the user named
-  (match by name/manufacturer, case-insensitive). If nothing matches, use null and
-  say which system is missing so the owner can add it on the Systems page.
+- service_id = the id of the SERVICES row matching the work the user named (match
+  by name, case-insensitive). If nothing matches, put the name the user used in
+  service_id (the app will flag it) and say which service is missing.
+- unit = the matched service's pricing_unit ('SF' for sf, 'day' for day).
+- qty = net square footage (unit SF) or number of days (unit day) the user stated.
+  Never invent quantities — if missing, ask ONE short question instead of calling emit_scope.
+- system_id (optional, materials only) = id of the Systems Library row for the
+  material, when the user named one. Otherwise null.
 - prep_tier: light (sound, clean substrate), standard (typical patch/prime), heavy
   (significant repair, waterproofing, or board prep).
 - name and notes are short, professional, client-facing text. NEVER copy the user's
@@ -623,8 +639,16 @@ Deno.serve(async (req: Request) => {
       if (sysResp.ok) systemsLibrary = await sysResp.json();
     } catch (e) { console.warn("systems fetch failed", e); }
 
-    const settings = { overhead_pct: 8, profit_pct: 10, tax_rate: 0, estimate_valid_days: 30 };
-    const systemPrompt = buildSystemPrompt(systemsLibrary, settings, body.currentPage, body.currentRecord);
+    let servicesList: unknown[] = [];
+    try {
+      const svcResp = await fetch(`${SUPABASE_URL}/rest/v1/services?is_active=eq.true&select=id,name,pricing_unit,materials_included,system_id`, {
+        headers: { Authorization: authHeader, apikey: ANON_KEY },
+      });
+      if (svcResp.ok) servicesList = await svcResp.json();
+    } catch (e) { console.warn("services fetch failed", e); }
+
+    const settings = { tax_rate: 0, estimate_valid_days: 30 };
+    const systemPrompt = buildSystemPrompt(systemsLibrary, servicesList, settings, body.currentPage, body.currentRecord);
 
     const hasImages = body.hasImages || body.messages.some((m) =>
       Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
@@ -650,6 +674,11 @@ Deno.serve(async (req: Request) => {
     const validSystemIds = new Set<string>();
     for (const sy of systemsLibrary as Array<{ id?: string; name?: string }>) {
       if (sy?.id) { validSystemIds.add(sy.id); if (sy.name) systemIds.set(sy.name.toLowerCase(), sy.id); }
+    }
+    const serviceIds = new Map<string, string>();
+    const validServiceIds = new Set<string>();
+    for (const sv of servicesList as Array<{ id?: string; name?: string }>) {
+      if (sv?.id) { validServiceIds.add(sv.id); if (sv.name) serviceIds.set(sv.name.toLowerCase(), sv.id); }
     }
 
     console.log("ai-chat routing", { provider: useOpenRouter ? "openrouter" : "lovable", model });
@@ -812,7 +841,7 @@ Deno.serve(async (req: Request) => {
                   }
                 }
               } else if (fname === "emit_scope") {
-                const v = validateScope(args, validSystemIds, systemIds);
+                const v = validateScope(args, validSystemIds, systemIds, validServiceIds, serviceIds);
                 if (!v.ok) {
                   result = { error: `Invalid scope: ${v.error}. Call emit_scope again with a corrected payload.` };
                 } else {

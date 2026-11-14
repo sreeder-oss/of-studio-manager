@@ -5,8 +5,12 @@ export const PREP_TIERS = ['light', 'standard', 'heavy'] as const;
 
 export const scopeAreaSchema = z.object({
   name: z.string().min(1),
-  area_sf: z.number().nonnegative(),
-  system_id: z.string().nullable(),
+  service_id: z.string().nullable(),
+  /** Service name the AI could not match to the price book, if any. */
+  unmatched_service: z.string().nullable().optional(),
+  qty: z.number().nonnegative(),
+  unit: z.enum(['SF', 'day']),
+  system_id: z.string().nullable().optional(),
   substrate: z.string(),
   prep_tier: z.enum(PREP_TIERS),
   notes: z.string(),
