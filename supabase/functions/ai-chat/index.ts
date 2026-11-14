@@ -612,6 +612,80 @@ async function fcNaaPortal(target: string, key: string) {
   }
 }
 
+
+// --- Receipt scan: image -> { vendor, amount, date, category } as strict JSON ---
+const RECEIPT_SCAN_CATEGORIES = ["Materials", "Labor", "Equipment", "Travel", "Supplies", "Miscellaneous"] as const;
+
+async function handleReceiptScan(input: { image?: unknown }): Promise<Response> {
+  const json = (status: number, b: unknown) =>
+    new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  const image = typeof input.image === "string" ? input.image : "";
+  if (!/^data:image\/(png|jpe?g|webp|gif|heic|heif);base64,/i.test(image) || image.length > 12_000_000) {
+    return json(400, { error: "A receipt image (data URL, under ~9 MB) is required." });
+  }
+  const key = Deno.env.get("OPENROUTER_API_KEY") ?? "";
+  if (!key) return json(500, { error: "OPENROUTER_API_KEY is not configured" });
+
+  const schema = {
+    type: "object",
+    additionalProperties: false,
+    required: ["vendor", "amount", "date", "category"],
+    properties: {
+      vendor: { type: "string", description: "Store name, or empty string if unreadable" },
+      amount: { type: "number", description: "Grand total paid in dollars, or 0 if unreadable" },
+      date: { type: "string", description: "Purchase date as YYYY-MM-DD, or empty string if unreadable" },
+      category: { type: "string", enum: [...RECEIPT_SCAN_CATEGORIES, "Unknown"] },
+    },
+  };
+  const upstream = await fetch(OPENROUTER_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`, "Content-Type": "application/json",
+      "HTTP-Referer": "https://of-manager.lovable.app", "X-Title": "OF Manager",
+    },
+    body: JSON.stringify({
+      model: PINNED_MODEL,
+      temperature: 0,
+      stream: false,
+      response_format: { type: "json_schema", json_schema: { name: "receipt", strict: true, schema } },
+      messages: [
+        {
+          role: "system",
+          content: "You read a single purchase receipt. Return ONLY JSON matching the schema: vendor (store name), amount (the final total paid, number), date (YYYY-MM-DD), category (best match from: Materials, Labor, Equipment, Travel, Supplies, Miscellaneous). For anything you cannot read with confidence use an empty string, 0 for amount, or \"Unknown\" for category. Never guess.",
+        },
+        { role: "user", content: [
+          { type: "text", text: "Read this receipt." },
+          { type: "image_url", image_url: { url: image } },
+        ] },
+      ],
+    }),
+  });
+  if (!upstream.ok) {
+    const detail = await upstream.text().catch(() => "");
+    console.error("receipt_scan upstream", upstream.status, detail.slice(0, 300));
+    return json(upstream.status === 429 || upstream.status === 402 ? upstream.status : 502, { error: `Could not read the receipt (AI service ${upstream.status}).` });
+  }
+  let parsed: Record<string, unknown> = {};
+  try {
+    const data = await upstream.json();
+    let text = String(data?.choices?.[0]?.message?.content ?? "").trim();
+    const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fence) text = fence[1];
+    parsed = JSON.parse(text);
+  } catch {
+    return json(502, { error: "Could not read the receipt (unreadable AI reply)." });
+  }
+  const vendor = typeof parsed.vendor === "string" && parsed.vendor.trim() ? parsed.vendor.trim().slice(0, 200) : null;
+  const amt = Number(parsed.amount);
+  const amount = parsed.amount != null && Number.isFinite(amt) && amt > 0 ? Math.round(amt * 100) / 100 : null;
+  const date = typeof parsed.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : null;
+  const category = (RECEIPT_SCAN_CATEGORIES as readonly string[]).includes(String(parsed.category)) ? String(parsed.category) : null;
+  if (!vendor && amount == null && !date && !category) {
+    return json(422, { error: "Could not read anything from this receipt." });
+  }
+  return json(200, { vendor, amount, date, category });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -644,6 +718,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
+    if ((body as unknown as { mode?: string }).mode === "receipt_scan") {
+      return await handleReceiptScan(body as unknown as { image?: unknown });
+    }
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
