@@ -6,6 +6,15 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function isNaaHost(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+    const h = u.hostname.toLowerCase();
+    return h === "newageartisans.com" || h.endsWith(".newageartisans.com") || h === "new-age-artisans.outseta.com";
+  } catch { return false; }
+}
+
 const FC = "https://api.firecrawl.dev/v2";
 const LOGIN_URL = "https://new-age-artisans.outseta.com/auth?widgetMode=login#o-anonymous";
 
@@ -31,10 +40,20 @@ Deno.serve(async (req) => {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    {
+      const ownerEmail = (Deno.env.get("OWNER_EMAIL") ?? "").trim().toLowerCase();
+      const signedIn = await userResp.json().catch(() => ({}));
+      const email = String(signedIn?.email ?? "").trim().toLowerCase();
+      if (!ownerEmail || email !== ownerEmail) {
+        return new Response(JSON.stringify({ error: "This app is private." }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     const body = await req.json().catch(() => ({}));
     const target = String(body.url ?? "https://www.newageartisans.com/plaster-portal");
-    if (!/newageartisans\.com|outseta\.com/.test(target)) {
+    if (!isNaaHost(target)) {
       return new Response(JSON.stringify({ error: "URL must be on newageartisans.com" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

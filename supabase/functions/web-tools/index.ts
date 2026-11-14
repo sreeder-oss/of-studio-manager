@@ -26,6 +26,16 @@ Deno.serve(async (req) => {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    {
+      const ownerEmail = (Deno.env.get("OWNER_EMAIL") ?? "").trim().toLowerCase();
+      const signedIn = await userResp.json().catch(() => ({}));
+      const email = String(signedIn?.email ?? "").trim().toLowerCase();
+      if (!ownerEmail || email !== ownerEmail) {
+        return new Response(JSON.stringify({ error: "This app is private." }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     const body = await req.json();
     const op = body.op as "search" | "scrape";

@@ -1,6 +1,15 @@
 // AI chat with tool-calling (web search/scrape) + streaming final response.
 // Injects Systems Library + company defaults into the system prompt.
 
+function isNaaHost(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+    const h = u.hostname.toLowerCase();
+    return h === "newageartisans.com" || h.endsWith(".newageartisans.com") || h === "new-age-artisans.outseta.com";
+  } catch { return false; }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -556,7 +565,7 @@ async function fcNaaPortal(target: string, key: string) {
   if (!EMAIL || !PASSWORD) {
     return { error: "NAA_PORTAL_AUTH_FAILED: portal credentials not configured (NAA_PORTAL_EMAIL / NAA_PORTAL_PASSWORD missing)." };
   }
-  if (!/newageartisans\.com|outseta\.com/.test(target)) {
+  if (!isNaaHost(target)) {
     return { error: "naa_portal_fetch only works for newageartisans.com URLs." };
   }
   const LOGIN_URL = "https://new-age-artisans.outseta.com/auth?widgetMode=login#o-anonymous";
@@ -622,6 +631,16 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+    {
+      const ownerEmail = (Deno.env.get("OWNER_EMAIL") ?? "").trim().toLowerCase();
+      const signedIn = await userResp.json().catch(() => ({}));
+      const email = String(signedIn?.email ?? "").trim().toLowerCase();
+      if (!ownerEmail || email !== ownerEmail) {
+        return new Response(JSON.stringify({ error: "This app is private." }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const body = (await req.json()) as RequestBody;

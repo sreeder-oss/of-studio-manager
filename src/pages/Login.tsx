@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { lovable } from '@/integrations/lovable';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, PRIVATE_FLAG } from '@/contexts/AuthContext';
 import logoSrc from '@/assets/of-letters.svg';
 
 interface LocationState { from?: { pathname?: string } }
@@ -10,7 +10,12 @@ const Login: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => {
+    const flag = sessionStorage.getItem(PRIVATE_FLAG);
+    if (!flag) return '';
+    sessionStorage.removeItem(PRIVATE_FLAG);
+    return flag === 'unreachable' ? 'Could not confirm access. Please try again.' : 'This app is private.';
+  });
 
   const fromPath = (location.state as LocationState | null)?.from?.pathname || '/';
 
