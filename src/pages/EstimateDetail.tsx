@@ -14,6 +14,8 @@ import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSe
 import { downloadEstimatePdf, coerceToEstimateDoc } from '@/lib/estimatePdf';
 import { isPriceBookLines, toPriceRows, linesMatchSubtotal, rowsSum, totalSf, pricePerSf } from '@/lib/estimateLines';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { localToday, PAYMENT_METHODS, type PaymentMethod } from '@/hooks/useInvoicePayments';
 
 const STATUSES = ['Pending', 'Approved', 'Invoiced', 'Declined', 'Expired'] as const;
 
@@ -27,6 +29,11 @@ const EstimateDetail: React.FC = () => {
   const deleteEstimate = useDeleteEstimate();
   const queryClient = useQueryClient();
   const convertInvoice = useConvertEstimateToInvoice();
+  const [depStep, setDepStep] = React.useState<null | 'ask' | 'details'>(null);
+  const [depAmount, setDepAmount] = React.useState('');
+  const [depDate, setDepDate] = React.useState('');
+  const [depMethod, setDepMethod] = React.useState<PaymentMethod | ''>('');
+  const [depRef, setDepRef] = React.useState('');
   const { settings } = useSettings();
   const { data: systems = [] } = useSystems();
 
@@ -91,9 +98,25 @@ const EstimateDetail: React.FC = () => {
     }
   };
 
-  const handleConvertToInvoice = async () => {
+  const openConvert = () => {
+    if (estimate.status === 'Invoiced') { handleConvertToInvoice(null); return; }
+    setDepStep('ask');
+    setDepAmount(depositAmount(Number(estimate.total || 0), settings.default_deposit_pct).toFixed(2));
+    setDepDate(localToday()); setDepMethod(''); setDepRef('');
+  };
+
+  const submitDeposit = () => {
+    const amount = parseFloat(depAmount);
+    if (!(amount > 0)) { toast.error('Enter the deposit amount'); return; }
+    if (!depMethod) { toast.error('Choose Check or Zelle'); return; }
+    if (!depDate) { toast.error('Enter the date received'); return; }
+    handleConvertToInvoice({ amount, paid_on: depDate, method: depMethod, reference: depRef.trim() });
+  };
+
+  const handleConvertToInvoice = async (deposit: { amount: number; paid_on: string; method: PaymentMethod; reference: string } | null) => {
     try {
-      const res = await convertInvoice.mutateAsync({ estimate, depositPct: settings.default_deposit_pct });
+      const res = await convertInvoice.mutateAsync({ estimate, deposit });
+      setDepStep(null);
       toast.success(res.existed ? 'Opening existing invoice' : 'Invoice created');
       navigate(`/invoices/${res.id}`);
     } catch (e) {
@@ -135,7 +158,7 @@ const EstimateDetail: React.FC = () => {
           <button onClick={handleDownload} disabled={!linesOk} className="disabled:opacity-40 flex items-center gap-1 text-primary hover:text-primary/80 text-[10px] font-bold uppercase tracking-widest">
             <FileDown size={14} /> PDF
           </button>
-          <button onClick={handleConvertToInvoice}
+          <button onClick={openConvert}
             disabled={convertInvoice.isPending || !(estimate.status === 'Approved' || estimate.status === 'Invoiced')}
             title={estimate.status === 'Approved' || estimate.status === 'Invoiced' ? undefined : 'Set status to Approved to convert'}
             className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest shadow-glow disabled:opacity-40 disabled:shadow-none">
@@ -146,6 +169,50 @@ const EstimateDetail: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <Dialog open={depStep !== null} onOpenChange={(o) => { if (!o && !convertInvoice.isPending) setDepStep(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Was the deposit received?</DialogTitle>
+            <DialogDescription>
+              {depStep === 'details' ? 'Enter the deposit you received. It will be recorded as a payment on the new invoice.' : 'Only record it if you actually have the check or Zelle payment.'}
+            </DialogDescription>
+          </DialogHeader>
+          {depStep === 'details' && (
+            <div className="grid grid-cols-2 gap-2">
+              <input type="number" step="0.01" min="0.01" inputMode="decimal" aria-label="Amount" placeholder="Amount" value={depAmount} onChange={e => setDepAmount(e.target.value)}
+                className="bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
+              <input type="date" aria-label="Date" value={depDate} onChange={e => setDepDate(e.target.value)}
+                className="bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
+              <select aria-label="Method" value={depMethod} onChange={e => setDepMethod(e.target.value as PaymentMethod)}
+                className="bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary">
+                <option value="">Method…</option>
+                {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <input aria-label="Reference" maxLength={80} placeholder={depMethod === 'Zelle' ? 'Zelle confirmation' : 'Check number'} value={depRef} onChange={e => setDepRef(e.target.value)}
+                className="bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            {depStep === 'ask' ? (
+              <>
+                <button onClick={() => handleConvertToInvoice(null)} disabled={convertInvoice.isPending}
+                  className="px-4 py-2 rounded-xl border border-border text-foreground text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">No</button>
+                <button onClick={() => setDepStep('details')} disabled={convertInvoice.isPending}
+                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">Yes</button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setDepStep('ask')} disabled={convertInvoice.isPending}
+                  className="px-4 py-2 rounded-xl border border-border text-foreground text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">Back</button>
+                <button onClick={submitDeposit} disabled={convertInvoice.isPending}
+                  className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">
+                  {convertInvoice.isPending ? 'Creating…' : 'Create invoice'}</button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="bg-card rounded-2xl border border-border p-5">
         <div className="flex justify-between items-start mb-4 gap-3">

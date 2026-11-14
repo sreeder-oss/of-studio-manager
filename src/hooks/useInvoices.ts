@@ -1,3 +1,4 @@
+import { recomputeInvoiceFromLedger, type PaymentMethod } from '@/hooks/useInvoicePayments';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
@@ -79,18 +80,33 @@ export function nextInvoiceNumber(existing: (string | null | undefined)[]): stri
   return `INV-${String(max + 1).padStart(4, '0')}`;
 }
 
-/** Deposit already collected, read from the estimate document if recorded there. */
-export function depositCollected(lineItems: unknown): number {
-  const doc = lineItems && typeof lineItems === 'object' && !Array.isArray(lineItems) ? (lineItems as any) : {};
-  const v = Number(doc.deposit_collected ?? doc.deposit_paid ?? doc.deposit_received ?? 0);
-  return Number.isFinite(v) && v > 0 ? v : 0;
+type DbEstimateRow = Database['public']['Tables']['estimates']['Row'];
+
+/** Pure: the invoice row created from an estimate. Nothing is credited as paid. */
+export function conversionInsert(estimate: DbEstimateRow, invoice_number: string, today = Date.now()): DbInvoiceInsert {
+  const tax = Number(estimate.tax_amount || 0);
+  return {
+    estimate_id: estimate.id,
+    project_id: estimate.project_id,
+    contact_id: estimate.contact_id,
+    line_items: estimate.line_items,
+    subtotal: Number(estimate.subtotal || 0), tax_rate: Number(estimate.tax_rate || 0), tax_amount: tax, tax_applied: tax,
+    total: Number(estimate.total || 0),
+    deposit_applied: 0,
+    invoice_number,
+    status: 'draft',
+    notes: estimate.notes, terms: estimate.terms,
+    due_date: new Date(today + 30 * 86400000).toISOString().split('T')[0],
+  } as DbInvoiceInsert;
 }
+
+export type ReceivedDeposit = { amount: number; paid_on: string; method: PaymentMethod; reference?: string | null };
 
 /** Convert an estimate to a draft invoice, or return the existing invoice for it. */
 export const useConvertEstimateToInvoice = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ estimate, depositPct }: { estimate: Database['public']['Tables']['estimates']['Row']; depositPct: number }): Promise<{ id: string; existed: boolean }> => {
+    mutationFn: async ({ estimate, deposit }: { estimate: DbEstimateRow; deposit?: ReceivedDeposit | null }): Promise<{ id: string; existed: boolean }> => {
       const { data: found, error: findErr } = await supabase.from('invoices')
         .select('id').eq('estimate_id', estimate.id).order('created_at').limit(1).maybeSingle();
       if (findErr) throw findErr;
@@ -99,23 +115,17 @@ export const useConvertEstimateToInvoice = () => {
       const { data: nums, error: numErr } = await supabase.from('invoices').select('invoice_number');
       if (numErr) throw numErr;
       const invoice_number = nextInvoiceNumber((nums || []).map(r => r.invoice_number));
-      const subtotal = Number(estimate.subtotal || 0);
-      const tax_rate = Number(estimate.tax_rate || 0);
-      const tax = Number(estimate.tax_amount || 0);
-      const { data: inv, error } = await supabase.from('invoices').insert({
-        estimate_id: estimate.id,
-        project_id: estimate.project_id,
-        contact_id: estimate.contact_id,
-        line_items: estimate.line_items,
-        subtotal, tax_rate, tax_amount: tax, tax_applied: tax,
-        total: Number(estimate.total || 0),
-        deposit_applied: depositCollected(estimate.line_items) || +(Number(estimate.total || 0) * depositPct).toFixed(2),
-        invoice_number,
-        status: 'draft',
-        notes: estimate.notes, terms: estimate.terms,
-        due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-      } as DbInvoiceInsert).select('id').single();
+      const { data: inv, error } = await supabase.from('invoices').insert(conversionInsert(estimate, invoice_number)).select('id').single();
       if (error) throw error;
+
+      if (deposit && deposit.amount > 0) {
+        const { error: payErr } = await supabase.from('invoice_payments').insert({
+          invoice_id: inv.id, amount: Math.round(deposit.amount * 100) / 100, paid_on: deposit.paid_on,
+          method: deposit.method, reference: deposit.reference || null, note: 'Deposit',
+        });
+        if (payErr) throw payErr;
+        await recomputeInvoiceFromLedger(inv.id);
+      }
 
       const { error: estErr } = await supabase.from('estimates').update({ status: 'Invoiced' }).eq('id', estimate.id);
       if (estErr) throw estErr;
@@ -124,6 +134,7 @@ export const useConvertEstimateToInvoice = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] });
       qc.invalidateQueries({ queryKey: ['estimates'] });
+      qc.invalidateQueries({ queryKey: ['invoice_payments'] });
     },
   });
 };
