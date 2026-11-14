@@ -12,6 +12,7 @@ import { CostBreakdown } from '@/components/CostBreakdown';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSettings';
 import { downloadEstimatePdf, coerceToEstimateDoc } from '@/lib/estimatePdf';
+import { isPriceBookLines, toPriceRows, linesMatchSubtotal, rowsSum, totalSf, pricePerSf } from '@/lib/estimateLines';
 import { toast } from 'sonner';
 
 const STATUSES = ['Pending', 'Approved', 'Invoiced', 'Declined', 'Expired'] as const;
@@ -53,6 +54,10 @@ const EstimateDetail: React.FC = () => {
   const tax = Number(estimate.tax_amount || subtotal * taxRate);
   const total = Number(estimate.total || 0);
   const deposit = depositAmount(total, settings.default_deposit_pct);
+  const priceRows = isPriceBookLines(items) ? toPriceRows(items) : null;
+  const linesOk = !priceRows || linesMatchSubtotal(priceRows, subtotal);
+  const perSf = priceRows ? pricePerSf(total, priceRows) : 0;
+  const money = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const getStatusInfo = (status: string | null) => {
     if (status === 'Approved') return { classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
@@ -97,6 +102,7 @@ const EstimateDetail: React.FC = () => {
   };
 
   const handleDownload = () => {
+    if (!linesOk) { toast.error('Line amounts do not add up to the subtotal — fix the estimate before downloading'); return; }
     const doc = coerceToEstimateDoc(estimate.line_items, {
       title: `Estimate — ${contact?.name || 'Client'}`,
       client_name: contact?.name || '',
@@ -126,7 +132,7 @@ const EstimateDetail: React.FC = () => {
           <button onClick={() => navigate(`/estimates/${estimate.id}/edit`)} className="flex items-center gap-1 text-foreground hover:text-primary text-[10px] font-bold uppercase tracking-widest">
             <Pencil size={12} /> Edit
           </button>
-          <button onClick={handleDownload} className="flex items-center gap-1 text-primary hover:text-primary/80 text-[10px] font-bold uppercase tracking-widest">
+          <button onClick={handleDownload} disabled={!linesOk} className="disabled:opacity-40 flex items-center gap-1 text-primary hover:text-primary/80 text-[10px] font-bold uppercase tracking-widest">
             <FileDown size={14} /> PDF
           </button>
           <button onClick={handleConvertToInvoice}
@@ -189,7 +195,37 @@ const EstimateDetail: React.FC = () => {
 
         <div className="space-y-2 mb-4">
           <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Line Items</p>
-          {items.length === 0 ? (
+          {priceRows ? (
+            <div className="bg-accent rounded-xl border border-border overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="text-[9px] uppercase tracking-widest text-muted-foreground border-b border-border">
+                    <th className="text-left p-2 font-bold">Description</th>
+                    <th className="text-right p-2 font-bold">Qty</th>
+                    <th className="text-left p-2 font-bold">Unit</th>
+                    <th className="text-right p-2 font-bold">Rate</th>
+                    <th className="text-right p-2 font-bold">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceRows.map((r, i) => r.kind === 'service' ? (
+                    <tr key={i} className="border-t border-border/60">
+                      <td className="p-2 text-foreground">{r.description}{r.note && <p className="text-[10px] text-muted-foreground">{r.note}</p>}</td>
+                      <td className="p-2 text-right text-foreground">{r.qty.toLocaleString()}</td>
+                      <td className="p-2 text-foreground">{r.unit}</td>
+                      <td className="p-2 text-right text-foreground">{money(r.rate)}</td>
+                      <td className="p-2 text-right font-bold text-foreground">{money(r.amount)}</td>
+                    </tr>
+                  ) : (
+                    <tr key={i} className={r.kind === 'other' ? 'border-t border-border/60' : ''}>
+                      <td colSpan={4} className={`p-2 ${r.kind === 'materials' ? 'pl-6 italic text-muted-foreground' : 'text-foreground'}`}>{r.description}</td>
+                      <td className={`p-2 text-right ${r.kind === 'materials' ? 'text-muted-foreground' : 'font-bold text-foreground'}`}>{money(r.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : items.length === 0 ? (
             <p className="text-muted-foreground text-[11px] italic">No line items.</p>
           ) : items.map((item: any, i: number) => (
             <div key={item.id || i} className="bg-accent rounded-xl p-3 border border-border">
@@ -205,6 +241,11 @@ const EstimateDetail: React.FC = () => {
           ))}
         </div>
 
+        {!linesOk && priceRows && (
+          <div className="mb-3 rounded-lg border border-destructive bg-destructive/10 p-2 text-[11px] text-destructive font-semibold">
+            Line amounts add up to {money(rowsSum(priceRows))}, but the subtotal is {money(subtotal)}. PDF download is blocked until this is fixed.
+          </div>
+        )}
         <div className="border-t border-border pt-3 space-y-1.5">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Subtotal</span>
@@ -218,6 +259,12 @@ const EstimateDetail: React.FC = () => {
             <span className="text-sm">Total</span>
             <span className="text-base font-bold">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
+          {perSf > 0 && (
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Price per square foot ({totalSf(priceRows!).toLocaleString()} SF)</span>
+              <span>{money(perSf)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>{pctLabel(settings.default_deposit_pct)}% Deposit (requested)</span>
             <span>${deposit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>

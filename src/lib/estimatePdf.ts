@@ -1,3 +1,4 @@
+import { isPriceBookLines, toPriceRows, rowsSum, totalSf, pricePerSf } from './estimateLines';
 /**
  * Branded multi-page Organic Finishes estimate PDF.
  * Mirrors the layout of our reference estimates (Bauwerks Limewash / Biolime
@@ -263,7 +264,12 @@ function renderCover(ctx: RenderCtx): number {
 
   // Project summary tiles (8 metrics in 2 rows of 4)
   y = sectionLabel(ctx, y, 'Project Summary');
-  const tiles: [string, string][] = [
+  const tiles: [string, string][] = est.price_book ? [
+    ['Net Area', est.area_sf > 0 ? `${est.area_sf.toLocaleString()} SF` : '—'],
+    ...(est.tax_amount > 0 ? [['Subtotal', fmtCompact(est.total - est.tax_amount)] as [string, string], ['Tax', fmtCompact(est.tax_amount)] as [string, string]] : []),
+    ['Per SF', est.per_sf > 0 ? `${fmt(est.per_sf)}/SF` : '—'],
+    ['PROJECT TOTAL', fmtCompact(est.total)],
+  ] : [
     ['Net Area', est.area_sf > 0 ? `${est.area_sf.toLocaleString()} SF` : '—'],
     ['Labor', fmtCompact(est.sections.find((s) => /labor/i.test(s.label))?.subtotal || 0)],
     ['Materials', fmtCompact(est.sections.find((s) => /material/i.test(s.label))?.subtotal || 0)],
@@ -299,7 +305,7 @@ function renderCover(ctx: RenderCtx): number {
     doc.setTextColor(...(isTotal ? ([255, 255, 255] as [number, number, number]) : NAVY));
     doc.text(tiles[i][1], tx + 8, ty + 32);
   }
-  y += 2 * (tileH + 4) + 10;
+  y += Math.ceil(tiles.length / 4) * (tileH + 4) + 10;
 
   return y;
 }
@@ -325,6 +331,20 @@ function renderPricingTable(ctx: RenderCtx, startY: number): number {
       },
     ]);
     for (const li of section.line_items) {
+      if (est.price_book && (li as any).indent) {
+        body.push([
+          { content: li.description, colSpan: 4, styles: { fontSize: 8.5, fontStyle: 'italic', textColor: NAVY_SOFT, cellPadding: { top: 3, bottom: 5, left: 24, right: 8 } } },
+          { content: fmt(li.total), styles: { halign: 'right', fontSize: 8.5, textColor: NAVY_SOFT } },
+        ]);
+        continue;
+      }
+      if (est.price_book && !(li.qty > 0)) {
+        body.push([
+          { content: li.description, colSpan: 4, styles: { fontSize: 9 } },
+          { content: fmt(li.total), styles: { halign: 'right', fontSize: 9, fontStyle: 'bold' } },
+        ]);
+        continue;
+      }
       const desc = li.sub_note
         ? `${li.description}\n${li.sub_note}`
         : li.description;
@@ -333,7 +353,7 @@ function renderPricingTable(ctx: RenderCtx, startY: number): number {
         { content: String(li.qty || ''), styles: { halign: 'right', fontSize: 9 } },
         { content: li.unit || '', styles: { halign: 'center', fontSize: 9 } },
         {
-          content: li.unit_cost > 0 ? fmt(li.unit_cost) : '—',
+          content: li.unit_cost > 0 ? fmt(li.unit_cost) : est.price_book ? fmt(0) : '—',
           styles: { halign: 'right', fontSize: 9 },
         },
         {
@@ -432,7 +452,7 @@ function renderPricingTable(ctx: RenderCtx, startY: number): number {
   if (est.per_sf > 0) {
     body.push([
       {
-        content: 'Price per square foot (average)',
+        content: est.price_book ? 'Price per square foot' : 'Price per square foot (average)',
         colSpan: 4,
         styles: { halign: 'right', fontSize: 9, fontStyle: 'italic', textColor: MUTED },
       },
@@ -440,6 +460,13 @@ function renderPricingTable(ctx: RenderCtx, startY: number): number {
         content: `${fmt(est.per_sf)} / SF`,
         styles: { halign: 'right', fontSize: 9, fontStyle: 'bold', textColor: NAVY },
       },
+    ]);
+  }
+
+  if (est.price_book) {
+    body.push([
+      { content: `Deposit requested (${+(ctx.depositPct * 100).toFixed(2)}%)`, colSpan: 4, styles: { halign: 'right', fontSize: 9, textColor: NAVY } },
+      { content: fmt(Math.round(est.total * ctx.depositPct * 100) / 100), styles: { halign: 'right', fontSize: 9, fontStyle: 'bold', textColor: NAVY } },
     ]);
   }
 
@@ -451,8 +478,8 @@ function renderPricingTable(ctx: RenderCtx, startY: number): number {
         { content: 'Description', styles: { halign: 'left' } },
         { content: 'Qty', styles: { halign: 'right' } },
         { content: 'Unit', styles: { halign: 'center' } },
-        { content: 'Unit Cost', styles: { halign: 'right' } },
-        { content: 'Total', styles: { halign: 'right' } },
+        { content: est.price_book ? 'Rate' : 'Unit Cost', styles: { halign: 'right' } },
+        { content: est.price_book ? 'Amount' : 'Total', styles: { halign: 'right' } },
       ],
     ],
     body,
@@ -742,6 +769,32 @@ export function coerceToEstimateDoc(stored: unknown, fallback: {
     const doc = stored as EstimateDoc;
     if (!doc.valid_until && fallback.valid_until) doc.valid_until = fallback.valid_until;
     return doc;
+  }
+
+  // Price-book lines: carry real qty, unit and rate.
+  if (isPriceBookLines(stored)) {
+    const rows = toPriceRows(stored);
+    const lines = rows.map((r) => r.kind === 'service'
+      ? { description: r.description, sub_note: r.note || '', qty: r.qty, unit: r.unit, unit_cost: r.rate, total: r.amount }
+      : { description: r.description, sub_note: '', qty: 0, unit: '', unit_cost: 0, total: r.amount, indent: r.kind === 'materials' } as any);
+    const subtotal = rowsSum(rows);
+    const total = fallback.total ?? subtotal;
+    return {
+      title: fallback.title || 'Project Estimate',
+      client_name: fallback.client_name || '',
+      project_address: '', substrate: '', system_name: '',
+      area_sf: totalSf(rows), area_note: '', duration_estimate: '',
+      sections: [{ label: 'Scope & pricing', line_items: lines, subtotal }],
+      direct_cost_subtotal: subtotal,
+      overhead_pct: 0, overhead_amount: 0, profit_pct: 0, profit_amount: 0,
+      tax_rate: (fallback.tax_rate ?? 0) * 100,
+      tax_amount: Math.max(0, Math.round((total - subtotal) * 100) / 100),
+      total,
+      per_sf: pricePerSf(total, rows),
+      assumptions: [], exclusions: [], system_note: '',
+      valid_until: fallback.valid_until || '',
+      price_book: true,
+    };
   }
 
   // Legacy flat array of { scope/description, materials, amount }

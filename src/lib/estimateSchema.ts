@@ -53,6 +53,8 @@ export const estimateSchema = z.object({
   system_note: z.string().optional().default(''),
   /** ISO date 'YYYY-MM-DD' — when this estimate expires */
   valid_until: z.string().optional().default(''),
+  /** Lines come from the price book: amounts are stored, not recomputed. */
+  price_book: z.boolean().optional(),
 });
 
 export type EstimateDoc = z.infer<typeof estimateSchema>;
@@ -72,6 +74,7 @@ export function parseEstimateFromText(text: string): EstimateDoc | null {
 }
 
 export function recalcEstimate(e: EstimateDoc): EstimateDoc {
+  if (e.price_book) return e;
   const sections = e.sections.map((s) => {
     const items = s.line_items.map((li) => ({ ...li, total: +(li.qty * li.unit_cost).toFixed(2) }));
     const subtotal = +items.reduce((a, b) => a + b.total, 0).toFixed(2);
