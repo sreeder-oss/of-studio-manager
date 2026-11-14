@@ -210,10 +210,10 @@ const EstimateDetail: React.FC = () => {
             <span>Subtotal</span>
             <span>${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground">
+          {tax > 0 && <div className="flex justify-between text-xs text-muted-foreground">
             <span>Tax ({(taxRate * 100).toFixed(2)}%)</span>
             <span>${tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
+          </div>}
           <div className="flex justify-between text-lg font-serif text-primary pt-1">
             <span className="text-sm">Total</span>
             <span className="text-base font-bold">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>

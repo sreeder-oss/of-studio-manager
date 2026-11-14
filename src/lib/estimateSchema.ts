@@ -43,7 +43,7 @@ export const estimateSchema = z.object({
   profit_pct: z.number().min(0).max(100).optional().default(10),
   profit_amount: z.number().nonnegative().optional().default(0),
   /** percent (e.g. 8.75 for 8.75%) — converted to fraction (0.0875) before persisting */
-  tax_rate: z.number().min(0).max(100).optional().default(8.75),
+  tax_rate: z.number().min(0).max(100).optional().default(0),
   tax_amount: z.number().nonnegative().optional().default(0),
   total: z.number().nonnegative().optional().default(0),
   per_sf: z.number().nonnegative().optional().default(0),

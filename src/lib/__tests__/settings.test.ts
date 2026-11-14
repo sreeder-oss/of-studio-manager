@@ -3,8 +3,8 @@ vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
 import { depositAmount, renderTerms, DEFAULT_SETTINGS } from '@/hooks/useSettings';
 
 describe('settings defaults', () => {
-  it('tax 8.75%, waste 12%, deposit 50%', () => {
-    expect(DEFAULT_SETTINGS.default_tax_rate).toBe(0.0875);
+  it('tax 0%, waste 12%, deposit 50%', () => {
+    expect(DEFAULT_SETTINGS.default_tax_rate).toBe(0);
     expect(DEFAULT_SETTINGS.default_waste_factor).toBe(0.12);
     expect(DEFAULT_SETTINGS.default_deposit_pct).toBe(0.5);
   });

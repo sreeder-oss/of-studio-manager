@@ -13,7 +13,7 @@ export const DEFAULT_TERMS_TEXT = Object.values(LEGAL_TERMS)
   .join('\n\n');
 
 export const DEFAULT_SETTINGS: Settings = {
-  default_tax_rate: 0.0875,
+  default_tax_rate: 0,
   default_overhead_pct: 0.15,
   default_profit_pct: 0.2,
   default_deposit_pct: 0.5,

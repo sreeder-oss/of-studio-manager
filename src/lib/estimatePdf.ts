@@ -269,7 +269,7 @@ function renderCover(ctx: RenderCtx): number {
     ['Materials', fmtCompact(est.sections.find((s) => /material/i.test(s.label))?.subtotal || 0)],
     ['Equipment', fmtCompact(est.sections.find((s) => /equipment|site/i.test(s.label))?.subtotal || 0)],
     ['Pre-tax', fmtCompact(est.total - est.tax_amount)],
-    ['Tax', fmtCompact(est.tax_amount)],
+    ...(est.tax_amount > 0 ? [['Tax', fmtCompact(est.tax_amount)] as [string, string]] : []),
     ['Per SF', est.per_sf > 0 ? `${fmt(est.per_sf)}/SF` : '—'],
     ['PROJECT TOTAL', fmtCompact(est.total)],
   ];

@@ -35,6 +35,15 @@ export const useEstimate = (id: string) => {
   });
 };
 
+/** UPDATE payload: only keys the caller actually passed (undefined is dropped, null is kept). */
+export function buildUpdatePayload(input: Record<string, unknown>, allowed: string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of allowed) {
+    if (k !== 'id' && input[k] !== undefined) out[k] = input[k];
+  }
+  return out;
+}
+
 type SaveEstimateInput = Partial<DbEstimate> &
   Pick<DbEstimateInsert, 'contact_id' | 'line_items' | 'subtotal' | 'total'>;
 
@@ -67,7 +76,7 @@ export const useSaveEstimate = () => {
       if (estimate.id) {
         const { data, error } = await supabase
           .from('estimates')
-          .update(payload)
+          .update(buildUpdatePayload(estimate, Object.keys(payload)) as DbEstimateUpdate)
           .eq('id', estimate.id)
           .select()
           .single();

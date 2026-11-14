@@ -43,7 +43,7 @@ const EstimateCreate: React.FC = () => {
     { id: '1', scope: '', materials: '', amount: 0 }
   ]);
   const [notes, setNotes] = useState('');
-  const [taxRate, setTaxRate] = useState(8.75);
+  const [taxRate, setTaxRate] = useState(0);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
   // Apply user defaults to new estimates once settings load
   useEffect(() => {

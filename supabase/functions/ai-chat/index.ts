@@ -438,8 +438,8 @@ INVOICE QUALITY BAR — every invoice must hit ALL of these:
    Final, or Retainer release. The PDF surfaces this prominently.
 
 4. **Numbers reconcile.** line.total = qty × unit_cost. section.subtotal =
-   sum of lines. subtotal = sum of sections. tax = subtotal × tax_rate%.
-   total = subtotal + tax. amount_paid = deposit_applied + sum(prior_payments).
+   sum of lines. subtotal = sum of sections.
+   total = subtotal. amount_paid = deposit_applied + sum(prior_payments).
    balance_due = total - amount_paid. The client app re-runs these but
    yours should already match.
 
@@ -623,7 +623,7 @@ Deno.serve(async (req: Request) => {
       if (sysResp.ok) systemsLibrary = await sysResp.json();
     } catch (e) { console.warn("systems fetch failed", e); }
 
-    const settings = { overhead_pct: 8, profit_pct: 10, tax_rate: 8.75, estimate_valid_days: 30 };
+    const settings = { overhead_pct: 8, profit_pct: 10, tax_rate: 0, estimate_valid_days: 30 };
     const systemPrompt = buildSystemPrompt(systemsLibrary, settings, body.currentPage, body.currentRecord);
 
     const hasImages = body.hasImages || body.messages.some((m) =>

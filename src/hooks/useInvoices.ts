@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 import { useAuthReady } from '@/hooks/useAuthReady';
+import { buildUpdatePayload } from '@/hooks/useEstimates';
 
 export type DbInvoice = Database['public']['Tables']['invoices']['Row'];
 export type DbInvoiceInsert = Database['public']['Tables']['invoices']['Insert'];
@@ -54,7 +55,7 @@ export const useSaveInvoice = () => {
         terms: invoice.terms ?? null,
       };
       if (invoice.id) {
-        const { data, error } = await supabase.from('invoices').update(payload).eq('id', invoice.id).select().single();
+        const { data, error } = await supabase.from('invoices').update(buildUpdatePayload(invoice, Object.keys(payload))).eq('id', invoice.id).select().single();
         if (error) throw error;
         return data;
       }
