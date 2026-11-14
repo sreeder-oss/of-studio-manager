@@ -151,7 +151,7 @@ export const ScopePreview: React.FC<{ initial: EstimateScope; onClose: () => voi
               <input className={`${inputCls} w-full`} placeholder="Substrate" value={a.substrate} onChange={e => update(i, { substrate: e.target.value })} />
               <textarea className={`${inputCls} w-full h-12 resize-none`} placeholder="Client-facing notes" value={a.notes} onChange={e => update(i, { notes: e.target.value })} />
               <div className="flex justify-between text-[11px]">
-                <span className="text-muted-foreground">{p?.rule_note || (sysById(a.system_id) ? '' : 'Needs a system to price')}</span>
+                <span className="text-muted-foreground">{(sysById(a.system_id) ? '' : 'Needs a system to price')}</span>
                 <span className="font-mono text-foreground">{money(p?.pre_tax || 0)}</span>
               </div>
             </div>
@@ -167,7 +167,7 @@ export const ScopePreview: React.FC<{ initial: EstimateScope; onClose: () => voi
           <div className="flex justify-between text-muted-foreground"><span>{pctLabel(settings.default_deposit_pct)}% Deposit</span><span>{money(depositAmount(pricing.total, settings.default_deposit_pct))}</span></div>
         </div>
 
-        <CostBreakdown b={pricing} ruleAdjustment={pricing.rule_adjustment} />
+        <CostBreakdown b={pricing} />
         <p className="text-[9px] text-muted-foreground">Scope read by {initial.model_used}. Prices calculated by the app from your Systems and Settings.</p>
       </div>
       <div className="p-3 border-t border-border">

@@ -8,17 +8,34 @@ import { useContacts } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useSaveEstimate, useEstimate } from '@/hooks/useEstimates';
 import { useSystems } from '@/hooks/useSystems';
-import { computeEstimatePricing } from '@/lib/pricing';
-import { CostBreakdown } from '@/components/CostBreakdown';
+import { useServices } from '@/hooks/useServices';
+import { priceLines, materialUnits, materialCost, r2, type EstimateLine } from '@/lib/pricing';
 import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSettings';
 import { toast } from 'sonner';
 
-interface LineItem {
+interface Area {
   id: string;
-  scope: string;
-  materials: string;
+  name: string;
+  service_id: string;
+  qty: number;
+  rate: number;
+  /** Optional system for materials (only when the service bills materials separately). */
+  system_id: string;
+  /** SF used for the materials quantity when the service is priced per day. */
+  materials_sf: number;
+  /** User override of the materials amount; null = use calculated. */
+  materials_amount: number | null;
+  note: string | null;
+}
+
+interface OtherLine {
+  id: string;
+  description: string;
   amount: number;
 }
+
+const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const emptyArea = (): Area => ({ id: newId(), name: '', service_id: '', qty: 0, rate: 0, system_id: '', materials_sf: 0, materials_amount: null, note: null });
 
 const EstimateCreate: React.FC = () => {
   const navigate = useNavigate();
@@ -35,13 +52,11 @@ const EstimateCreate: React.FC = () => {
   const [selectedContactId, setSelectedContactId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const { data: systems = [] } = useSystems();
-  const [systemId, setSystemId] = useState('');
-  const [areaSf, setAreaSf] = useState<number>(0);
+  const { data: services = [] } = useServices();
+  const [areas, setAreas] = useState<Area[]>([emptyArea()]);
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
-  const [lineItems, setLineItems] = useState<LineItem[]>([
-    { id: '1', scope: '', materials: '', amount: 0 }
-  ]);
+  const [otherLines, setOtherLines] = useState<OtherLine[]>([]);
   const [notes, setNotes] = useState('');
   const [taxRate, setTaxRate] = useState(0);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
@@ -62,15 +77,31 @@ const EstimateCreate: React.FC = () => {
     if (!isEdit || !existing) return;
     setSelectedContactId(existing.contact_id || '');
     setSelectedProjectId(existing.project_id || '');
-    setSystemId(existing.system_id || '');
-    setAreaSf(Number(existing.area_sf || 0));
     const items = Array.isArray(existing.line_items) ? (existing.line_items as any[]) : [];
-    if (items.length) {
-      setLineItems(items.map((li: any, i) => ({
+    const isNew = items.some((li: any) => li && (li.kind === 'service' || li.kind === 'materials' || li.kind === 'other'));
+    if (isNew) {
+      const byArea = new Map<string, Area>();
+      const others: OtherLine[] = [];
+      for (const li of items) {
+        if (li.kind === 'other') { others.push({ id: String(li.id ?? newId()), description: li.description ?? '', amount: Number(li.amount ?? 0) }); continue; }
+        const aid = String(li.area_id ?? li.id ?? newId());
+        const a = byArea.get(aid) ?? { ...emptyArea(), id: aid, name: li.area_name ?? '' };
+        if (li.kind === 'service') {
+          Object.assign(a, { service_id: li.service_id ?? '', qty: Number(li.qty ?? 0), rate: Number(li.rate ?? 0), note: li.note ?? null });
+        } else {
+          Object.assign(a, { system_id: li.system_id ?? '', materials_amount: Number(li.amount ?? 0), materials_sf: Number(li.materials_sf ?? 0) });
+        }
+        byArea.set(aid, a);
+      }
+      setAreas(byArea.size ? [...byArea.values()] : [emptyArea()]);
+      setOtherLines(others);
+    } else {
+      // Older estimates: load every line as an 'other' line at face value.
+      setAreas([]);
+      setOtherLines(items.map((li: any, i) => ({
         id: String(li.id ?? i + 1),
-        scope: li.scope ?? li.description ?? '',
-        materials: li.materials ?? '',
-        amount: Number(li.amount ?? 0),
+        description: [li.scope ?? li.description ?? li.label ?? '', li.materials ? `Materials: ${li.materials}` : ''].filter(Boolean).join('\n'),
+        amount: Number(li.amount ?? li.total ?? 0),
       })));
     }
     setNotes(existing.notes ?? '');
@@ -99,19 +130,59 @@ const EstimateCreate: React.FC = () => {
     }
   };
 
-  const updateItem = (index: number, field: keyof LineItem, value: any) => {
-    const newItems = [...lineItems];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setLineItems(newItems);
+  const updateArea = (id: string, patch: Partial<Area>) =>
+    setAreas(prev => prev.map(a => (a.id === id ? { ...a, ...patch } : a)));
+  const pickService = (id: string, serviceId: string) => {
+    const svc = services.find(s => s.id === serviceId);
+    updateArea(id, {
+      service_id: serviceId,
+      rate: svc ? Number(svc.rate_default) : 0,
+      ...(svc?.materials_included ? { system_id: '', materials_amount: null } : {}),
+    });
   };
+  const updateOther = (id: string, patch: Partial<OtherLine>) =>
+    setOtherLines(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)));
 
-  const subtotal = useMemo(() => lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0), [lineItems]);
   const taxFraction = (Number(taxRate) || 0) / 100;
-  const selectedSystem = systems.find(s => s.id === systemId) || null;
-  const pricing = useMemo(() => computeEstimatePricing({
-    system: selectedSystem as any, area_sf: areaSf, settings, extra_direct: subtotal, tax_rate: taxFraction,
-  }), [selectedSystem, areaSf, settings, subtotal, taxFraction]);
-  const tax = pricing.tax_amount;
+
+  /** Flatten areas + other lines into priced estimate lines. */
+  const rawLines = useMemo<EstimateLine[]>(() => {
+    const out: EstimateLine[] = [];
+    for (const a of areas) {
+      const svc = services.find(s => s.id === a.service_id);
+      if (!svc) continue;
+      const unit = svc.pricing_unit === 'day' ? 'day' : 'SF';
+      out.push({
+        id: `${a.id}-svc`, kind: 'service', service_id: svc.id, system_id: svc.system_id ?? null,
+        description: [a.name, svc.name].filter(Boolean).join(' — '),
+        qty: Number(a.qty) || 0, unit, rate: Number(a.rate) || 0, amount: 0, note: a.note,
+        area_id: a.id, area_name: a.name, materials_included: svc.materials_included,
+      });
+      if (!svc.materials_included && a.system_id) {
+        const sys = systems.find(s => s.id === a.system_id) || null;
+        const sf = unit === 'SF' ? Number(a.qty) || 0 : Number(a.materials_sf) || 0;
+        const units = materialUnits(sys as any, sf, settings.default_waste_factor);
+        const calc = materialCost(sys as any, sf, settings.default_waste_factor);
+        out.push({
+          id: `${a.id}-mat`, kind: 'materials', service_id: null, system_id: a.system_id,
+          description: `Materials at cost${sys ? ` — ${sys.name}` : ''}`,
+          qty: units, unit: 'lot', rate: Number(sys?.cost_per_unit) || 0,
+          amount: a.materials_amount != null ? a.materials_amount : calc, note: null,
+          area_id: a.id, area_name: a.name, ...(unit === 'day' ? { materials_sf: sf } : {}),
+        } as EstimateLine);
+      }
+    }
+    for (const l of otherLines) {
+      out.push({ id: l.id, kind: 'other', service_id: null, system_id: null, description: l.description, qty: 1, unit: 'lot', rate: Number(l.amount) || 0, amount: Number(l.amount) || 0, note: null });
+    }
+    return out;
+  }, [areas, otherLines, services, systems, settings.default_waste_factor]);
+
+  const pricing = useMemo(
+    () => priceLines(rawLines, services.map(s => ({ id: s.id, minimum_charge: Number(s.minimum_charge) })), taxFraction),
+    [rawLines, services, taxFraction],
+  );
+  const lineFor = (id: string) => pricing.lines.find(l => l.id === id);
   const total = pricing.total;
   const deposit = depositAmount(total, settings.default_deposit_pct);
 
@@ -120,33 +191,27 @@ const EstimateCreate: React.FC = () => {
       toast.error('Select a client first');
       return;
     }
-    if (!systemId && (!lineItems.length || lineItems.every(li => !li.scope && !li.amount))) {
-      toast.error('Pick a system and area, or add a line item');
-      return;
-    }
-    if (systemId && !(areaSf > 0)) {
-      toast.error('Enter the square footage for this system');
+    const items = pricing.lines.filter(l => l.amount !== 0 || (l.kind === 'service' && l.qty > 0));
+    if (!items.length) {
+      toast.error('Add an area with a service, or a line item');
       return;
     }
     try {
-      const items = lineItems.filter(li => (Number(li.amount) || 0) !== 0).map(li => ({
-        id: li.id,
-        description: `${li.scope || ''}${li.materials ? `\nMaterials: ${li.materials}` : ''}`,
-        scope: li.scope, materials: li.materials, amount: Number(li.amount) || 0,
-      }));
+      const sfTotal = r2(items.filter(l => l.kind === 'service' && l.unit === 'SF').reduce((s, l) => s + l.qty, 0));
+      const firstSystem = items.find(l => l.kind === 'materials')?.system_id ?? null;
       const saved = await saveEstimate.mutateAsync({
         ...(isEdit && existing ? { id: existing.id } : {}),
         contact_id: selectedContactId,
         project_id: selectedProjectId || null,
         line_items: items as any,
-        system_id: systemId || null,
-        area_sf: areaSf > 0 ? areaSf : null,
-        subtotal: pricing.pre_tax_total,
+        system_id: firstSystem,
+        area_sf: sfTotal > 0 ? sfTotal : null,
+        subtotal: pricing.subtotal,
         tax_rate: taxFraction,
-        direct_cost_subtotal: pricing.direct_cost_subtotal,
-        overhead_amount: pricing.overhead_amount,
-        profit_amount: pricing.profit_amount,
-        pre_tax_total: pricing.pre_tax_total,
+        direct_cost_subtotal: pricing.materials_total,
+        overhead_amount: 0,
+        profit_amount: 0,
+        pre_tax_total: pricing.subtotal,
         tax_amount: pricing.tax_amount,
         total: pricing.total,
         notes: notes || null,
@@ -174,7 +239,7 @@ const EstimateCreate: React.FC = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, selectedContactId, lineItems, systemId, areaSf, pricing, taxRate, validUntil, notes, selectedProjectId, saveEstimate.isPending]);
+  }, [step, selectedContactId, pricing, taxRate, validUntil, notes, selectedProjectId, saveEstimate.isPending]);
 
   if (isEdit && loadingExisting) {
     return <div className="text-center py-20 text-muted-foreground text-sm">Loading...</div>;
@@ -264,43 +329,99 @@ const EstimateCreate: React.FC = () => {
         </button>
       </div>
 
-      <div className="bg-card p-3 rounded-xl border border-border space-y-2">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">System & Area</p>
-        <div className="flex gap-2">
-          <select value={systemId} onChange={e => setSystemId(e.target.value)}
-            className="flex-1 bg-accent border border-border rounded-lg p-2 text-foreground text-xs outline-none">
-            <option value="">No system (line items only)</option>
-            {systems.filter(s => s.is_active !== false || s.id === systemId).map(s => (
-              <option key={s.id} value={s.id}>{s.name}{s.manufacturer ? ` — ${s.manufacturer}` : ''}</option>
-            ))}
-          </select>
-          <input type="number" inputMode="decimal" min="0" placeholder="SF"
-            className="w-24 bg-accent border border-border rounded-lg p-2 text-right text-foreground text-xs outline-none"
-            value={areaSf || ''} onChange={e => setAreaSf(e.target.value === '' ? 0 : parseFloat(e.target.value))} />
-        </div>
-        {selectedSystem && !(Number(selectedSystem.coverage_rate) > 0 && Number(selectedSystem.cost_per_unit) >= 0 && selectedSystem.labor_rate_per_sf != null) && (
-          <p className="text-[10px] text-warning">This system is missing coverage, cost per unit or labor rate — fill them in on the Systems page for accurate pricing.</p>
-        )}
-        <p className="text-[10px] text-muted-foreground">Line items below are added as extra direct costs before overhead and profit.</p>
+      <div className="space-y-3">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Areas</p>
+        {areas.map(a => {
+          const svc = services.find(s => s.id === a.service_id);
+          const unitWord = svc?.pricing_unit === 'day' ? 'days' : 'SF';
+          const svcLine = lineFor(`${a.id}-svc`);
+          const matLine = lineFor(`${a.id}-mat`);
+          const outOfRange = svc && (Number(a.rate) < Number(svc.rate_low) || Number(a.rate) > Number(svc.rate_high));
+          const sys = systems.find(s => s.id === a.system_id);
+          return (
+            <div key={a.id} className="bg-card p-3 rounded-xl border border-border space-y-2">
+              <div className="flex gap-2 items-center">
+                <input placeholder="Area name (e.g. Primary shower)" value={a.name} onChange={e => updateArea(a.id, { name: e.target.value })}
+                  className="flex-1 bg-accent border border-border rounded-lg p-2 text-foreground text-xs outline-none" />
+                <button onClick={() => setAreas(areas.filter(x => x.id !== a.id))} className="text-destructive p-1.5" aria-label="Remove area"><Trash2 size={14} /></button>
+              </div>
+              <select value={a.service_id} onChange={e => pickService(a.id, e.target.value)}
+                className="w-full bg-accent border border-border rounded-lg p-2 text-foreground text-xs outline-none">
+                <option value="">Pick a service…</option>
+                {services.filter(s => s.is_active || s.id === a.service_id).map(s => (
+                  <option key={s.id} value={s.id}>{s.name} — ${Number(s.rate_default).toLocaleString()} {s.pricing_unit === 'day' ? 'per day' : 'per SF'}</option>
+                ))}
+              </select>
+              {svc && (
+                <>
+                  <div className="flex gap-2 items-center text-[11px]">
+                    <input type="number" inputMode="decimal" min="0" value={a.qty || ''} placeholder={unitWord}
+                      onChange={e => updateArea(a.id, { qty: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
+                      className="w-20 bg-accent border border-border rounded-lg p-2 text-right text-foreground text-xs outline-none" />
+                    <span className="text-muted-foreground">{unitWord} ×</span>
+                    <span className="text-muted-foreground">$</span>
+                    <input type="number" inputMode="decimal" min="0" step="0.01" value={Number.isFinite(a.rate) ? a.rate : 0}
+                      onChange={e => updateArea(a.id, { rate: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
+                      className="w-20 bg-accent border border-border rounded-lg p-2 text-right text-foreground text-xs outline-none" />
+                    <span className="text-muted-foreground">{svc.pricing_unit === 'day' ? '/day' : '/SF'}</span>
+                    <span className="ml-auto font-mono text-primary text-xs">${(svcLine?.amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  {svc.materials_included && <span className="inline-block text-[9px] uppercase tracking-widest font-bold text-primary border border-primary/40 rounded px-1.5 py-0.5">Materials included</span>}
+                  {outOfRange && <p className="text-[10px] text-warning">Rate is outside your usual ${Number(svc.rate_low).toLocaleString()}–${Number(svc.rate_high).toLocaleString()} range.</p>}
+                  {svcLine?.note && <p className="text-[10px] text-warning">{svcLine.note}</p>}
+                  {!svc.materials_included && (
+                    <div className="space-y-1.5 border-t border-border pt-2">
+                      <select value={a.system_id} onChange={e => updateArea(a.id, { system_id: e.target.value, materials_amount: null })}
+                        className="w-full bg-accent border border-border rounded-lg p-2 text-foreground text-xs outline-none">
+                        <option value="">No materials line (optional: pick a system)</option>
+                        {systems.filter(s => s.is_active !== false || s.id === a.system_id).map(s => (
+                          <option key={s.id} value={s.id}>{s.name}{s.manufacturer ? ` — ${s.manufacturer}` : ''}</option>
+                        ))}
+                      </select>
+                      {a.system_id && svc.pricing_unit === 'day' && (
+                        <div className="flex gap-2 items-center text-[10px] text-muted-foreground">
+                          <span>SF for materials</span>
+                          <input type="number" inputMode="decimal" min="0" value={a.materials_sf || ''}
+                            onChange={e => updateArea(a.id, { materials_sf: e.target.value === '' ? 0 : parseFloat(e.target.value), materials_amount: null })}
+                            className="w-20 bg-accent border border-border rounded-lg p-1.5 text-right text-foreground text-xs outline-none" />
+                        </div>
+                      )}
+                      {matLine && (
+                        <div className="flex gap-2 items-center text-[11px]">
+                          <span className="text-muted-foreground flex-1">Materials at cost{matLine.qty ? ` · ${matLine.qty} ${sys?.coverage_unit || 'units'}` : ''}</span>
+                          <span className="text-muted-foreground">$</span>
+                          <input type="number" inputMode="decimal" min="0" step="0.01" value={matLine.amount}
+                            onChange={e => updateArea(a.id, { materials_amount: e.target.value === '' ? 0 : parseFloat(e.target.value) })}
+                            className="w-24 bg-accent border border-border rounded-lg p-1.5 text-right text-primary font-mono text-xs outline-none" />
+                        </div>
+                      )}
+                      {sys && !(Number(sys.coverage_rate) > 0 && sys.cost_per_unit != null) && (
+                        <p className="text-[10px] text-warning">This system is missing coverage or cost per unit — enter the materials amount yourself or fill them in on the Systems page.</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
+        <button onClick={() => setAreas([...areas, emptyArea()])}
+          className="w-full py-2 border border-dashed border-border text-muted-foreground rounded-xl hover:text-foreground text-[10px] uppercase tracking-widest font-bold">+ Add Area</button>
       </div>
 
       <div className="space-y-3">
-        {lineItems.map((item, index) => (
-          <div key={item.id} className="bg-card p-3 rounded-xl border border-border">
-            <textarea placeholder="Scope of Work..." className="w-full bg-accent border border-border rounded-lg p-2 text-foreground text-[11px] mb-1.5 outline-none resize-none h-12"
-              value={item.scope} onChange={e => updateItem(index, 'scope', e.target.value)} />
-            <div className="flex gap-2 items-center">
-              <input placeholder="Materials..." className="flex-1 bg-accent border border-border rounded-lg p-2 text-foreground text-[11px] outline-none"
-                value={item.materials} onChange={e => updateItem(index, 'materials', e.target.value)} />
-              <span className="text-muted-foreground text-[10px]">$</span>
-              <input type="number" inputMode="decimal" className="bg-accent border border-border rounded-lg p-1.5 text-right text-primary font-mono text-xs w-20 outline-none"
-                value={Number.isFinite(item.amount) ? item.amount : 0}
-                onChange={e => updateItem(index, 'amount', e.target.value === '' ? 0 : parseFloat(e.target.value))} />
-              <button onClick={() => setLineItems(lineItems.filter((_, i) => i !== index))} className="text-destructive p-1.5"><Trash2 size={14} /></button>
-            </div>
+        {otherLines.map(l => (
+          <div key={l.id} className="bg-card p-3 rounded-xl border border-border flex gap-2 items-start">
+            <textarea placeholder="Line item description..." className="flex-1 bg-accent border border-border rounded-lg p-2 text-foreground text-[11px] outline-none resize-none h-12"
+              value={l.description} onChange={e => updateOther(l.id, { description: e.target.value })} />
+            <span className="text-muted-foreground text-[10px] pt-2">$</span>
+            <input type="number" inputMode="decimal" step="0.01" className="bg-accent border border-border rounded-lg p-1.5 text-right text-primary font-mono text-xs w-24 outline-none"
+              value={Number.isFinite(l.amount) ? l.amount : 0}
+              onChange={e => updateOther(l.id, { amount: e.target.value === '' ? 0 : parseFloat(e.target.value) })} />
+            <button onClick={() => setOtherLines(otherLines.filter(x => x.id !== l.id))} className="text-destructive p-1.5" aria-label="Remove line"><Trash2 size={14} /></button>
           </div>
         ))}
-        <button onClick={() => setLineItems([...lineItems, { id: Date.now().toString(), scope: '', materials: '', amount: 0 }])}
+        <button onClick={() => setOtherLines([...otherLines, { id: newId(), description: '', amount: 0 }])}
           className="w-full py-2 border border-dashed border-border text-muted-foreground rounded-xl hover:text-foreground text-[10px] uppercase tracking-widest font-bold">+ Add Line Item</button>
       </div>
 
@@ -315,7 +436,17 @@ const EstimateCreate: React.FC = () => {
           <input type="date" className="bg-accent border border-border rounded px-2 py-1 text-xs text-foreground outline-none"
             value={validUntil} onChange={e => setValidUntil(e.target.value)} />
         </div>
-        <div className="flex justify-between text-lg font-serif text-primary pt-2 border-t border-border">
+        <div className="flex justify-between text-xs text-muted-foreground pt-2 border-t border-border">
+          <span>Subtotal</span>
+          <span>${pricing.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+        </div>
+        {pricing.tax_amount > 0 && (
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Tax</span>
+            <span>${pricing.tax_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+        )}
+        <div className="flex justify-between text-lg font-serif text-primary">
           <span className="text-sm">Estimate Total</span>
           <span className="text-base">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
         </div>
@@ -324,8 +455,6 @@ const EstimateCreate: React.FC = () => {
           <span>${deposit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
         </div>
       </div>
-
-      <CostBreakdown b={pricing} systemName={selectedSystem?.name} />
 
       <div>
         <label className="block text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Notes</label>

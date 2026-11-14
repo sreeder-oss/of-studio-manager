@@ -6,7 +6,7 @@ const money = (n: number) => `$${Number(n || 0).toLocaleString(undefined, { mini
 const pct = (f: number) => `${+(Number(f || 0) * 100).toFixed(2)}%`;
 
 /** Internal-only cost breakdown. Never rendered into the client PDF. */
-export const CostBreakdown: React.FC<{ b: Partial<PricingBreakdown>; systemName?: string | null; ruleAdjustment?: number }> = ({ b, systemName, ruleAdjustment }) => {
+export const CostBreakdown: React.FC<{ b: Partial<PricingBreakdown>; systemName?: string | null}> = ({ b, systemName }) => {
   const Row = ({ label, value, strong }: { label: string; value: string; strong?: boolean }) => (
     <div className={`flex justify-between text-xs ${strong ? 'text-foreground font-bold' : 'text-muted-foreground'}`}>
       <span>{label}</span><span className="font-mono">{value}</span>
@@ -28,7 +28,6 @@ export const CostBreakdown: React.FC<{ b: Partial<PricingBreakdown>; systemName?
       <Row label="Direct cost" value={money(b.direct_cost_subtotal ?? 0)} strong />
       <Row label={`Overhead${b.overhead_pct != null ? ` (${pct(b.overhead_pct)})` : ''}`} value={money(b.overhead_amount ?? 0)} />
       <Row label={`Profit${b.profit_pct != null ? ` (${pct(b.profit_pct)})` : ''}`} value={money(b.profit_amount ?? 0)} />
-      {!!ruleAdjustment && <Row label="Tadelakt $/SF rule adjustment" value={money(ruleAdjustment)} />}
       {!!b.min_charge_adjustment && <Row label={`Minimum charge adjustment (${money(b.min_charge ?? 0)})`} value={money(b.min_charge_adjustment)} />}
       <Row label="Pre-tax total" value={money(b.pre_tax_total ?? 0)} strong />
       <Row label={`Tax${b.tax_rate != null ? ` (${pct(b.tax_rate)})` : ''}`} value={money(b.tax_amount ?? 0)} />

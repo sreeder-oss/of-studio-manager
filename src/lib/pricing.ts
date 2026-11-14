@@ -1,6 +1,10 @@
 /**
  * Deterministic estimate pricing. All money math lives here — the AI never sets prices.
- * Rates are fractions (0.12 = 12%).
+ *
+ * Pricing model (price book):
+ *  - Labor is a flat rate per SF or per day from the services table; profit is inside that rate.
+ *  - Materials pass through at cost, no markup.
+ *  - No overhead %, profit %, sundries % or hidden adjustments on the client price.
  */
 export interface PricingSystem {
   coverage_rate: number | null;   // SF per unit
@@ -19,16 +23,6 @@ export interface PricingSettings {
   default_waste_factor: number;
   sundries_pct: number;
   minimum_charge: number;
-}
-
-export interface PricingInput {
-  system: PricingSystem | null;
-  area_sf: number;
-  settings: PricingSettings;
-  /** Extra direct costs from manual line items (added before overhead/profit). */
-  extra_direct?: number;
-  /** Overrides settings.default_tax_rate when provided. */
-  tax_rate?: number;
 }
 
 export interface PricingBreakdown {
@@ -52,57 +46,95 @@ export interface PricingBreakdown {
   per_sf: number;
 }
 
-const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+export const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const num = (v: unknown, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
 
-export function computeEstimatePricing({ system, area_sf, settings, extra_direct = 0, tax_rate }: PricingInput): PricingBreakdown {
-  const area = Math.max(0, num(area_sf));
+/* ------------------------------------------------------------------ */
+/* Materials quantity (coverage × coats × waste)                        */
+/* ------------------------------------------------------------------ */
+
+/** units = (area_sf ÷ coverage_rate) × coats × (1 + waste_factor). */
+export function materialUnits(system: PricingSystem | null, area_sf: number, default_waste = 0.12): number {
   const coverage = num(system?.coverage_rate);
-  const coats = num(system?.coats, 1) || 1;
-  const waste = system?.waste_factor != null ? num(system.waste_factor) : num(settings.default_waste_factor);
-  const sundriesPct = system?.sundries_pct != null ? num(system.sundries_pct) : num(settings.sundries_pct);
+  if (!system || coverage <= 0) return 0;
+  const coats = num(system.coats, 1) || 1;
+  const waste = system.waste_factor != null ? num(system.waste_factor) : num(default_waste);
+  return Math.round(((Math.max(0, num(area_sf)) / coverage) * coats * (1 + waste)) * 100) / 100;
+}
 
-  const units = system && coverage > 0 ? (area / coverage) * coats * (1 + waste) : 0;
-  const material = r2(units * num(system?.cost_per_unit));
-  const labor = r2(system ? area * num(system.labor_rate_per_sf) : 0);
-  const sundries = r2((material + labor) * sundriesPct);
-  const extra = r2(Math.max(0, num(extra_direct)));
-  const direct = r2(material + labor + sundries + extra);
+/** Materials at cost = units × cost_per_unit (no markup). */
+export function materialCost(system: PricingSystem | null, area_sf: number, default_waste = 0.12): number {
+  const units = materialUnits(system, area_sf, default_waste);
+  return r2(units * num(system?.cost_per_unit));
+}
 
-  const ohPct = num(settings.default_overhead_pct);
-  const prPct = num(settings.default_profit_pct);
-  const overhead = r2(direct * ohPct);
-  const profit = r2((direct + overhead) * prPct);
-  const computedPreTax = r2(direct + overhead + profit);
+/* ------------------------------------------------------------------ */
+/* Price-book line pricing                                              */
+/* ------------------------------------------------------------------ */
 
-  const minCharge = system?.min_charge != null ? num(system.min_charge) : num(settings.minimum_charge);
-  const preTax = direct > 0 ? Math.max(computedPreTax, minCharge) : computedPreTax;
-  const minAdj = r2(preTax - computedPreTax);
+export type LineKind = 'service' | 'materials' | 'other';
+export type LineUnit = 'SF' | 'day' | 'lot';
 
-  const taxRate = tax_rate != null ? num(tax_rate) : num(settings.default_tax_rate);
-  const tax = r2(preTax * taxRate);
-  const total = r2(preTax + tax);
+export interface EstimateLine {
+  id: string;
+  kind: LineKind;
+  service_id: string | null;
+  system_id: string | null;
+  description: string;
+  qty: number;
+  unit: LineUnit;
+  rate: number;
+  amount: number;
+  note: string | null;
+  /** Grouping for the editor; optional. */
+  area_id?: string | null;
+  area_name?: string | null;
+  materials_included?: boolean;
+}
 
-  return {
-    area_sf: area,
-    units_needed: Math.round(units * 100) / 100,
-    material_cost: material,
-    labor_cost: labor,
-    sundries_cost: sundries,
-    extra_direct: extra,
-    direct_cost_subtotal: direct,
-    overhead_pct: ohPct,
-    overhead_amount: overhead,
-    profit_pct: prPct,
-    profit_amount: profit,
-    min_charge: minCharge,
-    min_charge_adjustment: minAdj,
-    pre_tax_total: r2(preTax),
-    tax_rate: taxRate,
-    tax_amount: tax,
-    total,
-    per_sf: area > 0 ? r2(total / area) : 0,
-  };
+export interface PriceBookService {
+  id: string;
+  minimum_charge: number | null;
+}
+
+export interface LinePricing {
+  lines: EstimateLine[];
+  service_total: number;
+  materials_total: number;
+  other_total: number;
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  total: number;
+}
+
+/**
+ * Price an estimate from lines.
+ *  - service: amount = qty × rate (cents); raised to the service minimum_charge if below it.
+ *  - materials: amount is cost, no markup.
+ *  - other: amount exactly as typed.
+ */
+export function priceLines(lines: EstimateLine[], services: PriceBookService[], tax_rate: number): LinePricing {
+  const byId = new Map(services.map((s) => [s.id, s]));
+  const out = lines.map((l): EstimateLine => {
+    if (l.kind === 'service') {
+      const raw = r2(num(l.qty) * num(l.rate));
+      const min = num(l.service_id ? byId.get(l.service_id)?.minimum_charge : 0);
+      if (min > 0 && num(l.qty) > 0 && raw < min) {
+        return { ...l, amount: r2(min), note: `Raised to $${min.toLocaleString(undefined, { minimumFractionDigits: 2 })} minimum charge` };
+      }
+      return { ...l, amount: raw, note: l.note && /minimum charge/i.test(l.note) ? null : l.note };
+    }
+    return { ...l, amount: r2(num(l.amount)) };
+  });
+  const sum = (k: LineKind) => r2(out.filter((l) => l.kind === k).reduce((s, l) => s + l.amount, 0));
+  const service_total = sum('service');
+  const materials_total = sum('materials');
+  const other_total = sum('other');
+  const subtotal = r2(out.reduce((s, l) => s + l.amount, 0));
+  const rate = Math.max(0, num(tax_rate));
+  const tax_amount = r2(subtotal * rate);
+  return { lines: out, service_total, materials_total, other_total, subtotal, tax_rate: rate, tax_amount, total: r2(subtotal + tax_amount) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -125,81 +157,45 @@ export interface AreaPricing {
   sundries_cost: number;
   direct_cost: number;
   computed_pre_tax: number;
-  /** Adjustment from a per-SF floor/ceiling rule (e.g. Tadelakt $55–$60/SF all-in). */
-  rule_adjustment: number;
-  rule_note: string | null;
   pre_tax: number;
 }
 
 export interface ScopePricing extends Omit<PricingBreakdown, 'extra_direct'> {
   areas: AreaPricing[];
-  rule_adjustment: number;
 }
 
-/** Tadelakt is always $55–$60/SF all-in (incl. tax), regardless of manufacturer. */
-export const TADELAKT_MIN_PER_SF = 55;
-export const TADELAKT_MAX_PER_SF = 60;
-export const isTadelakt = (name?: string | null) => /tadelakt/i.test(name || '');
-
+/** Materials at cost + labor at the system's per-SF rate. No overhead, profit, sundries or adjustments. */
 export function computeScopePricing(areas: ScopeAreaInput[], settings: PricingSettings, tax_rate?: number): ScopePricing {
   const taxRate = tax_rate != null ? num(tax_rate) : num(settings.default_tax_rate);
-  const ohPct = num(settings.default_overhead_pct);
-  const prPct = num(settings.default_profit_pct);
-
   const out: AreaPricing[] = areas.map((a) => {
-    const p = computeEstimatePricing({ system: a.system ? { ...a.system, min_charge: null } : null, area_sf: a.area_sf, settings: { ...settings, minimum_charge: 0 }, tax_rate: taxRate });
-    let preTax = p.pre_tax_total;
-    let note: string | null = null;
-    if (isTadelakt(a.system?.name) && p.area_sf > 0) {
-      const minPre = r2((TADELAKT_MIN_PER_SF * p.area_sf) / (1 + taxRate));
-      const maxPre = r2((TADELAKT_MAX_PER_SF * p.area_sf) / (1 + taxRate));
-      if (preTax < minPre) { preTax = minPre; note = `Raised to Tadelakt floor of $${TADELAKT_MIN_PER_SF}/SF all-in`; }
-      else if (preTax > maxPre) { preTax = maxPre; note = `Capped at Tadelakt ceiling of $${TADELAKT_MAX_PER_SF}/SF all-in`; }
-    }
+    const sf = Math.max(0, num(a.area_sf));
+    const units = materialUnits(a.system, sf, settings.default_waste_factor);
+    const material = materialCost(a.system, sf, settings.default_waste_factor);
+    const labor = r2(a.system ? sf * num(a.system.labor_rate_per_sf) : 0);
+    const direct = r2(material + labor);
     return {
-      name: a.name, area_sf: p.area_sf, system_name: a.system?.name ?? null,
-      units_needed: p.units_needed, material_cost: p.material_cost, labor_cost: p.labor_cost,
-      sundries_cost: p.sundries_cost, direct_cost: p.direct_cost_subtotal,
-      computed_pre_tax: p.pre_tax_total, rule_adjustment: r2(preTax - p.pre_tax_total), rule_note: note, pre_tax: preTax,
+      name: a.name, area_sf: sf, system_name: a.system?.name ?? null,
+      units_needed: units, material_cost: material, labor_cost: labor, sundries_cost: 0,
+      direct_cost: direct, computed_pre_tax: direct, pre_tax: direct,
     };
   });
-
   const sum = (k: keyof AreaPricing) => r2(out.reduce((s, a) => s + Number(a[k] || 0), 0));
   const area = sum('area_sf');
-  const direct = sum('direct_cost');
-  const overhead = r2(direct * ohPct);
-  const profit = r2((direct + overhead) * prPct);
-  const ruleAdj = sum('rule_adjustment');
-  const afterRules = sum('pre_tax');
-
-  const systemMins = areas.map((a) => a.system?.min_charge).filter((v): v is number => v != null).map(Number);
-  const minCharge = systemMins.length ? Math.max(...systemMins) : num(settings.minimum_charge);
-  const preTax = direct > 0 ? Math.max(afterRules, minCharge) : afterRules;
-  const minAdj = r2(preTax - afterRules);
-  // Spread min-charge adjustment across areas proportionally so line items reconcile.
-  if (minAdj > 0 && afterRules > 0) {
-    let left = minAdj;
-    out.forEach((a, i) => {
-      const share = i === out.length - 1 ? left : r2(minAdj * (a.pre_tax / afterRules));
-      a.pre_tax = r2(a.pre_tax + share); left = r2(left - share);
-    });
-  }
+  const preTax = sum('pre_tax');
   const tax = r2(preTax * taxRate);
   const total = r2(preTax + tax);
-
   return {
     areas: out,
     area_sf: area,
     units_needed: sum('units_needed'),
     material_cost: sum('material_cost'),
     labor_cost: sum('labor_cost'),
-    sundries_cost: sum('sundries_cost'),
-    direct_cost_subtotal: direct,
-    overhead_pct: ohPct, overhead_amount: overhead,
-    profit_pct: prPct, profit_amount: profit,
-    rule_adjustment: ruleAdj,
-    min_charge: minCharge, min_charge_adjustment: minAdj,
-    pre_tax_total: r2(preTax),
+    sundries_cost: 0,
+    direct_cost_subtotal: sum('direct_cost'),
+    overhead_pct: 0, overhead_amount: 0,
+    profit_pct: 0, profit_amount: 0,
+    min_charge: 0, min_charge_adjustment: 0,
+    pre_tax_total: preTax,
     tax_rate: taxRate, tax_amount: tax, total,
     per_sf: area > 0 ? r2(total / area) : 0,
   };

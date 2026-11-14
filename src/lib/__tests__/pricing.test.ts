@@ -1,56 +1,51 @@
 import { describe, it, expect } from 'vitest';
-import { computeEstimatePricing } from '@/lib/pricing';
+import { priceLines, materialCost, materialUnits, type EstimateLine } from '@/lib/pricing';
 
-const settings = {
-  default_overhead_pct: 0.15, default_profit_pct: 0.2, default_tax_rate: 0.0875,
-  default_waste_factor: 0.12, sundries_pct: 0.05, minimum_charge: 0,
-};
-const system = { coverage_rate: 100, coats: 2, cost_per_unit: 50, labor_rate_per_sf: 10, waste_factor: 0.12, sundries_pct: 0.05, min_charge: null };
-
-describe('computeEstimatePricing', () => {
-  const p = computeEstimatePricing({ system, area_sf: 300, settings });
-  it('units = (area ÷ coverage) × coats × (1 + waste)', () => expect(p.units_needed).toBe(6.72));
-  it('material = units × cost per unit', () => expect(p.material_cost).toBe(336));
-  it('labor = area × labor rate', () => expect(p.labor_cost).toBe(3000));
-  it('direct = material + labor + sundries', () => {
-    expect(p.sundries_cost).toBe(166.8);
-    expect(p.direct_cost_subtotal).toBe(3502.8);
-  });
-  it('applies overhead, profit, then tax', () => {
-    expect(p.overhead_amount).toBe(525.42);
-    expect(p.profit_amount).toBe(805.64);
-    expect(p.pre_tax_total).toBe(4833.86);
-    expect(p.tax_amount).toBe(422.96);
-    expect(p.total).toBe(5256.82);
-  });
-  it('enforces the system minimum charge before tax', () => {
-    const m = computeEstimatePricing({ system: { ...system, min_charge: 10000 }, area_sf: 300, settings });
-    expect(m.pre_tax_total).toBe(10000);
-    expect(m.total).toBe(10875);
-  });
-  it('falls back to the settings minimum charge', () => {
-    const m = computeEstimatePricing({ system, area_sf: 10, settings: { ...settings, minimum_charge: 1500 } });
-    expect(m.pre_tax_total).toBe(1500);
-  });
+const line = (p: Partial<EstimateLine>): EstimateLine => ({
+  id: 'x', kind: 'service', service_id: null, system_id: null, description: '', qty: 0, unit: 'SF', rate: 0, amount: 0, note: null, ...p,
 });
+const services = [
+  { id: 'tad', minimum_charge: 0 },
+  { id: 'hood', minimum_charge: 0 },
+  { id: 'paint', minimum_charge: 300 },
+];
 
-import { computeScopePricing } from '@/lib/pricing';
-describe('computeScopePricing', () => {
-  it('sums two areas and line items reconcile with pre-tax', () => {
-    const p = computeScopePricing([
-      { name: 'Entry', area_sf: 150, system },
-      { name: 'Den', area_sf: 150, system },
-    ], settings);
-    expect(p.direct_cost_subtotal).toBe(3502.8);
-    expect(+(p.areas[0].pre_tax + p.areas[1].pre_tax).toFixed(2)).toBe(p.pre_tax_total);
+describe('priceLines', () => {
+  it('SF service: 300 SF × $42.50 = $12,750', () => {
+    const p = priceLines([line({ service_id: 'tad', qty: 300, unit: 'SF', rate: 42.5 })], services, 0);
+    expect(p.lines[0].amount).toBe(12750);
+    expect(p.subtotal).toBe(12750);
   });
-  it('raises Tadelakt to at least $55/SF all-in', () => {
-    const p = computeScopePricing([{ name: 'Shower', area_sf: 300, system: { ...system, name: 'NAA Tadelakt' } }], settings);
-    expect(p.total).toBeGreaterThanOrEqual(16500 - 0.01);
-    expect(p.total).toBeLessThanOrEqual(16500.01);
+  it('day-rate service: 2 days × $850 = $1,700', () => {
+    const p = priceLines([line({ service_id: 'hood', qty: 2, unit: 'day', rate: 850 })], services, 0);
+    expect(p.lines[0].amount).toBe(1700);
   });
-  it('caps Tadelakt at $60/SF all-in', () => {
-    const p = computeScopePricing([{ name: 'Shower', area_sf: 100, system: { ...system, labor_rate_per_sf: 200, name: 'Tadelakt' } }], settings);
-    expect(p.total).toBeLessThanOrEqual(6000.01);
+  it('minimum charge raises amount and sets a note', () => {
+    const p = priceLines([line({ service_id: 'paint', qty: 100, rate: 1 })], services, 0);
+    expect(p.lines[0].amount).toBe(300);
+    expect(p.lines[0].note).toMatch(/minimum/i);
+  });
+  it('materials line passes through at cost with no markup', () => {
+    const sys = { coverage_rate: 100, coats: 2, cost_per_unit: 50, labor_rate_per_sf: null, waste_factor: 0.12 };
+    expect(materialUnits(sys, 300)).toBe(6.72);
+    expect(materialCost(sys, 300)).toBe(336);
+    const p = priceLines([line({ kind: 'materials', amount: 336, unit: 'lot' })], services, 0);
+    expect(p.materials_total).toBe(336);
+    expect(p.subtotal).toBe(336);
+  });
+  it("'other' line at face value", () => {
+    const p = priceLines([line({ kind: 'other', amount: 123.45, unit: 'lot' })], services, 0);
+    expect(p.subtotal).toBe(123.45);
+    expect(p.total).toBe(123.45);
+  });
+  it('zero tax: total equals subtotal', () => {
+    const p = priceLines([line({ service_id: 'tad', qty: 100, rate: 42.5 }), line({ kind: 'other', amount: 50 })], services, 0);
+    expect(p.tax_amount).toBe(0);
+    expect(p.total).toBe(4300);
+  });
+  it('tax applies to subtotal when set', () => {
+    const p = priceLines([line({ kind: 'other', amount: 1000 })], services, 0.1);
+    expect(p.tax_amount).toBe(100);
+    expect(p.total).toBe(1100);
   });
 });
