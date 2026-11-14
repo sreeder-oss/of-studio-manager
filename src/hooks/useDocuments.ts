@@ -47,9 +47,18 @@ export const useSaveDocument = () => {
 export const useDeleteDocument = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, path }: { id: string; path?: string | null }) => {
       const { error } = await supabase.from('documents').delete().eq('id', id);
       if (error) throw error;
+      let key = path || null;
+      if (key && /^https?:\/\//.test(key)) {
+        const m = key.match(/\/of-documents\/(.+)$/);
+        key = m ? decodeURIComponent(m[1].split('?')[0]) : null;
+      }
+      if (key) {
+        const { error: sErr } = await supabase.storage.from('of-documents').remove([key]);
+        if (sErr) throw sErr;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['documents'] }),
   });

@@ -41,9 +41,14 @@ export const useSavePhoto = () => {
 export const useDeletePhoto = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, path }: { id: string; path?: string | null }) => {
       const { error } = await supabase.from('photos').delete().eq('id', id);
       if (error) throw error;
+      const key = path ? photoStoragePath(path) : null;
+      if (key) {
+        const { error: sErr } = await supabase.storage.from('of-photos').remove([key]);
+        if (sErr) throw sErr;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['photos'] }),
   });
@@ -54,6 +59,23 @@ export const uploadProjectPhoto = async (userId: string, file: File): Promise<st
   const path = `${userId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from('of-photos').upload(path, file);
   if (error) throw error;
-  const { data } = supabase.storage.from('of-photos').getPublicUrl(path);
-  return data.publicUrl;
+  return path;
+};
+
+/** Stored value (path or legacy public URL) -> storage path inside of-photos. */
+export const photoStoragePath = (pathOrUrl: string): string | null => {
+  if (/^https?:\/\//.test(pathOrUrl)) {
+    const m = pathOrUrl.match(/\/of-photos\/(.+)$/);
+    return m ? decodeURIComponent(m[1].split('?')[0]) : null;
+  }
+  return pathOrUrl;
+};
+
+/** Resolve a stored photo value to a signed URL valid for one hour. */
+export const getPhotoUrl = async (pathOrUrl: string): Promise<string> => {
+  const key = photoStoragePath(pathOrUrl);
+  if (!key) return pathOrUrl;
+  const { data, error } = await supabase.storage.from('of-photos').createSignedUrl(key, 3600);
+  if (error) throw error;
+  return data.signedUrl;
 };

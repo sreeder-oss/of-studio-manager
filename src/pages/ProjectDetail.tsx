@@ -50,6 +50,7 @@ const ProjectDetail: React.FC = () => {
   const [photoPhase, setPhotoPhase] = useState('During');
   const docFileRef = useRef<HTMLInputElement>(null);
   const photoFileRef = useRef<HTMLInputElement>(null);
+  const photoCameraRef = useRef<HTMLInputElement>(null);
 
   const project = projects.find(p => p.id === id);
   const contact = contacts.find(c => c.id === project?.contact_id);
@@ -294,7 +295,11 @@ const ProjectDetail: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {doc.file_url && <SignedLink bucket="of-documents" path={doc.file_url} className="text-primary text-[9px] font-bold uppercase tracking-widest hover:underline">View</SignedLink>}
-                <button onClick={() => { deleteDocMut.mutateAsync(doc.id); toast.success('Deleted'); }} className="text-destructive/50 hover:text-destructive"><Trash2 size={12} /></button>
+                <button aria-label="Delete document" onClick={async () => {
+                  if (!confirm(`Delete "${doc.label}"? The file will be removed too.`)) return;
+                  try { await deleteDocMut.mutateAsync({ id: doc.id, path: doc.file_url }); toast.success('Document deleted'); }
+                  catch { toast.error('Failed to delete document'); }
+                }} className="text-destructive/50 hover:text-destructive"><Trash2 size={12} /></button>
               </div>
             </div>
           ))}
@@ -312,11 +317,18 @@ const ProjectDetail: React.FC = () => {
                 {['Before', 'During', 'After'].map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => photoFileRef.current?.click()} disabled={uploadingPhoto}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent border border-border rounded-xl text-foreground text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-all disabled:opacity-50">
-              <Camera size={14} /> {uploadingPhoto ? 'Uploading...' : 'Add Photo'}
-            </button>
-            <input ref={photoFileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => photoCameraRef.current?.click()} disabled={uploadingPhoto}
+                className="flex items-center justify-center gap-2 py-2.5 bg-accent border border-border rounded-xl text-foreground text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-all disabled:opacity-50">
+                <Camera size={14} /> {uploadingPhoto ? 'Uploading...' : 'Camera'}
+              </button>
+              <button type="button" onClick={() => photoFileRef.current?.click()} disabled={uploadingPhoto}
+                className="flex items-center justify-center gap-2 py-2.5 bg-accent border border-border rounded-xl text-foreground text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-all disabled:opacity-50">
+                <Upload size={14} /> {uploadingPhoto ? 'Uploading...' : 'Upload'}
+              </button>
+            </div>
+            <input ref={photoCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
+            <input ref={photoFileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
           </div>
 
           {projectPhotos.length === 0 ? (
@@ -327,13 +339,17 @@ const ProjectDetail: React.FC = () => {
             <div className="grid grid-cols-2 gap-2">
               {projectPhotos.map(photo => (
                 <div key={photo.id} className="relative rounded-xl overflow-hidden border border-border group">
-                  {photo.image_url && <img src={photo.image_url} alt={photo.caption || ''} className="w-full h-32 object-cover" />}
+                  {photo.image_url && <SignedImage bucket="of-photos" path={photo.image_url} alt={photo.caption || ''} className="w-full h-32 object-cover" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
                     <div className="flex-1">
                       {photo.caption && <p className="text-foreground text-[10px] font-semibold">{photo.caption}</p>}
                       <span className="text-[8px] text-muted-foreground uppercase font-bold">{photo.phase}</span>
                     </div>
-                    <button onClick={() => { deletePhotoMut.mutateAsync(photo.id); toast.success('Deleted'); }}
+                    <button aria-label="Delete photo" onClick={async () => {
+                      if (!confirm('Delete this photo? The file will be removed too.')) return;
+                      try { await deletePhotoMut.mutateAsync({ id: photo.id, path: photo.image_url }); toast.success('Photo deleted'); }
+                      catch { toast.error('Failed to delete photo'); }
+                    }}
                       className="text-destructive p-1"><Trash2 size={12} /></button>
                   </div>
                 </div>

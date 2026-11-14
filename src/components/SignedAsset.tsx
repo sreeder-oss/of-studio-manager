@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { getReceiptImageUrl } from '@/hooks/useReceipts';
 import { getDocumentFileUrl } from '@/hooks/useDocuments';
+import { getPhotoUrl } from '@/hooks/usePhotos';
 
-type Bucket = 'receipts' | 'of-documents';
+type Bucket = 'receipts' | 'of-documents' | 'of-photos';
 
 const resolve = (bucket: Bucket, p: string) =>
-  bucket === 'receipts' ? getReceiptImageUrl(p) : getDocumentFileUrl(p);
+  bucket === 'receipts' ? getReceiptImageUrl(p) : bucket === 'of-photos' ? getPhotoUrl(p) : getDocumentFileUrl(p);
 
 export const SignedImage: React.FC<{
   bucket: Bucket;
