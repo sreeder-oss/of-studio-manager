@@ -43,6 +43,13 @@
       "when": 1794679321151,
       "tag": "0005_create_services",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794680389378,
+      "tag": "0006_invoice_payments_ledger",
+      "breakpoints": true
     }
   ]
 }

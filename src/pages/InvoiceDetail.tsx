@@ -1,38 +1,54 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle, FileDown, Trash2 } from 'lucide-react';
-import { useInvoice, useSaveInvoice, useDeleteInvoice, useRecordInvoicePayment } from '@/hooks/useInvoices';
+import { useInvoice, useDeleteInvoice } from '@/hooks/useInvoices';
+import { useInvoicePayments, useAddInvoicePayment, useDeleteInvoicePayment, localToday, PAYMENT_METHODS, type PaymentMethod } from '@/hooks/useInvoicePayments';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useContact } from '@/hooks/useContacts';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { PRIVACY_NOTICE } from '@/lib/legal';
 import { useSettings, renderTerms } from '@/hooks/useSettings';
 import { downloadInvoicePdf, coerceToInvoiceDoc } from '@/lib/invoicePdf';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { useQueryClient } from '@tanstack/react-query';
 
 const InvoiceDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { settings } = useSettings();
   const { data: invoice, isLoading } = useInvoice(id!);
   const { data: contact } = useContact(invoice?.contact_id || '');
-  const saveInvoice = useSaveInvoice();
   const deleteInvoice = useDeleteInvoice();
-  const recordPay = useRecordInvoicePayment();
+  const { data: payments = [] } = useInvoicePayments(id!);
+  const addPayment = useAddInvoicePayment();
+  const deletePayment = useDeleteInvoicePayment();
   const [payAmount, setPayAmount] = React.useState('');
+  const [payDate, setPayDate] = React.useState(localToday());
+  const [payMethod, setPayMethod] = React.useState<PaymentMethod | ''>('');
+  const [payRef, setPayRef] = React.useState('');
+  const [toDelete, setToDelete] = React.useState<string | null>(null);
+  const amountRef = React.useRef<HTMLInputElement>(null);
 
   const recordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!invoice) return;
     const amount = parseFloat(payAmount);
     if (!(amount > 0)) { toast.error('Enter a payment amount'); return; }
+    if (!payMethod) { toast.error('Choose Check or Zelle'); return; }
+    if (!payDate) { toast.error('Enter the payment date'); return; }
     try {
-      const row = await recordPay.mutateAsync({ invoice, amount });
-      setPayAmount('');
-      toast.success(row.status === 'paid' ? 'Paid in full' : 'Payment recorded');
+      const s = await addPayment.mutateAsync({ invoice_id: invoice.id, amount, paid_on: payDate, method: payMethod, reference: payRef.trim() });
+      setPayAmount(''); setPayRef(''); setPayMethod(''); setPayDate(localToday());
+      toast.success(s.status === 'paid' ? 'Paid in full' : 'Payment recorded');
     } catch { /* global toast */ }
+  };
+
+  const confirmDeletePayment = async () => {
+    if (!invoice || !toDelete) return;
+    try {
+      await deletePayment.mutateAsync({ id: toDelete, invoice_id: invoice.id });
+      toast.success('Payment deleted');
+    } catch { /* global toast */ }
+    setToDelete(null);
   };
 
   const handleDelete = async () => {
@@ -69,8 +85,9 @@ const InvoiceDetail: React.FC = () => {
   const total = Number(invoice.total || 0);
 
   const getStatusInfo = () => {
-    const isOverdue = !invoice.paid && invoice.due_date && new Date(invoice.due_date) < new Date();
-    if (invoice.paid) return { label: 'Paid', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
+    const isOverdue = invoice.status === 'overdue' || (invoice.status !== 'paid' && invoice.due_date && new Date(invoice.due_date) < new Date());
+    if (invoice.status === 'partial' && !isOverdue) return { label: 'Partial', classes: 'bg-warning/10 text-warning border-warning/20', icon: <Clock size={10} className="mr-1" /> };
+    if (invoice.status === 'paid') return { label: 'Paid', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
     if (isOverdue) return { label: 'Overdue', classes: 'bg-destructive/10 text-destructive border-destructive/20', icon: <AlertCircle size={10} className="mr-1" /> };
     return { label: 'Pending', classes: 'bg-warning/10 text-warning border-warning/20', icon: <Clock size={10} className="mr-1" /> };
   };
@@ -101,33 +118,12 @@ const InvoiceDetail: React.FC = () => {
     }
   };
 
-  const togglePaid = async () => {
-    if (!invoice.paid) {
-      // Mark as Paid: explicit four-column update only.
-      const { error } = await supabase.from('invoices').update({
-        status: 'paid',
-        paid: true,
-        paid_date: new Date().toISOString().split('T')[0],
-        amount_paid: +(Number(invoice.total || 0) - Number(invoice.deposit_applied || 0)).toFixed(2),
-      }).eq('id', invoice.id);
-      if (error) { toast.error('Failed to update invoice'); return; }
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success('Marked as paid');
-      return;
-    }
-    // Mark as Unpaid: explicit four-column update keyed by invoice id.
-    // amount_paid is written back as the stored value so recorded payments
-    // are never erased. No form or component state is spread in.
-    const { error } = await supabase.from('invoices').update({
-      status: 'draft',
-      paid: false,
-      paid_date: null,
-      amount_paid: invoice.amount_paid,
-    }).eq('id', invoice.id);
-    if (error) { toast.error('Failed to update invoice'); return; }
-    queryClient.invalidateQueries({ queryKey: ['invoices'] });
-    toast.success('Marked as unpaid');
+  const balance = Number(invoice.balance_due ?? total);
+  const fillRemaining = () => {
+    setPayAmount(balance > 0 ? balance.toFixed(2) : '');
+    setTimeout(() => amountRef.current?.focus(), 0);
   };
+  const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
@@ -204,31 +200,70 @@ const InvoiceDetail: React.FC = () => {
           <div className="flex justify-between text-sm font-bold text-foreground"><span>Balance due</span><span>${Number(invoice.balance_due ?? total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
         </div>
 
-        {invoice.status !== 'paid' && (
-          <form onSubmit={recordPayment} className="mt-4 pt-3 border-t border-border flex gap-2 items-center">
-            <input type="number" step="0.01" min="0.01" inputMode="decimal" placeholder="Payment amount"
-              value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
-              className="flex-1 bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
-            <button type="submit" disabled={recordPay.isPending || !payAmount}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest disabled:opacity-50">
-              Record Payment
+        {balance > 0 && (
+          <form onSubmit={recordPayment} className="mt-4 pt-3 border-t border-border space-y-2">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Record Payment</p>
+            <div className="grid grid-cols-2 gap-2">
+              <input ref={amountRef} type="number" step="0.01" min="0.01" inputMode="decimal" placeholder="Amount" aria-label="Amount"
+                value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
+                className="bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
+              <input type="date" aria-label="Date" value={payDate} onChange={(e) => setPayDate(e.target.value)}
+                className="bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
+              <select aria-label="Method" value={payMethod} onChange={(e) => setPayMethod(e.target.value as PaymentMethod)}
+                className="bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary">
+                <option value="">Method…</option>
+                {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <input placeholder={payMethod === 'Zelle' ? 'Zelle confirmation' : 'Check number'} aria-label="Reference" maxLength={80}
+                value={payRef} onChange={(e) => setPayRef(e.target.value)}
+                className="bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary" />
+            </div>
+            <button type="submit" disabled={addPayment.isPending || !payAmount || !payMethod}
+              className="w-full bg-primary text-primary-foreground py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest disabled:opacity-50">
+              {addPayment.isPending ? 'Saving…' : 'Record Payment'}
             </button>
           </form>
         )}
+
+        <div className="mt-4 pt-3 border-t border-border space-y-1.5">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Payments</p>
+          {payments.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground italic">No payments recorded.</p>
+          ) : payments.map(p => (
+            <div key={p.id} className="bg-accent rounded-xl px-3 py-2 border border-border flex items-center gap-3 text-[11px]">
+              <span className="text-foreground w-20">{new Date(p.paid_on + 'T00:00:00').toLocaleDateString()}</span>
+              <span className="text-muted-foreground w-12">{p.method || '—'}</span>
+              <span className="text-muted-foreground flex-1 truncate">{p.reference || p.note || ''}</span>
+              <span className="font-bold text-foreground">{fmt(Number(p.amount))}</span>
+              <button onClick={() => setToDelete(p.id)} className="text-destructive/60 hover:text-destructive p-1" aria-label="Delete payment"><Trash2 size={12} /></button>
+            </div>
+          ))}
+        </div>
+
+        <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this payment?</AlertDialogTitle>
+              <AlertDialogDescription>The invoice's paid amount and status will be recalculated from the remaining payments.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeletePayment} disabled={deletePayment.isPending}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="mt-4 pt-3 border-t border-border flex gap-2">
           <button onClick={handleDownload}
             className="flex-1 bg-card border border-primary/40 text-primary py-2.5 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-primary/10">
             <FileDown size={14} /> PDF
           </button>
-          <button onClick={togglePaid} disabled={saveInvoice.isPending}
-            className={`flex-1 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all disabled:opacity-50 ${
-              invoice.paid
-                ? 'bg-muted text-muted-foreground border border-border hover:bg-destructive/10 hover:text-destructive'
-                : 'bg-primary text-primary-foreground shadow-glow'
-            }`}>
-            {invoice.paid ? 'Mark as Unpaid' : 'Mark as Paid'}
-          </button>
+          {balance > 0 && (
+            <button onClick={fillRemaining}
+              className="flex-1 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest bg-primary text-primary-foreground shadow-glow">
+              Record remaining balance
+            </button>
+          )}
         </div>
       </div>
 

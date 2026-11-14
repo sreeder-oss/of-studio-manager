@@ -1,3 +1,4 @@
+import { recomputeInvoiceFromLedger, localToday } from '@/hooks/useInvoicePayments';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -122,16 +123,15 @@ export const useAIActions = () => {
           const { data: inv, error } = await supabase
             .from('invoices').select('*').eq('id', d.invoice_id).single();
           if (error || !inv) throw error ?? new Error('Invoice not found');
-          const { error: payErr } = await supabase
-            .from('invoices')
-            .update({
-              status: 'paid',
-              paid: true,
-              paid_date: d.paid_date ?? new Date().toISOString().slice(0, 10),
-              amount_paid: +(Number(inv.total || 0) - Number(inv.deposit_applied || 0)).toFixed(2),
-            })
-            .eq('id', d.invoice_id);
+          const remaining = +(Number(inv.total || 0) - Number(inv.deposit_applied || 0) - Number(inv.amount_paid || 0)).toFixed(2);
+          if (!(remaining > 0)) { toast.info('Invoice is already paid in full'); return true; }
+          const { error: payErr } = await supabase.from('invoice_payments').insert({
+            invoice_id: d.invoice_id, amount: remaining,
+            paid_on: d.paid_date ?? localToday(), method: null, note: 'Recorded by AI assistant',
+          });
           if (payErr) throw payErr;
+          await recomputeInvoiceFromLedger(d.invoice_id);
+          await queryClient.invalidateQueries({ queryKey: ['invoice_payments', d.invoice_id] });
           await queryClient.invalidateQueries({ queryKey: ['invoices'] });
           toast.success('Marked invoice as paid');
           return true;
