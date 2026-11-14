@@ -11,6 +11,7 @@ import { useSettings, renderTerms } from '@/hooks/useSettings';
 import { downloadInvoicePdf, coerceToInvoiceDoc } from '@/lib/invoicePdf';
 import { toast } from 'sonner';
 import { useProjects } from '@/hooks/useProjects';
+import { useChangeOrders, useAddChangeOrdersToInvoice } from '@/hooks/useChangeOrders';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -24,6 +25,10 @@ const InvoiceDetail: React.FC = () => {
   const queryClient = useQueryClient();
   const { data: projects = [] } = useProjects();
   const [savingProject, setSavingProject] = React.useState(false);
+  const { data: projectCOs = [] } = useChangeOrders(invoice?.project_id);
+  const addCOs = useAddChangeOrdersToInvoice();
+  const pendingCOs = projectCOs.filter(c => c.status === 'Approved' && !c.invoice_id);
+  const pendingCOTotal = Math.round(pendingCOs.reduce((s, c) => s + Number(c.amount || 0), 0) * 100) / 100;
   const { data: payments = [] } = useInvoicePayments(id!);
   const addPayment = useAddInvoicePayment();
   const deletePayment = useDeleteInvoicePayment();
@@ -182,6 +187,19 @@ const InvoiceDetail: React.FC = () => {
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
+
+        {invoice.project_id && pendingCOs.length > 0 && (
+          <button disabled={addCOs.isPending}
+            onClick={async () => {
+              try {
+                const n = await addCOs.mutateAsync({ invoiceId: invoice.id, projectId: invoice.project_id! });
+                toast.success(`Added ${n} change order${n === 1 ? '' : 's'}`);
+              } catch { /* global toast */ }
+            }}
+            className="w-full mb-4 py-2 rounded-xl border border-primary/40 text-primary text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 disabled:opacity-50">
+            {addCOs.isPending ? 'Adding…' : `Add ${pendingCOs.length} approved change order${pendingCOs.length === 1 ? '' : 's'} (${pendingCOTotal < 0 ? '-' : ''}$${Math.abs(pendingCOTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`}
+          </button>
+        )}
 
         <div className="flex gap-4 mb-4">
           <div className="bg-accent rounded-xl p-3 flex-1 border border-border">

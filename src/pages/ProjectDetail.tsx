@@ -12,8 +12,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { toast } from 'sonner';
 import { SignedImage, SignedLink } from '@/components/SignedAsset';
+import { ChangeOrdersTab } from '@/components/project/ChangeOrdersTab';
+import { useChangeOrders, approvedChangesTotal } from '@/hooks/useChangeOrders';
 
-type Tab = 'overview' | 'estimates' | 'receipts' | 'documents' | 'photos';
+type Tab = 'overview' | 'changes' | 'estimates' | 'receipts' | 'documents' | 'photos';
 
 const statusStyles: Record<string, string> = {
   Bidding: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
@@ -39,6 +41,7 @@ const ProjectDetail: React.FC = () => {
   const deletePhotoMut = useDeletePhoto();
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const { data: changeOrders = [] } = useChangeOrders(id);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [docLabel, setDocLabel] = useState('');
@@ -72,6 +75,8 @@ const ProjectDetail: React.FC = () => {
   }
 
   const contractValue = Number(project.contract_value || 0);
+  const approvedChanges = approvedChangesTotal(changeOrders);
+  const revisedContract = Math.round((contractValue + approvedChanges) * 100) / 100;
   const totalInvoiced = invoices.reduce((s, i) => s + Number(i.total || 0), 0);
   const totalExpenses = receipts.reduce((s, r) => s + Number(r.amount || 0), 0);
   const margin = contractValue > 0 ? ((contractValue - totalExpenses) / contractValue * 100) : 0;
@@ -104,6 +109,7 @@ const ProjectDetail: React.FC = () => {
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Overview', icon: <TrendingUp size={14} /> },
+    { key: 'changes', label: 'Changes', icon: <DollarSign size={14} /> },
     { key: 'estimates', label: 'Estimates', icon: <FileText size={14} /> },
     { key: 'receipts', label: 'Receipts', icon: <Receipt size={14} /> },
     { key: 'documents', label: 'Docs', icon: <FileBox size={14} /> },
@@ -149,6 +155,20 @@ const ProjectDetail: React.FC = () => {
       {/* Tab Content */}
       {activeTab === 'overview' && (
         <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-card p-4 rounded-xl border border-border">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">Contract value</p>
+              <p className="font-serif text-foreground text-lg mt-1">${contractValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            <div className="bg-card p-4 rounded-xl border border-border">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">Approved changes</p>
+              <p className={`font-serif text-lg mt-1 ${approvedChanges < 0 ? 'text-destructive' : 'text-foreground'}`}>{approvedChanges < 0 ? '-' : ''}${Math.abs(approvedChanges).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            <div className="bg-card p-4 rounded-xl border border-primary/30">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">Revised contract</p>
+              <p className="font-serif text-primary text-lg mt-1">${revisedContract.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-card p-4 rounded-xl border border-border">
               <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">Contract Value</p>
@@ -190,6 +210,8 @@ const ProjectDetail: React.FC = () => {
           )}
         </div>
       )}
+
+      {activeTab === 'changes' && id && <ChangeOrdersTab projectId={id} />}
 
       {activeTab === 'estimates' && (
         <div className="space-y-2">

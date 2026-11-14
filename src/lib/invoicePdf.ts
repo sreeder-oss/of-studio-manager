@@ -326,7 +326,7 @@ function renderItemTable(ctx: RenderCtx, startY: number): number {
         { content: String(li.qty || ''), styles: { halign: 'right', fontSize: 9 } },
         { content: li.unit || '', styles: { halign: 'center', fontSize: 9 } },
         {
-          content: li.unit_cost > 0 ? fmt(li.unit_cost) : '—',
+          content: li.unit_cost !== 0 ? fmt(li.unit_cost) : '—',
           styles: { halign: 'right', fontSize: 9 },
         },
         {
@@ -715,9 +715,14 @@ export function coerceToInvoiceDoc(stored: unknown, fallback: {
   }
 
   // Legacy flat: array of { description/scope, amount }
-  const items = Array.isArray(stored)
-    ? (stored as Array<{ description?: string; scope?: string; amount?: number; sub_note?: string }>)
+  const allItems = Array.isArray(stored)
+    ? (stored as Array<{ description?: string; scope?: string; amount?: number; sub_note?: string; kind?: string }>)
     : [];
+  const items = allItems.filter((it) => it.kind !== 'change_order');
+  const coLines = allItems.filter((it) => it.kind === 'change_order').map((it) => ({
+    description: it.description || 'Change order', sub_note: '', qty: 1, unit: 'lot',
+    unit_cost: Number(it.amount || 0), total: Number(it.amount || 0),
+  }));
   const lines = items.map((it) => ({
     description: it.description || it.scope || 'Item',
     sub_note: it.sub_note || '',
@@ -726,7 +731,7 @@ export function coerceToInvoiceDoc(stored: unknown, fallback: {
     unit_cost: Number(it.amount || 0),
     total: Number(it.amount || 0),
   }));
-  const subtotal = lines.reduce((a, b) => a + b.total, 0) || (fallback.subtotal ?? 0);
+  const subtotal = [...lines, ...coLines].reduce((a, b) => a + b.total, 0) || (fallback.subtotal ?? 0);
   const tax = fallback.tax_applied ?? 0;
   const total = fallback.total ?? (subtotal + tax);
   return {
@@ -745,6 +750,7 @@ export function coerceToInvoiceDoc(stored: unknown, fallback: {
     milestone: '',
     sections: [
       { label: 'Work completed', line_items: lines, subtotal: lines.reduce((a, b) => a + b.total, 0) },
+      ...(coLines.length ? [{ label: 'Change orders', line_items: coLines, subtotal: coLines.reduce((a, b) => a + b.total, 0) }] : []),
     ],
     direct_cost_subtotal: subtotal,
     tax_rate: subtotal > 0 ? +((tax / subtotal) * 100).toFixed(2) : 0,

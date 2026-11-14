@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      change_orders: {
+        Row: {
+          agreed_on: string | null
+          amount: number
+          created_at: string
+          description: string
+          id: string
+          invoice_id: string | null
+          notes: string | null
+          project_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agreed_on?: string | null
+          amount?: number
+          created_at?: string
+          description: string
+          id?: string
+          invoice_id?: string | null
+          notes?: string | null
+          project_id: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          agreed_on?: string | null
+          amount?: number
+          created_at?: string
+          description?: string
+          id?: string
+          invoice_id?: string | null
+          notes?: string | null
+          project_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_orders_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           address: string | null
