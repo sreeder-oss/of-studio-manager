@@ -158,7 +158,7 @@ const EstimateDetail: React.FC = () => {
             <select
               value={estimate.status || 'Pending'}
               onChange={(e) => handleStatusChange(e.target.value)}
-              disabled={saveEstimate.isPending}
+              disabled={false}
               className="bg-accent border border-border rounded px-2 py-0.5 text-[10px] text-foreground outline-none"
             >
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
