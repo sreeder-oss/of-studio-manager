@@ -111,6 +111,31 @@ export function parseActionsFromText(text: string): ParsedAction[] {
   return out;
 }
 
+export interface ActionParseFailure { id: string; type: string | null; reason: string; }
+
+/** Action blocks that could not be read (bad JSON or failed validation), with why. */
+export function parseActionFailures(text: string): ActionParseFailure[] {
+  const re = /```action\s*([\s\S]*?)```/g;
+  const out: ActionParseFailure[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const raw = m[1].trim();
+    let obj: any;
+    try { obj = JSON.parse(raw); } catch (e) {
+      out.push({ id: hash(raw), type: null, reason: 'The action is not valid JSON.' });
+      continue;
+    }
+    const result = actionSchema.safeParse(obj);
+    if (!result.success) {
+      const reason = result.error.issues
+        .map(i => `${i.path.join('.') || 'action'}: ${i.message}`)
+        .join('; ');
+      out.push({ id: hash(raw), type: typeof obj?.type === 'string' ? obj.type : null, reason });
+    }
+  }
+  return out;
+}
+
 /** Strip the action fences for clean prose rendering. */
 export function stripActionBlocks(text: string): string {
   return text.replace(/```action\s*[\s\S]*?```/g, '').trim();

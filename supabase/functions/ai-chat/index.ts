@@ -234,7 +234,7 @@ function validateScope(raw: any, validIds: Set<string>, nameToId: Map<string, st
   return { ok: true, scope: { title: String(raw.title ?? "").slice(0, 120), client_name: String(raw.client_name ?? ""), project_address: String(raw.project_address ?? ""), areas } };
 }
 
-function buildSystemPrompt(systemsLibrary: unknown[], services: unknown[], settings: { tax_rate: number; estimate_valid_days: number; }, currentPage?: string, currentRecord?: unknown) {
+function buildSystemPrompt(systemsLibrary: unknown[], services: unknown[], settings: { tax_rate: number; estimate_valid_days: number; deposit_pct: number; }, currentPage?: string, currentRecord?: unknown) {
   return `You are the AI assistant for OF Manager, the business management app for
 Organic Finishes LLC, a specialty plaster and paint company in Tulsa, Oklahoma.
 The owner is Shawn. You can perform any action in the app through conversation.
@@ -298,8 +298,8 @@ Supported action types:
 
 \`\`\`action
 { "type": "create_contact", "data": {
-  "name": "string (required)", "type": "Client|Vendor|Subcontractor|null",
-  "status": "Active|Inactive|null", "email": "string|null",
+  "name": "string (required)", "type": "Client|Vendor|Lead|null",
+  "status": "Active|Inactive|Pending|null", "email": "string|null",
   "phone": "string|null", "address": "string|null", "notes": "string|null"
 }}
 \`\`\`
@@ -317,8 +317,8 @@ Supported action types:
 
 \`\`\`action
 { "type": "update_contact", "data": {
-  "id": "uuid (required)", "name": "string|null", "type": "string|null",
-  "status": "string|null", "email": "string|null", "phone": "string|null",
+  "id": "uuid (required)", "name": "string|null", "type": "Client|Vendor|Lead|null",
+  "status": "Active|Inactive|Pending|null", "email": "string|null", "phone": "string|null",
   "address": "string|null", "notes": "string|null"
 }}
 \`\`\`
@@ -336,7 +336,7 @@ Supported action types:
 { "type": "create_receipt", "data": {
   "vendor": "string|null", "amount": number (required),
   "receipt_date": "YYYY-MM-DD (required)",
-  "category": "Materials|Labor|Equipment|Subcontractor|Vehicle|Insurance|Office|Permits|Miscellaneous",
+  "category": "Materials|Labor|Equipment|Travel|Supplies|Miscellaneous",
   "project_id": "uuid|null", "tax_deductible": boolean,
   "notes": "string|null"
 }}
@@ -445,7 +445,7 @@ INVOICE QUALITY BAR — every invoice must hit ALL of these:
 1. **work_summary is real prose**, not a tagline. It tells the client exactly
    what they're paying for in this billing cycle (elevations finished, coats
    applied, days on site). If this is a Deposit invoice, say so plainly:
-   "30% deposit per signed estimate dated MM/DD to schedule materials and crew."
+   "${settings.deposit_pct}% deposit per signed estimate dated MM/DD to schedule materials and crew."
 
 2. **Every line item has a sub_note** explaining what's included or how the
    qty was measured (SF completed, days × day-rate, lot for prep).
@@ -647,7 +647,18 @@ Deno.serve(async (req: Request) => {
       if (svcResp.ok) servicesList = await svcResp.json();
     } catch (e) { console.warn("services fetch failed", e); }
 
-    const settings = { tax_rate: 0, estimate_valid_days: 30 };
+    let depositPct = 50;
+    try {
+      const setResp = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?select=default_deposit_pct&limit=1`, {
+        headers: { Authorization: authHeader, apikey: ANON_KEY },
+      });
+      if (setResp.ok) {
+        const rows = await setResp.json();
+        const v = Number(rows?.[0]?.default_deposit_pct);
+        if (Number.isFinite(v)) depositPct = v;
+      }
+    } catch (e) { console.warn("settings fetch failed", e); }
+    const settings = { tax_rate: 0, estimate_valid_days: 30, deposit_pct: depositPct };
     const systemPrompt = buildSystemPrompt(systemsLibrary, servicesList, settings, body.currentPage, body.currentRecord);
 
     const hasImages = body.hasImages || body.messages.some((m) =>

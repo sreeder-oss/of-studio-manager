@@ -5,7 +5,7 @@ import type { ChatMessage as Msg } from '@/contexts/AIAssistantContext';
 import { parseEstimateFromText } from '@/lib/estimateSchema';
 import { parseInvoiceFromText } from '@/lib/invoiceSchema';
 import { parseScopeFromText } from '@/lib/scopeSchema';
-import { parseActionsFromText, stripActionBlocks } from '@/lib/actionSchema';
+import { parseActionsFromText, parseActionFailures, stripActionBlocks } from '@/lib/actionSchema';
 import { ActionCard } from './ActionCard';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
 
@@ -21,11 +21,12 @@ export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenIn
   const hasEstimate = !isUser && (!!parseScopeFromText(message.content) || !!parseEstimateFromText(message.content));
   const hasInvoice = !isUser && !hasEstimate && !!parseInvoiceFromText(message.content);
   const actions = isUser ? [] : parseActionsFromText(message.content);
+  const failedActions = isUser || message.streaming ? [] : parseActionFailures(message.content);
 
   // Hide raw fenced blocks from prose
   let display = message.content;
   if (hasEstimate || hasInvoice) display = display.replace(/```json\s*[\s\S]*?```/g, '').trim();
-  if (actions.length > 0) display = stripActionBlocks(display);
+  if (actions.length > 0 || failedActions.length > 0) display = stripActionBlocks(display);
 
   return (
     <div className={`flex gap-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -74,6 +75,12 @@ export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenIn
             <FileText size={12} /> Open invoice preview
           </button>
         )}
+        {failedActions.map((f) => (
+          <div key={f.id} className="mt-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px]">
+            <p className="font-bold text-destructive">Action could not be read{f.type ? ` (${f.type})` : ''}</p>
+            <p className="text-muted-foreground mt-0.5 break-words">{f.reason}</p>
+          </div>
+        ))}
         {actions.map((p) => (
           <ActionCard
             key={p.id}

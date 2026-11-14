@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, Filter } from 'lucide-react';
 import { useReceipts } from '@/hooks/useReceipts';
 
@@ -7,11 +7,16 @@ const TaxSummary: React.FC = () => {
   const navigate = useNavigate();
   const { data: receipts = [] } = useReceipts();
   const [deductibleOnly, setDeductibleOnly] = useState(false);
+  const [searchParams] = useSearchParams();
+  const yearParam = searchParams.get('year');
+  const year = yearParam && /^\d{4}$/.test(yearParam) ? yearParam : null;
 
   const filtered = useMemo(() => {
-    if (deductibleOnly) return receipts.filter(r => r.tax_deductible);
-    return receipts;
-  }, [receipts, deductibleOnly]);
+    let list = receipts;
+    if (year) list = list.filter(r => (r.tax_year || String(r.receipt_date).slice(0, 4)) === year);
+    if (deductibleOnly) list = list.filter(r => r.tax_deductible);
+    return list;
+  }, [receipts, deductibleOnly, year]);
 
   const taxYears = useMemo(() => {
     const years = new Set(filtered.map(r => r.tax_year || String(r.receipt_date).slice(0, 4)));
@@ -55,7 +60,7 @@ const TaxSummary: React.FC = () => {
 
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-foreground text-xl">Tax Summary</h2>
+          <h2 className="font-serif text-foreground text-xl">Tax Summary{year ? ` · ${year}` : ''}</h2>
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mt-0.5">
             {filtered.length} receipt{filtered.length !== 1 ? 's' : ''}
           </p>
