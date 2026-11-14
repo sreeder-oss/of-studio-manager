@@ -6,7 +6,7 @@ import { useSaveSystem } from './useSystems';
 import { useSaveContact } from './useContacts';
 import { useSaveProject } from './useProjects';
 import { useSaveReceipt } from './useReceipts';
-import { useSaveInvoice } from './useInvoices';
+import { useQueryClient } from '@tanstack/react-query';
 import type { AIAction } from '@/lib/actionSchema';
 
 export const useAIActions = () => {
@@ -15,7 +15,7 @@ export const useAIActions = () => {
   const saveContact = useSaveContact();
   const saveProject = useSaveProject();
   const saveReceipt = useSaveReceipt();
-  const saveInvoice = useSaveInvoice();
+  const queryClient = useQueryClient();
 
   const run = useCallback(async (action: AIAction): Promise<boolean> => {
     try {
@@ -122,19 +122,17 @@ export const useAIActions = () => {
           const { data: inv, error } = await supabase
             .from('invoices').select('*').eq('id', d.invoice_id).single();
           if (error || !inv) throw error ?? new Error('Invoice not found');
-          await saveInvoice.mutateAsync({
-            id: d.invoice_id,
-            contact_id: inv.contact_id,
-            project_id: inv.project_id,
-            estimate_id: inv.estimate_id,
-            line_items: inv.line_items,
-            subtotal: inv.subtotal,
-            tax_applied: inv.tax_applied,
-            total: inv.total,
-            due_date: inv.due_date,
-            paid: true,
-            paid_date: d.paid_date ?? new Date().toISOString().slice(0, 10),
-          });
+          const { error: payErr } = await supabase
+            .from('invoices')
+            .update({
+              status: 'paid',
+              paid: true,
+              paid_date: d.paid_date ?? new Date().toISOString().slice(0, 10),
+              amount_paid: +(Number(inv.total || 0) - Number(inv.deposit_applied || 0)).toFixed(2),
+            })
+            .eq('id', d.invoice_id);
+          if (payErr) throw payErr;
+          await queryClient.invalidateQueries({ queryKey: ['invoices'] });
           toast.success('Marked invoice as paid');
           return true;
         }
@@ -149,7 +147,7 @@ export const useAIActions = () => {
       return false;
     }
     return false;
-  }, [navigate, saveSystem, saveContact, saveProject, saveReceipt, saveInvoice]);
+  }, [navigate, saveSystem, saveContact, saveProject, saveReceipt, queryClient]);
 
   return { run };
 };
