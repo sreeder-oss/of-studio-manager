@@ -33,6 +33,7 @@ const Invoices = lazy(() => import("./pages/Invoices"));
 const InvoiceDetail = lazy(() => import("./pages/InvoiceDetail"));
 const Receipts = lazy(() => import("./pages/Receipts"));
 const Systems = lazy(() => import("./pages/Systems"));
+const Services = lazy(() => import("./pages/Services"));
 const TaxSummary = lazy(() => import("./pages/TaxSummary"));
 const Login = lazy(() => import("./pages/Login"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -124,6 +125,7 @@ const App = () => (
                     <Route path="/invoices" element={<Invoices />} />
                     <Route path="/invoices/:id" element={<InvoiceDetail />} />
                     <Route path="/receipts" element={<Receipts />} />
+                    <Route path="/services" element={<Services />} />
                     <Route path="/systems" element={<Systems />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/reports/tax" element={<TaxSummary />} />

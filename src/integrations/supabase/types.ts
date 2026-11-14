@@ -453,6 +453,65 @@ export type Database = {
           },
         ]
       }
+      services: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          materials_included: boolean
+          minimum_charge: number
+          name: string
+          pricing_unit: string
+          rate_default: number
+          rate_high: number
+          rate_low: number
+          rate_reviewed_on: string | null
+          system_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          materials_included?: boolean
+          minimum_charge?: number
+          name: string
+          pricing_unit?: string
+          rate_default?: number
+          rate_high?: number
+          rate_low?: number
+          rate_reviewed_on?: string | null
+          system_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          materials_included?: boolean
+          minimum_charge?: number
+          name?: string
+          pricing_unit?: string
+          rate_default?: number
+          rate_high?: number
+          rate_low?: number
+          rate_reviewed_on?: string | null
+          system_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "services_system_id_fkey"
+            columns: ["system_id"]
+            isOneToOne: false
+            referencedRelation: "systems"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       systems: {
         Row: {
           application_notes: string | null

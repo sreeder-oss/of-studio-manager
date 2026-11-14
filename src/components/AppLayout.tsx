@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Users, FolderKanban, FileText, FileSpreadsheet, Receipt, Layers, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { Users, FolderKanban, FileText, FileSpreadsheet, Receipt, Layers, Tag, LogOut, Settings as SettingsIcon } from 'lucide-react';
 import LuminaIcon from '@/components/icons/LuminaIcon';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,6 +15,7 @@ const navItems = [
   { path: '/estimates', label: 'Estimates', icon: FileText },
   { path: '/invoices', label: 'Invoices', icon: FileSpreadsheet },
   { path: '/receipts', label: 'Receipts', icon: Receipt },
+  { path: '/services', label: 'Services', icon: Tag },
   { path: '/systems', label: 'Systems', icon: Layers },
   { path: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
