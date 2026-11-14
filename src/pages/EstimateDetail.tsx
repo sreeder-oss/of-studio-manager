@@ -1,7 +1,9 @@
 import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, Shield, CheckCircle, Clock, Send, FileDown, Pencil, ArrowRight } from 'lucide-react';
-import { useEstimate, useDeleteEstimate, useSaveEstimate } from '@/hooks/useEstimates';
+import { useEstimate, useDeleteEstimate } from '@/hooks/useEstimates';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { useContact } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useConvertEstimateToInvoice } from '@/hooks/useInvoices';
@@ -22,7 +24,7 @@ const EstimateDetail: React.FC = () => {
   const { data: projects = [] } = useProjects();
   const project = projects.find(p => p.id === estimate?.project_id);
   const deleteEstimate = useDeleteEstimate();
-  const saveEstimate = useSaveEstimate();
+  const queryClient = useQueryClient();
   const convertInvoice = useConvertEstimateToInvoice();
   const { settings } = useSettings();
   const { data: systems = [] } = useSystems();
@@ -72,7 +74,12 @@ const EstimateDetail: React.FC = () => {
   const handleStatusChange = async (newStatus: string) => {
     if (newStatus === estimate.status) return;
     try {
-      await saveEstimate.mutateAsync({ id: estimate.id, status: newStatus, contact_id: estimate.contact_id, line_items: estimate.line_items as any, subtotal, total });
+      const { error } = await supabase
+        .from('estimates')
+        .update({ status: newStatus })
+        .eq('id', estimate.id);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ['estimates'] });
       toast.success(`Status updated to ${newStatus}`);
     } catch (e: any) {
       toast.error(e?.message || 'Failed to update status');
