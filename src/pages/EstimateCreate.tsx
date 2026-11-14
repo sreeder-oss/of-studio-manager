@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Search, Trash2, Shield, UserPlus } from 'lucide-react';
@@ -68,7 +69,7 @@ const EstimateCreate: React.FC = () => {
     setDefaultsApplied(true);
   }, [isEdit, defaultsApplied, settingsLoaded, settings]);
   const [validUntil, setValidUntil] = useState<string>(
-    new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+    daysFromTodayLocal(30)
   );
   const [showTerms, setShowTerms] = useState(false);
 

@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Plus, Trash2, UserPlus, AlertTriangle } from 'lucide-react';
@@ -103,7 +104,7 @@ export const ScopePreview: React.FC<{ initial: EstimateScope; onClose: () => voi
         pre_tax_total: pricing.subtotal,
         tax_amount: pricing.tax_amount,
         total: pricing.total,
-        valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        valid_until: daysFromTodayLocal(30),
         model_used: initial.model_used,
         prompt: initial.prompt,
         status: 'Pending',

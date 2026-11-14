@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ChevronRight, FileSpreadsheet, CheckCircle, Clock, AlertCircle, Shield } from 'lucide-react';
@@ -29,7 +30,7 @@ const Invoices: React.FC = () => {
   }, { paid: 0, outstanding: 0, unpaidCount: 0 });
 
   const getStatusInfo = (inv: typeof invoices[0]) => {
-    const isOverdue = inv.status === 'overdue' || (inv.status !== 'paid' && inv.due_date && new Date(inv.due_date) < new Date());
+    const isOverdue = inv.status === 'overdue' || (inv.status !== 'paid' && inv.due_date && inv.due_date.slice(0, 10) < todayLocal());
     if (inv.status === 'paid') return { label: 'Paid', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
     if (inv.status === 'partial' && !isOverdue) return { label: 'Partial', classes: 'bg-warning/10 text-warning border-warning/20', icon: <Clock size={10} className="mr-1" /> };
     if (isOverdue) return { label: 'Overdue', classes: 'bg-destructive/10 text-destructive border-destructive/20', icon: <AlertCircle size={10} className="mr-1" /> };
@@ -102,7 +103,7 @@ const Invoices: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-end mt-3 pl-11">
                   <div className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">
-                    {inv.paid ? 'Paid' : 'Due'}: {inv.due_date ? new Date(inv.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A'}
+                    {inv.paid ? 'Paid' : 'Due'}: {inv.due_date ? parseLocalDate(inv.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A'}
                   </div>
                   <div className="flex items-center gap-2">
                     <p className="font-serif font-bold text-foreground text-base">${total.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>

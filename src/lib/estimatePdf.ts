@@ -1,3 +1,4 @@
+import { todayLocal } from '@/lib/utils';
 import { isPriceBookLines, toPriceRows, rowsSum, totalSf, pricePerSf } from './estimateLines';
 /**
  * Branded multi-page Organic Finishes estimate PDF.
@@ -37,7 +38,7 @@ const fmtDate = (iso?: string) => {
   // Use UTC components so the rendered date is stable regardless of build-machine TZ
   return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(d);
 };
-const today = () => fmtDate(new Date().toISOString());
+const today = () => fmtDate(todayLocal());
 
 interface CompanyInfo {
   name: string;

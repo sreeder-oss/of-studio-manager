@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, Shield, CheckCircle, Clock, Send, FileDown, Pencil, ArrowRight } from 'lucide-react';
@@ -221,7 +222,7 @@ const EstimateDetail: React.FC = () => {
             <p className="text-muted-foreground text-xs mt-0.5">{contact?.name || 'Unknown Client'}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
               {estimate.created_at ? new Date(estimate.created_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : ''}
-              {estimate.valid_until && ` · Valid until ${new Date(estimate.valid_until).toLocaleDateString()}`}
+              {estimate.valid_until && ` · Valid until ${parseLocalDate(estimate.valid_until).toLocaleDateString()}`}
             </p>
           </div>
           <div className="flex flex-col items-end gap-1">

@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, Search, X, Trash2, ChevronDown, ChevronRight, FolderOpen, Layers } from 'lucide-react';
 import { useReceipts, useSaveReceipt, useDeleteReceipt, uploadReceiptImage } from '@/hooks/useReceipts';
@@ -37,7 +38,7 @@ const Receipts: React.FC = () => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
-    vendor: '', amount: '', date: new Date().toISOString().split('T')[0],
+    vendor: '', amount: '', date: todayLocal(),
     category: 'Materials', projectId: '', notes: ''
   });
 
@@ -112,7 +113,7 @@ const Receipts: React.FC = () => {
     setNewProjectName('');
     setImageFile(null);
     setImagePreview('');
-    setFormData({ vendor: '', amount: '', date: new Date().toISOString().split('T')[0], category: 'Materials', projectId: '', notes: '' });
+    setFormData({ vendor: '', amount: '', date: todayLocal(), category: 'Materials', projectId: '', notes: '' });
   };
 
   const categoryColors: Record<string, string> = {
@@ -166,7 +167,7 @@ const Receipts: React.FC = () => {
           </span>
         </div>
         <p className="text-[10px] text-muted-foreground mt-0.5">
-          {new Date(receipt.receipt_date).toLocaleDateString()}
+          {parseLocalDate(receipt.receipt_date).toLocaleDateString()}
           {viewMode === 'category' && receipt.project_id && ` • ${getProjectName(receipt.project_id)}`}
           {receipt.notes && ` • ${receipt.notes}`}
         </p>

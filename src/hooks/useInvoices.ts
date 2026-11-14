@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import { recomputeInvoiceFromLedger, type PaymentMethod } from '@/hooks/useInvoicePayments';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -96,7 +97,7 @@ export function conversionInsert(estimate: DbEstimateRow, invoice_number: string
     invoice_number,
     status: 'draft',
     notes: estimate.notes, terms: estimate.terms,
-    due_date: new Date(today + 30 * 86400000).toISOString().split('T')[0],
+    due_date: daysFromTodayLocal(30),
   } as DbInvoiceInsert;
 }
 
@@ -161,7 +162,7 @@ export const useRecordInvoicePayment = () => {
       );
       const paid = status === 'paid';
       const { data, error } = await supabase.from('invoices')
-        .update({ amount_paid, status, paid, paid_date: paid ? new Date().toISOString().split('T')[0] : null })
+        .update({ amount_paid, status, paid, paid_date: paid ? todayLocal() : null })
         .eq('id', invoice.id).select().single();
       if (error) throw error;
       return data;

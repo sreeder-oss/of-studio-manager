@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState } from 'react';
 import { Plus, Pencil, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -75,7 +76,7 @@ export const ChangeOrdersTab: React.FC<{ projectId: string }> = ({ projectId }) 
             <div className="flex-1">
               <p className="text-foreground text-sm font-semibold">{c.description}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                {c.agreed_on ? `Agreed ${new Date(c.agreed_on + 'T00:00:00').toLocaleDateString()}` : 'No date agreed'}
+                {c.agreed_on ? `Agreed ${parseLocalDate(c.agreed_on).toLocaleDateString()}` : 'No date agreed'}
                 {' · '}{c.invoice_id ? <span className="text-primary font-bold">Invoiced</span> : 'Not invoiced'}
               </p>
               {c.notes && <p className="text-[11px] text-muted-foreground mt-1">{c.notes}</p>}

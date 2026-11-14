@@ -14,7 +14,7 @@ const TaxSummary: React.FC = () => {
   }, [receipts, deductibleOnly]);
 
   const taxYears = useMemo(() => {
-    const years = new Set(filtered.map(r => r.tax_year || new Date(r.receipt_date).getFullYear().toString()));
+    const years = new Set(filtered.map(r => r.tax_year || String(r.receipt_date).slice(0, 4)));
     return Array.from(years).sort().reverse();
   }, [filtered]);
 
@@ -30,7 +30,7 @@ const TaxSummary: React.FC = () => {
   const byYear = useMemo(() => {
     const map: Record<string, { total: number; deductible: number; count: number }> = {};
     filtered.forEach(r => {
-      const year = r.tax_year || new Date(r.receipt_date).getFullYear().toString();
+      const year = r.tax_year || String(r.receipt_date).slice(0, 4);
       if (!map[year]) map[year] = { total: 0, deductible: 0, count: 0 };
       map[year].total += Number(r.amount);
       map[year].count += 1;

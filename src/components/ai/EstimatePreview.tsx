@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Save, Trash2, Plus, FileDown } from 'lucide-react';
@@ -140,7 +141,7 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
         tax_amount: preTax * taxFraction,
         total: doc.total,
         status: 'Pending',
-        valid_until: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        valid_until: daysFromTodayLocal(30),
       });
       toast.success('Estimate saved');
       onClose();

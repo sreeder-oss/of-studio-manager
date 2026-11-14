@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal } from '@/lib/utils';
 /**
  * Branded multi-page Organic Finishes INVOICE PDF.
  * Same visual language as estimatePdf.ts (white paper, deep navy ink,
@@ -41,7 +42,7 @@ const today = () =>
 
 const fmtDate = (iso: string) => {
   if (!iso) return '—';
-  const d = new Date(iso);
+  const d = parseLocalDate(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 };
@@ -159,8 +160,8 @@ function statusInfo(inv: InvoiceDoc): { label: string; color: [number, number, n
   if (inv.balance_due <= 0.005) return { label: 'PAID IN FULL', color: GREEN };
   if (inv.amount_paid > 0) return { label: 'PARTIALLY PAID', color: NAVY_SOFT };
   if (inv.due_date) {
-    const due = new Date(inv.due_date);
-    if (!isNaN(due.getTime()) && due < new Date()) return { label: 'OVERDUE', color: RED };
+    const due = parseLocalDate(inv.due_date);
+    if (!isNaN(due.getTime()) && inv.due_date.slice(0, 10) < todayLocal()) return { label: 'OVERDUE', color: RED };
   }
   return { label: 'BALANCE DUE', color: NAVY };
 }

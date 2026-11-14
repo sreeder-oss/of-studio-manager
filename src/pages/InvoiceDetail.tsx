@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle, FileDown, Trash2 } from 'lucide-react';
@@ -96,7 +97,7 @@ const InvoiceDetail: React.FC = () => {
   const total = Number(invoice.total || 0);
 
   const getStatusInfo = () => {
-    const isOverdue = invoice.status === 'overdue' || (invoice.status !== 'paid' && invoice.due_date && new Date(invoice.due_date) < new Date());
+    const isOverdue = invoice.status === 'overdue' || (invoice.status !== 'paid' && invoice.due_date && invoice.due_date.slice(0, 10) < todayLocal());
     if (invoice.status === 'partial' && !isOverdue) return { label: 'Partial', classes: 'bg-warning/10 text-warning border-warning/20', icon: <Clock size={10} className="mr-1" /> };
     if (invoice.status === 'paid') return { label: 'Paid', classes: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle size={10} className="mr-1" /> };
     if (isOverdue) return { label: 'Overdue', classes: 'bg-destructive/10 text-destructive border-destructive/20', icon: <AlertCircle size={10} className="mr-1" /> };
@@ -208,7 +209,7 @@ const InvoiceDetail: React.FC = () => {
           </div>
           <div className="bg-accent rounded-xl p-3 flex-1 border border-border">
             <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Due</p>
-            <p className="text-foreground text-sm mt-0.5">{invoice.due_date ? new Date(invoice.due_date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A'}</p>
+            <p className="text-foreground text-sm mt-0.5">{invoice.due_date ? parseLocalDate(invoice.due_date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A'}</p>
           </div>
         </div>
 
@@ -275,7 +276,7 @@ const InvoiceDetail: React.FC = () => {
             <p className="text-[11px] text-muted-foreground italic">No payments recorded.</p>
           ) : payments.map(p => (
             <div key={p.id} className="bg-accent rounded-xl px-3 py-2 border border-border flex items-center gap-3 text-[11px]">
-              <span className="text-foreground w-20">{new Date(p.paid_on + 'T00:00:00').toLocaleDateString()}</span>
+              <span className="text-foreground w-20">{parseLocalDate(p.paid_on).toLocaleDateString()}</span>
               <span className="text-muted-foreground w-12">{p.method || '—'}</span>
               <span className="text-muted-foreground flex-1 truncate">{p.reference || p.note || ''}</span>
               <span className="font-bold text-foreground">{fmt(Number(p.amount))}</span>

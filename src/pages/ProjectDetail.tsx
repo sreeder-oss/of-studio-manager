@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, MapPin, Calendar, DollarSign, TrendingUp, FileText, Receipt, FileBox, Camera, Plus, Trash2, Upload, X } from 'lucide-react';
@@ -136,7 +137,7 @@ const ProjectDetail: React.FC = () => {
         </div>
         <div className="flex items-center gap-4 flex-wrap text-[10px] text-muted-foreground">
           {project.address && <span className="flex items-center gap-1"><MapPin size={12} /> {project.address}</span>}
-          {project.start_date && <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(project.start_date).toLocaleDateString()}</span>}
+          {project.start_date && <span className="flex items-center gap-1"><Calendar size={12} /> {parseLocalDate(project.start_date).toLocaleDateString()}</span>}
           {contractValue > 0 && <span className="flex items-center gap-1 text-primary font-bold"><DollarSign size={12} /> {contractValue.toLocaleString()}</span>}
         </div>
       </div>
@@ -252,7 +253,7 @@ const ProjectDetail: React.FC = () => {
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-foreground text-sm font-semibold truncate">{r.vendor}</p>
-                <p className="text-[10px] text-muted-foreground">{new Date(r.receipt_date).toLocaleDateString()} • {r.category}</p>
+                <p className="text-[10px] text-muted-foreground">{parseLocalDate(r.receipt_date).toLocaleDateString()} • {r.category}</p>
               </div>
               <p className="font-serif text-foreground font-bold">${Number(r.amount).toFixed(2)}</p>
             </div>

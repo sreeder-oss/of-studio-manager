@@ -1,3 +1,4 @@
+import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, ChevronRight, X, Trash2, FolderKanban, MapPin, Calendar, DollarSign } from 'lucide-react';
@@ -147,7 +148,7 @@ const Projects: React.FC = () => {
                       )}
                       {project.start_date && (
                         <span className="flex items-center gap-1 text-[9px] text-muted-foreground">
-                          <Calendar size={10} /> {new Date(project.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                          <Calendar size={10} /> {parseLocalDate(project.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                         </span>
                       )}
                       {project.contract_value && (
