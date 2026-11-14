@@ -18,7 +18,7 @@ export const LEGAL_TERMS = {
   estimateValidity: `Estimate Validity: This estimate is valid for 30 days from the date issued. Material pricing and availability are subject to change beyond that window and may require a revised estimate.`,
 };
 
-export const PRIVACY_NOTICE = `Organic Finishes LLC does not collect, store, or process any banking, credit card, or financial account information. All payments are handled externally through your preferred method.`;
+export const PRIVACY_NOTICE = `Organic Finishes LLC does not collect, store, or process any banking or financial account information. Payments are accepted by check or Zelle only.`;
 
 export const COMPANY_INFO = {
   name: "Organic Finishes LLC",

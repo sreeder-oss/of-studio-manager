@@ -660,10 +660,12 @@ export type Database = {
           license_number: string | null
           minimum_charge: number
           mobilization_fee: number
+          payee_name: string
           sundries_pct: number
           terms_text: string | null
           updated_at: string
           user_id: string
+          zelle_contact: string | null
         }
         Insert: {
           company_address?: string | null
@@ -678,10 +680,12 @@ export type Database = {
           license_number?: string | null
           minimum_charge?: number
           mobilization_fee?: number
+          payee_name?: string
           sundries_pct?: number
           terms_text?: string | null
           updated_at?: string
           user_id?: string
+          zelle_contact?: string | null
         }
         Update: {
           company_address?: string | null
@@ -696,10 +700,12 @@ export type Database = {
           license_number?: string | null
           minimum_charge?: number
           mobilization_fee?: number
+          payee_name?: string
           sundries_pct?: number
           terms_text?: string | null
           updated_at?: string
           user_id?: string
+          zelle_contact?: string | null
         }
         Relationships: []
       }

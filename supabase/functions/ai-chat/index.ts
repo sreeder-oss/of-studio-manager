@@ -427,13 +427,13 @@ payload below (more reliable than fenced JSON):
 
   "deposit_applied": 0,
   "prior_payments": [
-    { "date": "YYYY-MM-DD", "amount": 0, "method": "Check #1042 | ACH | Card | Cash", "note": "optional" }
+    { "date": "YYYY-MM-DD", "amount": 0, "method": "Check | Zelle", "note": "optional" }
   ],
   "amount_paid": 0,
   "balance_due": 0,
 
-  "payment_terms": "Net 30 from invoice date. Make checks payable to Organic Finishes LLC. ACH and card accepted.",
-  "payment_methods": ["Check","ACH transfer","Credit/debit card"],
+  "payment_terms": "Net 30 from invoice date.",
+  "payment_methods": ["Check","Zelle"],
   "late_fee_note": "A 1.5% monthly finance charge applies to balances 30+ days past due (per signed estimate).",
   "thank_you_note": "Thank you for choosing Organic Finishes — we appreciate the partnership.",
   "notes": ["optional bullet notes — change orders applied, retainage held, etc."]
@@ -465,7 +465,7 @@ INVOICE QUALITY BAR — every invoice must hit ALL of these:
    progress payments so the client sees the running ledger.
 
 6. **payment_terms / payment_methods / late_fee_note** are always set —
-   default to Net 30, the methods above, and the 1.5%/mo late fee that
+   default to Net 30, Check and Zelle only, and the 1.5%/mo late fee that
    matches our signed estimates. Adjust only if the user overrides.
 
 7. **invoice_number** — if the user gives one, use it. Otherwise propose a

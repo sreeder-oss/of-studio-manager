@@ -66,6 +66,7 @@ interface RenderCtx {
   inv: InvoiceDoc;
   company: CompanyInfo;
   pageNum: number;
+  payee: { payee_name: string; zelle_contact: string | null };
 }
 
 // Header band on every page
@@ -524,7 +525,7 @@ function renderPayments(ctx: RenderCtx, y: number): number {
     rows.push([
       { content: 'Deposit applied', styles: { fontSize: 9 } },
       { content: '—', styles: { halign: 'center', fontSize: 9, textColor: MUTED } },
-      { content: 'Per estimate', styles: { fontSize: 9, textColor: NAVY_SOFT } },
+      { content: '', styles: { fontSize: 9, textColor: NAVY_SOFT } },
       { content: fmt(inv.deposit_applied), styles: { halign: 'right', fontSize: 9, fontStyle: 'bold', textColor: GREEN } },
     ]);
   }
@@ -544,7 +545,7 @@ function renderPayments(ctx: RenderCtx, y: number): number {
   autoTable(doc, {
     startY: y,
     margin: { left: MARGIN, right: MARGIN, top: 72, bottom: 50 },
-    head: [['Date', 'Method', 'Note', 'Amount']],
+    head: [['Date', 'Method', 'Reference', 'Amount']],
     body: rows,
     theme: 'plain',
     styles: {
@@ -577,13 +578,11 @@ function renderBack(ctx: RenderCtx, y: number): number {
   const { inv, doc } = ctx;
 
   // Payment instructions panel
-  if (inv.payment_terms || inv.payment_methods.length > 0 || inv.late_fee_note) {
+  {
     y = sectionLabel(ctx, y, 'Payment Instructions');
-    const lines: string[] = [];
-    if (inv.payment_terms) lines.push(inv.payment_terms);
-    if (inv.payment_methods.length > 0) lines.push(`Accepted: ${inv.payment_methods.join(', ')}.`);
-    if (inv.late_fee_note) lines.push(inv.late_fee_note);
-    const text = lines.join(' ');
+    const lines: string[] = [`Please make checks payable to ${ctx.payee.payee_name}.`];
+    if (ctx.payee.zelle_contact) lines.push(`Zelle: ${ctx.payee.zelle_contact}`);
+    const text = lines.join('\n');
     const wrapped = doc.splitTextToSize(text, CONTENT_W - 16) as string[];
     const lineH = 9.5 * 1.45;
     const boxH = wrapped.length * lineH + 16;
@@ -631,8 +630,11 @@ function renderBack(ctx: RenderCtx, y: number): number {
 }
 
 // --- Public API ------------------------------------------------------------
+export interface PayeeInfo { payee_name: string; zelle_contact?: string | null }
+
 export interface BuildInvoicePdfOptions {
   company?: Partial<CompanyInfo>;
+  payee?: PayeeInfo;
   filename?: string;
 }
 
@@ -641,7 +643,7 @@ export function buildInvoicePdf(raw: InvoiceDoc, opts: BuildInvoicePdfOptions = 
   const inv = recalcInvoice(raw);
 
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const ctx: RenderCtx = { doc, inv, company, pageNum: 1 };
+  const ctx: RenderCtx = { doc, inv, company, pageNum: 1, payee: { payee_name: opts.payee?.payee_name?.trim() || 'Shawn Reeder', zelle_contact: opts.payee?.zelle_contact?.trim() || null } };
 
   drawHeader(ctx);
   drawFooter(ctx);
@@ -687,7 +689,12 @@ export function coerceToInvoiceDoc(stored: unknown, fallback: {
   total?: number;
   paid?: boolean;
   paid_date?: string | null;
+  /** Real figures from the invoice row and its payment ledger. */
+  deposit_applied?: number;
+  payments?: { date: string; method: string | null; reference: string | null; amount: number }[];
 } = {}): InvoiceDoc | null {
+  const ledger = (fallback.payments || []).map((p) => ({ date: p.date, amount: Number(p.amount || 0), method: p.method || '', note: p.reference || '' }));
+  const deposit = Number(fallback.deposit_applied || 0);
   if (!stored && !fallback.total && !fallback.title) return null;
 
   // Already a structured InvoiceDoc?
@@ -700,6 +707,9 @@ export function coerceToInvoiceDoc(stored: unknown, fallback: {
       project_name: (stored as any).project_name || fallback.project_name || '',
       invoice_date: (stored as any).invoice_date || fallback.invoice_date || '',
       due_date: (stored as any).due_date || fallback.due_date || '',
+      deposit_applied: deposit,
+      prior_payments: ledger,
+      payment_terms: '', payment_methods: [],
     };
     return merged as InvoiceDoc;
   }
@@ -719,7 +729,6 @@ export function coerceToInvoiceDoc(stored: unknown, fallback: {
   const subtotal = lines.reduce((a, b) => a + b.total, 0) || (fallback.subtotal ?? 0);
   const tax = fallback.tax_applied ?? 0;
   const total = fallback.total ?? (subtotal + tax);
-  const paid = fallback.paid ? total : 0;
   return {
     invoice_number: fallback.invoice_number || '',
     title: fallback.title || 'Invoice',
@@ -742,15 +751,10 @@ export function coerceToInvoiceDoc(stored: unknown, fallback: {
     tax_amount: tax,
     subtotal,
     total,
-    deposit_applied: 0,
-    prior_payments: paid && fallback.paid_date ? [{
-      date: fallback.paid_date,
-      amount: paid,
-      method: '',
-      note: 'Marked paid',
-    }] : [],
-    amount_paid: paid,
-    balance_due: +(total - paid).toFixed(2),
+    deposit_applied: deposit,
+    prior_payments: ledger,
+    amount_paid: 0,
+    balance_due: total,
     payment_terms: '',
     payment_methods: [],
     late_fee_note: '',

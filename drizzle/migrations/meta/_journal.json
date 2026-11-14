@@ -50,6 +50,13 @@
       "when": 1794680389378,
       "tag": "0006_invoice_payments_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794680652765,
+      "tag": "0007_settings_payee_zelle",
+      "breakpoints": true
     }
   ]
 }

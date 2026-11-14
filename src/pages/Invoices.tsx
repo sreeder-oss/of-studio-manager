@@ -90,6 +90,7 @@ const Invoices: React.FC = () => {
                     </div>
                     <div>
                       <span className="font-serif font-bold text-foreground text-sm block leading-none">{contact?.name || 'Client'}</span>
+                      {inv.invoice_number && <span className="text-[10px] text-primary font-bold tracking-widest mr-2">{inv.invoice_number}</span>}
                       <span className="text-[10px] text-muted-foreground font-bold tracking-tight mt-0.5 inline-block">
                         {inv.created_at ? new Date(inv.created_at).toLocaleDateString() : ''}
                       </span>

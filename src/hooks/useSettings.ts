@@ -25,6 +25,8 @@ export const DEFAULT_SETTINGS: Settings = {
   company_name: COMPANY_INFO.name,
   company_address: null,
   license_number: null,
+  payee_name: 'Shawn Reeder',
+  zelle_contact: null,
 };
 
 /** Format a fraction (0.5) as a percent label ("50"). */

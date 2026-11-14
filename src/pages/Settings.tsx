@@ -34,6 +34,8 @@ const Settings: React.FC = () => {
     next.company_name = settings.company_name || '';
     next.company_address = settings.company_address || '';
     next.license_number = settings.license_number || '';
+    next.payee_name = settings.payee_name || 'Shawn Reeder';
+    next.zelle_contact = settings.zelle_contact || '';
     next.terms_text = settings.terms_text || DEFAULT_TERMS_TEXT;
     setF(next);
   }, [isLoading, settings]);
@@ -52,12 +54,15 @@ const Settings: React.FC = () => {
       out[k] = v;
     }
     if (!f.company_name?.trim()) { toast.error('Company name is required'); return; }
+    if (!f.payee_name?.trim()) { toast.error('Checks payable to is required'); return; }
     try {
       await save.mutateAsync({
         ...(out as S),
         company_name: f.company_name.trim(),
         company_address: f.company_address?.trim() || null,
         license_number: f.license_number?.trim() || null,
+        payee_name: f.payee_name.trim(),
+        zelle_contact: f.zelle_contact?.trim() || null,
         terms_text: f.terms_text?.trim() || null,
       });
       toast.success('Settings saved');
@@ -86,6 +91,12 @@ const Settings: React.FC = () => {
         <div><label className={labelCls}>Company name</label><input className={inputCls} value={f.company_name || ''} onChange={set('company_name')} /></div>
         <div><label className={labelCls}>Company address</label><input className={inputCls} value={f.company_address || ''} onChange={set('company_address')} /></div>
         <div><label className={labelCls}>License number</label><input className={inputCls} value={f.license_number || ''} onChange={set('license_number')} /></div>
+      </section>
+
+      <section className="bg-card border border-border rounded-xl p-4 space-y-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Getting paid</p>
+        <div><label className={labelCls}>Checks payable to</label><input className={inputCls} value={f.payee_name || ''} onChange={set('payee_name')} /></div>
+        <div><label className={labelCls}>Zelle contact (email or phone, optional)</label><input className={inputCls} value={f.zelle_contact || ''} onChange={set('zelle_contact')} /></div>
       </section>
 
       <section className="bg-card border border-border rounded-xl p-4 space-y-3">

@@ -10,6 +10,9 @@ import { PRIVACY_NOTICE } from '@/lib/legal';
 import { useSettings, renderTerms } from '@/hooks/useSettings';
 import { downloadInvoicePdf, coerceToInvoiceDoc } from '@/lib/invoicePdf';
 import { toast } from 'sonner';
+import { useProjects } from '@/hooks/useProjects';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 const InvoiceDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +21,9 @@ const InvoiceDetail: React.FC = () => {
   const { data: invoice, isLoading } = useInvoice(id!);
   const { data: contact } = useContact(invoice?.contact_id || '');
   const deleteInvoice = useDeleteInvoice();
+  const queryClient = useQueryClient();
+  const { data: projects = [] } = useProjects();
+  const [savingProject, setSavingProject] = React.useState(false);
   const { data: payments = [] } = useInvoicePayments(id!);
   const addPayment = useAddInvoicePayment();
   const deletePayment = useDeleteInvoicePayment();
@@ -97,7 +103,7 @@ const InvoiceDetail: React.FC = () => {
   const handleDownload = () => {
     try {
       const doc = coerceToInvoiceDoc(invoice.line_items, {
-        invoice_number: invoice.id?.slice(0, 8).toUpperCase(),
+        invoice_number: invoice.invoice_number || '',
         title: contact?.name ? `Invoice — ${contact.name}` : 'Invoice',
         client_name: contact?.name || '',
         project_address: contact?.address || '',
@@ -108,9 +114,12 @@ const InvoiceDetail: React.FC = () => {
         total: total,
         paid: !!invoice.paid,
         paid_date: invoice.paid_date,
+        deposit_applied: Number(invoice.deposit_applied || 0),
+        payments: [...payments].sort((a, b) => a.paid_on.localeCompare(b.paid_on))
+          .map(p => ({ date: p.paid_on, method: p.method, reference: p.reference, amount: Number(p.amount) })),
       });
       if (!doc) { toast.error('Nothing to export'); return; }
-      downloadInvoicePdf(doc);
+      downloadInvoicePdf(doc, { payee: { payee_name: settings.payee_name, zelle_contact: settings.zelle_contact } });
       toast.success('PDF downloaded');
     } catch (e) {
       console.error(e);
@@ -140,7 +149,7 @@ const InvoiceDetail: React.FC = () => {
       <div className="bg-card rounded-2xl border border-border p-5">
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h2 className="font-serif text-foreground text-xl">Invoice</h2>
+            <h2 className="font-serif text-foreground text-xl">Invoice{invoice.invoice_number ? ` ${invoice.invoice_number}` : ''}</h2>
             <p className="text-muted-foreground text-xs mt-0.5">{contact?.name || 'Unknown Client'}</p>
           </div>
           <span className={`text-[8px] font-bold px-2 py-0.5 rounded uppercase tracking-widest border flex items-center ${status.classes}`}>
@@ -156,6 +165,23 @@ const InvoiceDetail: React.FC = () => {
             {contact.phone && <p className="text-muted-foreground text-[11px]">{contact.phone}</p>}
           </div>
         )}
+
+        <div className="mb-4">
+          <label className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Project</label>
+          <select value={invoice.project_id || ''} disabled={savingProject} aria-label="Project"
+            onChange={async (e) => {
+              setSavingProject(true);
+              const { error } = await supabase.from('invoices').update({ project_id: e.target.value || null }).eq('id', invoice.id);
+              setSavingProject(false);
+              if (error) { toast.error('Failed to update project'); return; }
+              queryClient.invalidateQueries({ queryKey: ['invoices'] });
+              toast.success('Project updated');
+            }}
+            className="mt-1 w-full bg-accent border border-border rounded-xl py-2 px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary disabled:opacity-50">
+            <option value="">No project</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
 
         <div className="flex gap-4 mb-4">
           <div className="bg-accent rounded-xl p-3 flex-1 border border-border">
