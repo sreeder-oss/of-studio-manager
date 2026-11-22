@@ -1,6 +1,6 @@
 import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, Search, Trash2, Shield, UserPlus } from 'lucide-react';
 import { QuickContactDialog, QuickProjectDialog } from '@/components/QuickCreateDialogs';
 
@@ -40,6 +40,7 @@ const emptyArea = (): Area => ({ id: newId(), name: '', service_id: '', qty: 0, 
 
 const EstimateCreate: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { id: editId } = useParams<{ id: string }>();
   const isEdit = !!editId;
   const { data: existing, isLoading: loadingExisting } = useEstimate(editId || '');
@@ -52,6 +53,16 @@ const EstimateCreate: React.FC = () => {
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [selectedContactId, setSelectedContactId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
+
+  // Pre-select contact from URL param (e.g. ?contactId=...)
+  useEffect(() => {
+    if (isEdit) return;
+    const cid = searchParams.get('contactId');
+    if (cid) {
+      setSelectedContactId(cid);
+      setStep('create');
+    }
+  }, [isEdit, searchParams]);
   const { data: systems = [] } = useSystems();
   const { data: services = [] } = useServices();
   const [areas, setAreas] = useState<Area[]>([emptyArea()]);
