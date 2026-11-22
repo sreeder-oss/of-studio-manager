@@ -2,8 +2,8 @@ import React from 'react';
 import lumina from '@/assets/lumina.svg';
 
 interface Props {
-  size?: number;
-  strokeWidth?: number;
+  size?: string | number;
+  strokeWidth?: string | number;
   className?: string;
 }
 

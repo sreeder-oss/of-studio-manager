@@ -26,7 +26,7 @@ import { AIAssistant } from '@/components/ai/AIAssistant';
 interface NavItem {
   path: string;
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+  icon: React.ComponentType<{ size?: string | number; className?: string; strokeWidth?: string | number }>;
   badge?: string;
 }
 
