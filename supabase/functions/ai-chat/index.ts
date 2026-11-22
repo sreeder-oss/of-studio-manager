@@ -805,12 +805,85 @@ async function handleReceiptScan(input: { image?: unknown; model?: unknown; apiK
   return json(200, { vendor, amount, date, category });
 }
 
+async function handleOutreachDraft(input: {
+  prompt?: unknown;
+  model?: unknown;
+  apiKey?: unknown;
+  backupApiKey?: unknown;
+}): Promise<Response> {
+  const json = (status: number, b: unknown) =>
+    new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
+  if (!prompt) return json(400, { error: "prompt is required" });
+
+  const { primary, fallback } = resolveAITargets(
+    typeof input.model === "string" ? input.model : undefined,
+    typeof input.apiKey === "string" ? input.apiKey : undefined,
+    typeof input.backupApiKey === "string" ? input.backupApiKey : undefined,
+  );
+  if (!primary) {
+    return json(500, { error: "No AI API key configured. Please add your OpenRouter / DeepSeek key in Settings." });
+  }
+
+  const callDraft = (target: AITarget) =>
+    fetchWithTimeout(target.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${target.key}`,
+        "Content-Type": "application/json",
+        ...target.extraHeaders,
+      },
+      body: JSON.stringify({
+        model: target.model,
+        temperature: 0.4,
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content: "You write concise, commercial-grade outreach emails for Shawn Reeder, owner of Organic Finishes LLC (specialty plaster & microcement). Follow the requested output format exactly.",
+          },
+          { role: "user", content: prompt },
+        ],
+      }),
+    }, 45_000);
+
+  let usedTarget = primary;
+  let upstream: Response | null = null;
+  try {
+    upstream = await callDraft(primary);
+  } catch (e) {
+    console.warn("outreach_draft primary timeout/error", primary.model, e);
+  }
+  if ((!upstream || !upstream.ok) && fallback) {
+    if (upstream) {
+      const detail = await upstream.text().catch(() => "");
+      console.warn("outreach_draft primary failed, falling back to backup", primary.model, upstream.status, detail.slice(0, 200));
+    }
+    usedTarget = fallback;
+    try {
+      upstream = await callDraft(fallback);
+    } catch (e) {
+      console.error("outreach_draft backup timeout/error", fallback.model, e);
+      return json(504, { error: `Both ${primary.label} and backup ${fallback.label} timed out.` });
+    }
+  }
+  if (!upstream || !upstream.ok) {
+    const status = upstream?.status ?? 502;
+    const detail = upstream ? await upstream.text().catch(() => "") : "";
+    console.error("outreach_draft upstream error", usedTarget.model, status, detail.slice(0, 300));
+    return json(status === 429 || status === 402 ? status : 502, { error: `AI drafting failed (${status}).` });
+  }
+
+  const data = await upstream.json().catch(() => ({}));
+  const text = String(data?.choices?.[0]?.message?.content ?? "").trim();
+  if (!text) return json(502, { error: "AI returned an empty email draft." });
+  return json(200, { text, model: usedTarget.model });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") ?? "";
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -837,8 +910,12 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    if ((body as unknown as { mode?: string }).mode === "receipt_scan") {
+    const mode = (body as unknown as { mode?: string }).mode;
+    if (mode === "receipt_scan") {
       return await handleReceiptScan(body as unknown as { image?: unknown; model?: unknown; apiKey?: unknown; backupApiKey?: unknown });
+    }
+    if (mode === "outreach_draft") {
+      return await handleOutreachDraft(body as unknown as { prompt?: unknown; model?: unknown; apiKey?: unknown; backupApiKey?: unknown });
     }
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {
