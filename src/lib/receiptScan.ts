@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { getStoredDeepSeekKey } from '@/lib/aiModels';
 
 export interface ReceiptScanResult {
   vendor: string | null;
@@ -28,7 +29,8 @@ async function toJpegDataUrl(file: File, maxSide = 1600): Promise<string> {
 /** Send the receipt photo to ai-chat (receipt_scan mode). Throws with a readable message on failure. */
 export async function scanReceipt(file: File): Promise<ReceiptScanResult> {
   const image = await toJpegDataUrl(file);
-  const { data, error } = await supabase.functions.invoke('ai-chat', { body: { mode: 'receipt_scan', image } });
+  const apiKey = getStoredDeepSeekKey() || undefined;
+  const { data, error } = await supabase.functions.invoke('ai-chat', { body: { mode: 'receipt_scan', image, apiKey } });
   if (error) {
     let msg = 'Could not read the receipt.';
     try {

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useSettings, useSaveSettings, DEFAULT_TERMS_TEXT, type Settings as S } from '@/hooks/useSettings';
 import { useAIAssistantOptional } from '@/contexts/AIAssistantContext';
-import { AI_MODELS, getStoredModelId, setStoredModelId } from '@/lib/aiModels';
-import { Check, Brain } from 'lucide-react';
+import { AI_MODELS, getStoredModelId, setStoredModelId, getStoredDeepSeekKey, setStoredDeepSeekKey } from '@/lib/aiModels';
+import { Check, Brain, Key, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 type PctKey = 'default_tax_rate' | 'default_overhead_pct' | 'default_profit_pct' | 'default_deposit_pct' | 'default_waste_factor' | 'sundries_pct';
@@ -30,6 +30,8 @@ const Settings: React.FC = () => {
   const aiCtx = useAIAssistantOptional();
   const [currentModel, setCurrentModel] = useState<string>(() => aiCtx?.modelId ?? getStoredModelId());
   const [f, setF] = useState<Record<string, string>>({});
+  const [apiKey, setApiKey] = useState<string>(() => getStoredDeepSeekKey());
+  const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
     if (aiCtx?.modelId) {
@@ -44,6 +46,15 @@ const Settings: React.FC = () => {
       aiCtx.setModelId(id);
     }
     toast.success('Default AI model updated');
+  };
+
+  const handleSaveApiKey = () => {
+    setStoredDeepSeekKey(apiKey);
+    if (apiKey.trim()) {
+      toast.success('DeepSeek API key saved');
+    } else {
+      toast.info('DeepSeek API key cleared');
+    }
   };
 
   useEffect(() => {
@@ -119,45 +130,70 @@ const Settings: React.FC = () => {
         <div><label className={labelCls}>Zelle contact (email or phone, optional)</label><input className={inputCls} value={f.zelle_contact || ''} onChange={set('zelle_contact')} /></div>
       </section>
 
-      <section className="bg-card border border-border rounded-xl p-4 space-y-3">
+      <section className="bg-card border border-border rounded-xl p-4 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Brain size={14} className="text-primary" />
-            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">AI Assistant Model</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">AI Assistant Engine</p>
           </div>
-          <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-mono">
-            Active: {AI_MODELS.find((m) => m.id === currentModel)?.label ?? 'Custom'}
+          <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-muted-foreground font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            DeepSeek V4.1 Flash
           </span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Choose which AI engine powers the assistant for plaster estimates, blueprint scope extraction, and chat. You can also quickly toggle this from the header inside the AI Assistant drawer.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-          {AI_MODELS.map((m) => {
-            const isSelected = m.id === currentModel;
-            return (
+
+        {/* Model Card */}
+        <div className="p-3.5 rounded-lg border border-primary/40 bg-primary/5 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-foreground">DeepSeek V4.1 Flash</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/20 text-primary">Default</span>
+            </div>
+            <span className="text-[10px] font-mono text-muted-foreground">CED MoE 552B</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Multimodal Mixture-of-Experts model with native visual understanding, fast compressed KV caching, and superior trade estimating and blueprint extraction.
+          </p>
+        </div>
+
+        {/* API Key Configuration */}
+        <div className="pt-2 border-t border-border space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
+              <Key size={12} className="text-primary" />
+              DeepSeek API Key
+            </label>
+            <span className="text-[9px] text-muted-foreground">Direct API or OpenRouter</span>
+          </div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showKey ? 'text' : 'password'}
+                placeholder="sk-..."
+                className={`${inputCls} pr-9 font-mono text-xs`}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
               <button
-                key={m.id}
                 type="button"
-                onClick={() => handleModelChange(m.id)}
-                className={`text-left p-3 rounded-lg border transition-all ${
-                  isSelected
-                    ? 'border-primary bg-primary/10 shadow-sm'
-                    : 'border-border bg-accent/40 hover:bg-accent hover:border-border'
-                }`}
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                title={showKey ? 'Hide key' : 'Show key'}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-foreground">{m.label}</span>
-                  {isSelected && <Check size={14} className="text-primary shrink-0" />}
-                </div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-primary/90">{m.provider}</span>
-                  <span className="text-[9px] text-muted-foreground">via OpenRouter</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-snug">{m.blurb}</p>
+                {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
-            );
-          })}
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveApiKey}
+              className="px-3 py-1.5 rounded-lg border border-primary bg-primary/10 hover:bg-primary/20 text-primary font-bold text-[10px] uppercase tracking-wider shrink-0 transition-colors"
+            >
+              Save Key
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Paste your DeepSeek API key here, or configure <code className="text-primary">DEEPSEEK_API_KEY</code> in your environment secrets.
+          </p>
         </div>
       </section>
 

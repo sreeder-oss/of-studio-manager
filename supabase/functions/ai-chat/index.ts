@@ -18,8 +18,9 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 /** Single pinned model for all assistant calls (deterministic scope extraction). */
-const PINNED_MODEL = "anthropic/claude-sonnet-4.5";
+const PINNED_MODEL = "deepseek/deepseek-v4.1-flash";
 const FC = "https://api.firecrawl.dev/v2";
 const MAX_TOOL_ROUNDS = 16;
 const RESEARCH_SOFT_CAP = 6; // after this many tool rounds, force the model to wrap up
@@ -53,6 +54,8 @@ interface RequestBody {
   hasImages?: boolean;
   /** Optional model override. If it matches an OpenRouter slug, route through OpenRouter. */
   model?: string;
+  /** Optional client-provided API key (stored in app Settings) */
+  apiKey?: string;
 }
 
 const tools = [
@@ -633,15 +636,28 @@ async function fcNaaPortal(target: string, key: string) {
 // --- Receipt scan: image -> { vendor, amount, date, category } as strict JSON ---
 const RECEIPT_SCAN_CATEGORIES = ["Materials", "Labor", "Equipment", "Travel", "Supplies", "Miscellaneous"] as const;
 
-async function handleReceiptScan(input: { image?: unknown }): Promise<Response> {
+async function handleReceiptScan(input: { image?: unknown; apiKey?: unknown }): Promise<Response> {
   const json = (status: number, b: unknown) =>
     new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   const image = typeof input.image === "string" ? input.image : "";
   if (!/^data:image\/(png|jpe?g|webp|gif|heic|heif);base64,/i.test(image) || image.length > 12_000_000) {
     return json(400, { error: "A receipt image (data URL, under ~9 MB) is required." });
   }
-  const key = Deno.env.get("OPENROUTER_API_KEY") ?? "";
-  if (!key) return json(500, { error: "OPENROUTER_API_KEY is not configured" });
+  const clientKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
+  const key = clientKey || Deno.env.get("DEEPSEEK_API_KEY") || Deno.env.get("OPENROUTER_API_KEY") || "";
+  if (!key) return json(500, { error: "DEEPSEEK_API_KEY is not configured. Please add your key in Settings or environment." });
+
+  const isOpenRouter = key.startsWith("sk-or-");
+  const upstreamUrl = isOpenRouter ? OPENROUTER_URL : DEEPSEEK_URL;
+  const model = isOpenRouter ? "deepseek/deepseek-v4.1-flash" : "deepseek-flash";
+  const upstreamHeaders: Record<string, string> = {
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/json",
+  };
+  if (isOpenRouter) {
+    upstreamHeaders["HTTP-Referer"] = "https://of-manager.lovable.app";
+    upstreamHeaders["X-Title"] = "OF Manager";
+  }
 
   const schema = {
     type: "object",
@@ -654,14 +670,11 @@ async function handleReceiptScan(input: { image?: unknown }): Promise<Response> 
       category: { type: "string", enum: [...RECEIPT_SCAN_CATEGORIES, "Unknown"] },
     },
   };
-  const upstream = await fetch(OPENROUTER_URL, {
+  const upstream = await fetch(upstreamUrl, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`, "Content-Type": "application/json",
-      "HTTP-Referer": "https://of-manager.lovable.app", "X-Title": "OF Manager",
-    },
+    headers: upstreamHeaders,
     body: JSON.stringify({
-      model: PINNED_MODEL,
+      model,
       temperature: 0,
       stream: false,
       response_format: { type: "json_schema", json_schema: { name: "receipt", strict: true, schema } },
@@ -736,7 +749,7 @@ Deno.serve(async (req: Request) => {
 
     const body = (await req.json()) as RequestBody;
     if ((body as unknown as { mode?: string }).mode === "receipt_scan") {
-      return await handleReceiptScan(body as unknown as { image?: unknown });
+      return await handleReceiptScan(body as unknown as { image?: unknown; apiKey?: unknown });
     }
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {
@@ -778,18 +791,30 @@ Deno.serve(async (req: Request) => {
       Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
     );
 
-    // Model selection: use client-selected model if provided, otherwise default to PINNED_MODEL (Claude Sonnet 4.5)
+    // Model & key selection: DeepSeek V4.1 Flash (direct API or OpenRouter)
+    const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY") ?? "";
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
-    if (!OPENROUTER_API_KEY) {
-      return new Response(JSON.stringify({ error: "OPENROUTER_API_KEY is not configured" }), {
+    const clientApiKey = (typeof body.apiKey === "string" && body.apiKey.trim()) ? body.apiKey.trim() : "";
+    const activeKey = clientApiKey || DEEPSEEK_API_KEY || OPENROUTER_API_KEY;
+
+    if (!activeKey) {
+      return new Response(JSON.stringify({
+        error: "DEEPSEEK_API_KEY is not configured. Please enter your API key in Settings or add DEEPSEEK_API_KEY in your Supabase environment secrets."
+      }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const useOpenRouter = true;
-    const model = (typeof body.model === "string" && body.model.trim()) ? body.model.trim() : PINNED_MODEL;
-    const upstreamUrl = OPENROUTER_URL;
-    const upstreamKey = OPENROUTER_API_KEY;
-    const upstreamExtraHeaders: Record<string, string> = { "HTTP-Referer": "https://of-manager.lovable.app", "X-Title": "OF Manager" };
+
+    const isOpenRouter = activeKey.startsWith("sk-or-");
+    const upstreamUrl = isOpenRouter ? OPENROUTER_URL : DEEPSEEK_URL;
+    const rawModel = (typeof body.model === "string" && body.model.trim()) ? body.model.trim() : PINNED_MODEL;
+    const model = isOpenRouter
+      ? (rawModel.startsWith("deepseek/") ? rawModel : "deepseek/deepseek-v4.1-flash")
+      : "deepseek-flash";
+    const upstreamKey = activeKey;
+    const upstreamExtraHeaders: Record<string, string> = isOpenRouter
+      ? { "HTTP-Referer": "https://of-manager.lovable.app", "X-Title": "OF Manager" }
+      : {};
     const lastUserMsg = [...body.messages].reverse().find((m) => m.role === "user");
     const userPromptText = !lastUserMsg ? "" : typeof lastUserMsg.content === "string"
       ? lastUserMsg.content
