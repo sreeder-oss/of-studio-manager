@@ -258,6 +258,18 @@ ${JSON.stringify(systemsLibrary, null, 2)}
 SERVICES (the owner's price book — match each estimate area to one of these by name and use its id):
 ${JSON.stringify(services, null, 2)}
 
+MANUFACTURER TECHNICAL SPECIFICATIONS & ESTIMATING RULES:
+- SureCrete SureBroom Base & Broom Resurfacing: 50# bag = 100-180 SF base coat (squeegee/tight trowel), 150-250 SF broom finish coat (system avg ~150 SF/bag). Mix 4-6 qts water per 50# bag. 6,000+ PSI compressive strength. Substrate requires ICRI CSP-2 to CSP-4 profile, etched with SCR (2:1 dilution), SSD (Saturated Surface Dry - damp, no standing puddles). Honor all expansion joints. Recoat/seal in 24 hrs.
+- SureCrete MicroTek One Coat / Micro-Topping: 40# bag = 200-300 SF tightly troweled (0.5-1.0mm thickness). Mix 5-6 qts water per 40# bag with variable speed drill & cage mixer (min 1 min). 4,278 PSI compressive strength. 0 g/L VOC. 2 coats standard; recoat in 2-6 hrs. Dry 12-24 hrs before stains/sealers.
+- SureCrete Surface Prep & Primers: SCR cleaner/degreaser (2:1 dilution for concrete etching, 4:1 for overlay cleaning); SureBond cementitious slurry bonding agent for stamp/deep overlays (~200 SF/bag); DK 700 Class 1 Moisture Vapor Barrier (96.5% solids urethane, 300-400 SF/gal @ 3-5 mils wet, stops MVT < 0.5 lb/1,000 SF; tack-free in 4.5 hrs).
+- SureCrete Protective Sealers: Dura-Kote DK 400WB (2-component 57% aliphatic polyurethane, 300-400 SF/gal @ 4-5.3 mils wet, gloss/satin); HS 200/300 silane-acrylic nano-sealer (200-300 SF/gal, freeze-thaw spall protection); FloorTek 6 NanoCoat (400-500 SF/gal); SureFinish acrylic sacrificial wax (1,500 SF/gal).
+- Meoded Quartz Primer: Required 100% acrylic silica grit bonding primer for all Meoded lime & concrete plasters. 300-500 SF/gal. Dries in 3-5 hrs. Dilute up to 25% with water on porous masonry brown coats or previous plaster.
+- Meoded Marmorino Tintoretto: Slaked lime + fine marble dust for smooth matte/satin stone textures. 20 kg pail = 160-240 SF for 2 coats (~50 SF/5 kg). Burnish damp for low satin sheen.
+- Meoded Marmorino Palladino: Medium-grain marble lime plaster for pitted travertine, distressed stone, and concrete textures. 20 kg pail = 100-180 SF for 2 coats (~35 SF/5 kg).
+- Meoded Golmex: Concrete-look architectural plaster (Portland cement + hydrated lime). 50# pail = 80-140 SF @ 1/8" thickness (2 coats); 10# = 16-28 SF. Form-line relief, sponge float & tight trowel compress. Cure 48 hrs before sealing.
+- Meoded Stucco Veneziano: Ultra-high gloss mirror Venetian plaster. 20 kg pail = 250-320 SF for 3 ultra-thin passes. Burnish with trowel at 30 deg for high mirror reflection.
+- Meoded Sealers: PlasterSeal Plus penetrating siloxane water/stain barrier (200-300 SF/gal); Hydrowax natural beeswax/Marseille soap protective finish (300-400 SF/gal).
+
 PRICING — YOU DO NOT PRICE ESTIMATES. Never state, compute, or suggest dollar
 amounts, rates, or totals for an estimate. The app computes all pricing from the
 SERVICES price book.
