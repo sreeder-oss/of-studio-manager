@@ -40,7 +40,7 @@ const Invoices: React.FC = () => {
   if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading invoices...</div>;
 
   return (
-    <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
+    <div className="space-y-4 animate-fade-in pb-20 max-w-5xl mx-auto">
       <header>
         <h2 className="text-xl font-serif text-foreground tracking-tight">Invoices</h2>
         <p className="text-muted-foreground text-[9px] uppercase tracking-widest mt-0.5 font-bold">Financial Management</p>

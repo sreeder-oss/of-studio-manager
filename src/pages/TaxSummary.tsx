@@ -86,7 +86,7 @@ const TaxSummary: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
+    <div className="space-y-4 animate-fade-in pb-20 max-w-5xl mx-auto">
       <button onClick={() => navigate('/')} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[10px] font-bold uppercase tracking-widest">
         <ChevronLeft size={14} /> Dashboard
       </button>

@@ -163,7 +163,7 @@ const Contacts: React.FC = () => {
   const statusOptions = STATUS_BY_TYPE[formData.type];
 
   return (
-    <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
+    <div className="space-y-4 animate-fade-in pb-20 max-w-5xl mx-auto">
       <header className="flex justify-between items-center">
         <div>
           <h2 className="text-xl font-serif text-foreground tracking-tight">Contacts</h2>

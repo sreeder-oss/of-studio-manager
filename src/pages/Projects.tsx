@@ -91,7 +91,7 @@ const Projects: React.FC = () => {
   if (isLoading) return <div className="text-center py-20 text-muted-foreground text-sm">Loading projects...</div>;
 
   return (
-    <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
+    <div className="space-y-4 animate-fade-in pb-20 max-w-5xl mx-auto">
       <header className="flex justify-between items-center">
         <div>
           <h2 className="text-xl font-serif text-foreground tracking-tight">Projects</h2>
