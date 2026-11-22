@@ -25,6 +25,6 @@ export const COMPANY_INFO = {
   tagline: "Paint, Plaster & Microcement Specialty Contracting",
   address: "5239 S New Haven Ave, Tulsa, OK 74135",
   phone: "(405) 816-0750",
-  email: "organic.finishes.remodeling@gmail.com",
+  email: "contact@organicfinishesllc.org",
   website: "organicfinishesllc.org",
 };
