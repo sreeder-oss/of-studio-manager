@@ -14,12 +14,12 @@ export const DEFAULT_TERMS_TEXT = Object.values(LEGAL_TERMS)
 
 export const DEFAULT_SETTINGS: Settings = {
   default_tax_rate: 0,
-  default_overhead_pct: 0.15,
-  default_profit_pct: 0.2,
+  default_overhead_pct: 0,
+  default_profit_pct: 0,
   default_deposit_pct: 0.5,
-  minimum_charge: 0,
+  minimum_charge: 850,
   default_waste_factor: 0.12,
-  sundries_pct: 0.05,
+  sundries_pct: 0,
   mobilization_fee: 0,
   terms_text: DEFAULT_TERMS_TEXT,
   company_name: COMPANY_INFO.name,
