@@ -49,9 +49,9 @@ function resolveAITargets(
   clientApiKey?: string,
   clientBackupKey?: string,
 ): { primary: AITarget | null; fallback: AITarget | null } {
-  const envDeepSeek = (Deno.env.get("DEEPSEEK_API_KEY") ?? "").trim();
-  const envOpenRouter = (Deno.env.get("OPENROUTER_API_KEY") ?? "").trim();
-  const envGemma = (Deno.env.get("OPENROUTER_GEMMA_API_KEY") ?? "").trim();
+  const envDeepSeek = (Deno.env.get("AI_DeepSeek") ?? Deno.env.get("DEEPSEEK_API_KEY") ?? "").trim();
+  const envOpenRouter = (Deno.env.get("open_router") ?? Deno.env.get("OPENROUTER_API_KEY") ?? "").trim();
+  const envGemma = (Deno.env.get("Gemma") ?? Deno.env.get("OPENROUTER_GEMMA_API_KEY") ?? "").trim();
   const cKey = (clientApiKey ?? "").trim();
   const cBackup = (clientBackupKey ?? "").trim();
 
