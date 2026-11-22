@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useSettings, useSaveSettings, DEFAULT_TERMS_TEXT, type Settings as S } from '@/hooks/useSettings';
+import { useAIAssistantOptional } from '@/contexts/AIAssistantContext';
+import { AI_MODELS, getStoredModelId, setStoredModelId } from '@/lib/aiModels';
+import { Check, Brain } from 'lucide-react';
 import { toast } from 'sonner';
 
 type PctKey = 'default_tax_rate' | 'default_overhead_pct' | 'default_profit_pct' | 'default_deposit_pct' | 'default_waste_factor' | 'sundries_pct';
@@ -24,7 +27,24 @@ const labelCls = 'block text-[9px] font-bold uppercase tracking-widest text-mute
 const Settings: React.FC = () => {
   const { settings, isLoading } = useSettings();
   const save = useSaveSettings();
+  const aiCtx = useAIAssistantOptional();
+  const [currentModel, setCurrentModel] = useState<string>(() => aiCtx?.modelId ?? getStoredModelId());
   const [f, setF] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (aiCtx?.modelId) {
+      setCurrentModel(aiCtx.modelId);
+    }
+  }, [aiCtx?.modelId]);
+
+  const handleModelChange = (id: string) => {
+    setCurrentModel(id);
+    setStoredModelId(id);
+    if (aiCtx) {
+      aiCtx.setModelId(id);
+    }
+    toast.success('Default AI model updated');
+  };
 
   useEffect(() => {
     if (isLoading) return;
@@ -97,6 +117,48 @@ const Settings: React.FC = () => {
         <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Getting paid</p>
         <div><label className={labelCls}>Checks payable to</label><input className={inputCls} value={f.payee_name || ''} onChange={set('payee_name')} /></div>
         <div><label className={labelCls}>Zelle contact (email or phone, optional)</label><input className={inputCls} value={f.zelle_contact || ''} onChange={set('zelle_contact')} /></div>
+      </section>
+
+      <section className="bg-card border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Brain size={14} className="text-primary" />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">AI Assistant Model</p>
+          </div>
+          <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-mono">
+            Active: {AI_MODELS.find((m) => m.id === currentModel)?.label ?? 'Custom'}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Choose which AI engine powers the assistant for plaster estimates, blueprint scope extraction, and chat. You can also quickly toggle this from the header inside the AI Assistant drawer.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+          {AI_MODELS.map((m) => {
+            const isSelected = m.id === currentModel;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => handleModelChange(m.id)}
+                className={`text-left p-3 rounded-lg border transition-all ${
+                  isSelected
+                    ? 'border-primary bg-primary/10 shadow-sm'
+                    : 'border-border bg-accent/40 hover:bg-accent hover:border-border'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-foreground">{m.label}</span>
+                  {isSelected && <Check size={14} className="text-primary shrink-0" />}
+                </div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-primary/90">{m.provider}</span>
+                  <span className="text-[9px] text-muted-foreground">via OpenRouter</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-snug">{m.blurb}</p>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       <section className="bg-card border border-border rounded-xl p-4 space-y-3">

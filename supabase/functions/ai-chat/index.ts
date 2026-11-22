@@ -761,7 +761,7 @@ Deno.serve(async (req: Request) => {
       Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
     );
 
-    // Pinned model: always Claude Sonnet 4.5 via OpenRouter, temperature 0. Client model choice is ignored.
+    // Model selection: use client-selected model if provided, otherwise default to PINNED_MODEL (Claude Sonnet 4.5)
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
     if (!OPENROUTER_API_KEY) {
       return new Response(JSON.stringify({ error: "OPENROUTER_API_KEY is not configured" }), {
@@ -769,7 +769,7 @@ Deno.serve(async (req: Request) => {
       });
     }
     const useOpenRouter = true;
-    const model = PINNED_MODEL;
+    const model = (typeof body.model === "string" && body.model.trim()) ? body.model.trim() : PINNED_MODEL;
     const upstreamUrl = OPENROUTER_URL;
     const upstreamKey = OPENROUTER_API_KEY;
     const upstreamExtraHeaders: Record<string, string> = { "HTTP-Referer": "https://of-manager.lovable.app", "X-Title": "OF Manager" };

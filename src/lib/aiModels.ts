@@ -16,64 +16,43 @@ export interface AIModelOption {
 
 export const AI_MODELS: AIModelOption[] = [
   {
-    id: 'openai/gpt-5',
-    label: 'GPT-5 (high reasoning)',
-    provider: 'OpenAI',
-    blurb: 'Best all-rounder. Sharp reasoning, vision, and tool use. Default.',
-    openrouter: false, // available via Lovable AI
+    id: 'anthropic/claude-sonnet-4.5',
+    label: 'Claude Sonnet 4.5',
+    provider: 'Anthropic',
+    blurb: 'Fast, intelligent, best at trade estimates, formulas, and scope extraction. Recommended default.',
+    openrouter: true,
   },
   {
     id: 'anthropic/claude-opus-4.5',
     label: 'Claude Opus 4.5',
     provider: 'Anthropic',
-    blurb: 'Most careful with long instructions. Excellent at nuanced trade work and estimates.',
+    blurb: 'Deepest reasoning for complex multi-page architectural specifications and blueprints.',
     openrouter: true,
   },
   {
-    id: 'anthropic/claude-sonnet-4.5',
-    label: 'Claude Sonnet 4.5',
-    provider: 'Anthropic',
-    blurb: 'Faster Claude, still very accurate. Good daily driver.',
-    openrouter: true,
-  },
-  {
-    id: 'anthropic/claude-sonnet-4-6',
-    label: 'Claude Sonnet 4.6',
-    provider: 'Anthropic',
-    blurb: 'Latest Claude Sonnet. Fast, intelligent, great for estimates and detailed work.',
-    openrouter: true,
-  },
-  {
-    id: 'google/gemini-3-pro-preview',
-    label: 'Gemini 3 Pro',
-    provider: 'Google',
-    blurb: 'Massive context, strong vision (great for plan drawings).',
-    openrouter: true,
-  },
-  {
-    id: 'openai/gpt-5-pro',
-    label: 'GPT-5 Pro',
+    id: 'openai/gpt-4o',
+    label: 'GPT-4o',
     provider: 'OpenAI',
-    blurb: 'GPT-5 with extended thinking. Slowest, most thorough.',
+    blurb: 'Strong general reasoning, vision, and tool calling.',
     openrouter: true,
   },
   {
-    id: 'x-ai/grok-4',
-    label: 'Grok 4',
-    provider: 'xAI',
-    blurb: 'Fast, candid, good at on-the-fly research.',
+    id: 'google/gemini-2.0-flash-001',
+    label: 'Gemini 2.0 Flash',
+    provider: 'Google',
+    blurb: 'Ultra fast responses and vision recognition for receipts and drawings.',
     openrouter: true,
   },
   {
-    id: 'deepseek/deepseek-v3.2-exp',
-    label: 'DeepSeek 3.2',
+    id: 'deepseek/deepseek-chat',
+    label: 'DeepSeek V3',
     provider: 'DeepSeek',
-    blurb: 'Cost-efficient with strong reasoning and coding. Great cheap daily driver.',
+    blurb: 'Cost-efficient daily driver with strong analytical skills.',
     openrouter: true,
   },
 ];
 
-export const DEFAULT_AI_MODEL_ID = 'openai/gpt-5';
+export const DEFAULT_AI_MODEL_ID = 'anthropic/claude-sonnet-4.5';
 export const AI_MODEL_STORAGE_KEY = 'of-ai-model';
 
 export function getStoredModelId(): string {
