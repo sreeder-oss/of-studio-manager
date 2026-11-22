@@ -23,10 +23,10 @@ export const DEFAULT_SETTINGS: Settings = {
   mobilization_fee: 0,
   terms_text: DEFAULT_TERMS_TEXT,
   company_name: COMPANY_INFO.name,
-  company_address: null,
+  company_address: COMPANY_INFO.address,
   license_number: null,
   payee_name: 'Shawn Reeder',
-  zelle_contact: null,
+  zelle_contact: '(405) 816-0750',
 };
 
 /** Format a fraction (0.5) as a percent label ("50"). */

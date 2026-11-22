@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Sparkles, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useServices, useUpdateService, useCreateService, type DbService, type DbServiceUpdate } from '@/hooks/useServices';
+import { useServices, useUpdateService, useCreateService, useServiceJobStats, SEED_SERVICES, type DbService, type DbServiceUpdate, type ServiceJobStats } from '@/hooks/useServices';
 import { useSystems } from '@/hooks/useSystems';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn, todayLocal } from '@/lib/utils';
 
 const unitLabel = (u: string) => (u === 'day' ? 'per day' : 'per SF');
 
@@ -24,12 +24,23 @@ const NumField: React.FC<{ label: string; value: number; onSave: (v: number) => 
   );
 };
 
-const ServiceCard: React.FC<{ s: DbService; systems: { id: string; name: string }[] }> = ({ s, systems }) => {
+const ServiceCard: React.FC<{ s: DbService; systems: { id: string; name: string }[]; stat?: ServiceJobStats }> = ({ s, systems, stat }) => {
   const update = useUpdateService();
   const [name, setName] = useState(s.name);
   React.useEffect(() => setName(s.name), [s.name]);
   const save = (patch: DbServiceUpdate) =>
     update.mutate({ id: s.id, patch }, { onSuccess: () => toast.success('Saved') });
+
+  const applySuggestedRate = () => {
+    if (!stat) return;
+    save({
+      rate_default: stat.avgRate,
+      rate_low: stat.minRate,
+      rate_high: stat.maxRate,
+      rate_reviewed_on: todayLocal(),
+    });
+    toast.success(`Updated rate to verified average ($${stat.avgRate})`);
+  };
 
   return (
     <div className={cn('rounded-lg border border-border bg-card p-4 space-y-3', !s.is_active && 'opacity-60')}>
@@ -49,6 +60,27 @@ const ServiceCard: React.FC<{ s: DbService; systems: { id: string; name: string 
         </Badge>
         {Number(s.minimum_charge) > 0 && <Badge variant="outline">Min ${Number(s.minimum_charge).toLocaleString()}</Badge>}
       </div>
+
+      {stat && (
+        <div className="rounded-lg bg-primary/5 border border-primary/20 p-2.5 text-[11px] space-y-1.5">
+          <div className="flex items-center justify-between text-foreground font-semibold">
+            <span className="flex items-center gap-1 text-primary">
+              <Sparkles size={12} /> Verified from {stat.count} job{stat.count > 1 ? 's' : ''}
+            </span>
+            <span>Avg: ${stat.avgRate.toFixed(2)} {unitLabel(s.pricing_unit)}</span>
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+            <span>Range: ${stat.minRate.toFixed(2)} – ${stat.maxRate.toFixed(2)}</span>
+            <button
+              type="button"
+              onClick={applySuggestedRate}
+              className="text-primary hover:underline font-bold inline-flex items-center gap-1"
+            >
+              <CheckCircle2 size={11} /> Use verified rate
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2">
         <NumField label="Low" value={Number(s.rate_low)} onSave={v => save({ rate_low: v })} />
@@ -94,6 +126,7 @@ const ServiceCard: React.FC<{ s: DbService; systems: { id: string; name: string 
 const Services: React.FC = () => {
   const { data: services = [], isLoading } = useServices();
   const { data: systems = [] } = useSystems();
+  const { data: jobStats = {} } = useServiceJobStats();
   const create = useCreateService();
   const [showInactive, setShowInactive] = useState(true);
 
@@ -102,25 +135,64 @@ const Services: React.FC = () => {
     { onSuccess: () => toast.success('Service added') },
   );
 
+  const seed = async () => {
+    try {
+      for (const s of SEED_SERVICES) {
+        await create.mutateAsync(s);
+      }
+      toast.success(`Seeded ${SEED_SERVICES.length} starter services`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to seed price book');
+    }
+  };
+
   const list = services.filter(s => showInactive || s.is_active);
 
   return (
     <div className="space-y-4 pb-24">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="font-serif text-2xl text-foreground">Services</h1>
           <p className="text-xs text-muted-foreground">Your price book — what you charge.</p>
         </div>
-        <Button onClick={add} disabled={create.isPending} size="sm"><Plus className="h-4 w-4 mr-1" />Add service</Button>
+        <div className="flex items-center gap-2">
+          {services.length < SEED_SERVICES.length && (
+            <Button onClick={seed} disabled={create.isPending} variant="outline" size="sm">
+              <Sparkles className="h-4 w-4 mr-1 text-primary" />Seed Price Book
+            </Button>
+          )}
+          <Button onClick={add} disabled={create.isPending} size="sm">
+            <Plus className="h-4 w-4 mr-1" />Add service
+          </Button>
+        </div>
       </div>
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
         <Switch checked={showInactive} onCheckedChange={setShowInactive} /> Show inactive
       </label>
-      {isLoading ? <p className="text-sm text-muted-foreground">Loading…</p>
-        : list.length === 0 ? <p className="text-sm text-muted-foreground">No services yet.</p>
-        : <div className="grid gap-3 md:grid-cols-2">{list.map(s => <ServiceCard key={s.id} s={s} systems={systems} />)}</div>}
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : list.length === 0 ? (
+        <div className="text-center py-10 bg-card rounded-xl border border-dashed border-border space-y-3">
+          <Sparkles className="mx-auto text-primary" size={24} />
+          <p className="text-foreground text-sm font-bold">No services in price book yet</p>
+          <p className="text-muted-foreground text-[11px] max-w-sm mx-auto">
+            Seed Organic Finishes' verified starter services (Vasari Marmorino @ $8.50/SF, Microcement @ $38/SF, Night Shifts @ $1,475/shift, Travel per diem).
+          </p>
+          <Button onClick={seed} disabled={create.isPending} size="sm" className="shadow-glow">
+            <Sparkles className="h-4 w-4 mr-1" /> Seed Starter Price Book
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {list.map(s => {
+            const stat = jobStats[s.id] || jobStats[s.name];
+            return <ServiceCard key={s.id} s={s} systems={systems} stat={stat} />;
+          })}
+        </div>
+      )}
     </div>
   );
 };
 
 export default Services;
+
