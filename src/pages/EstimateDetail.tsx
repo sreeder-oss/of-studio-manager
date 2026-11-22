@@ -1,7 +1,7 @@
 import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ChevronLeft, Shield, CheckCircle, Clock, Send, FileDown, Pencil, ArrowRight } from 'lucide-react';
+import { ChevronLeft, Shield, CheckCircle, Clock, Send, FileDown, Pencil, ArrowRight, Mail } from 'lucide-react';
 import { useEstimate, useDeleteEstimate } from '@/hooks/useEstimates';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,10 +12,14 @@ import { useSystems } from '@/hooks/useSystems';
 import { CostBreakdown } from '@/components/CostBreakdown';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSettings';
-import { downloadEstimatePdf, coerceToEstimateDoc } from '@/lib/estimatePdf';
 import { isPriceBookLines, toPriceRows, linesMatchSubtotal, rowsSum, totalSf, pricePerSf } from '@/lib/estimateLines';
+import { openGmailCompose } from '@/lib/gmail';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { localToday, PAYMENT_METHODS, type PaymentMethod } from '@/hooks/useInvoicePayments';
 
 const STATUSES = ['Pending', 'Approved', 'Invoiced', 'Declined', 'Expired'] as const;
@@ -35,6 +39,7 @@ const EstimateDetail: React.FC = () => {
   const [depDate, setDepDate] = React.useState('');
   const [depMethod, setDepMethod] = React.useState<PaymentMethod | ''>('');
   const [depRef, setDepRef] = React.useState('');
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
   const { settings } = useSettings();
   const { data: systems = [] } = useSystems();
 
@@ -76,11 +81,13 @@ const EstimateDetail: React.FC = () => {
 
   const status = getStatusInfo(estimate.status);
 
-  const handleDelete = async () => {
-    if (confirm('Delete this estimate?')) {
+  const confirmDelete = async () => {
+    try {
       await deleteEstimate.mutateAsync(estimate.id);
       toast.success('Estimate deleted');
       navigate('/estimates');
+    } catch {
+      toast.error('Failed to delete estimate');
     }
   };
 
@@ -125,19 +132,20 @@ const EstimateDetail: React.FC = () => {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!linesOk) { toast.error('Line amounts do not add up to the subtotal — fix the estimate before downloading'); return; }
-    const doc = coerceToEstimateDoc(estimate.line_items, {
-      title: `Estimate — ${contact?.name || 'Client'}`,
-      client_name: contact?.name || '',
-      total: Number(estimate.total || 0),
-      tax_rate: Number(estimate.tax_rate || 0),
-      valid_until: estimate.valid_until || '',
-    });
-    if (!doc) { toast.error('No estimate data to export'); return; }
-    if (!doc.client_name && contact?.name) doc.client_name = contact.name;
-    if (!doc.project_address && contact?.address) doc.project_address = contact.address;
     try {
+      const { coerceToEstimateDoc, downloadEstimatePdf } = await import('@/lib/estimatePdf');
+      const doc = coerceToEstimateDoc(estimate.line_items, {
+        title: `Estimate — ${contact?.name || 'Client'}`,
+        client_name: contact?.name || '',
+        total: Number(estimate.total || 0),
+        tax_rate: Number(estimate.tax_rate || 0),
+        valid_until: estimate.valid_until || '',
+      });
+      if (!doc) { toast.error('No estimate data to export'); return; }
+      if (!doc.client_name && contact?.name) doc.client_name = contact.name;
+      if (!doc.project_address && contact?.address) doc.project_address = contact.address;
       downloadEstimatePdf(doc, { depositPct: settings.default_deposit_pct, company: { name: settings.company_name.toUpperCase() } });
       toast.success('PDF downloaded');
     } catch (e) {
@@ -146,30 +154,77 @@ const EstimateDetail: React.FC = () => {
     }
   };
 
+  const handleEmailEstimate = () => {
+    const firstName = contact?.name ? contact.name.split(' ')[0] : 'there';
+    const subject = `Project Estimate — ${project?.name || contact?.name || 'Organic Finishes LLC'}`;
+    const validLine = estimate.valid_until
+      ? `This estimate is valid through ${parseLocalDate(estimate.valid_until).toLocaleDateString()}.`
+      : 'This estimate is valid for 30 days.';
+    const body = [
+      `Hi ${firstName},`,
+      '',
+      `Please find your attached project estimate from ${settings.company_name}.`,
+      '',
+      `• Estimated Total: ${money(total)}`,
+      `• ${pctLabel(settings.default_deposit_pct)}% Deposit to Schedule: ${money(deposit)} (initiates custom project sample board)`,
+      `• Accepted Payment Methods: Check payable to ${settings.payee_name} or direct Zelle (${settings.zelle_contact})`,
+      '',
+      validLine,
+      '',
+      `Please let me know if you have any questions or would like to lock in dates on our schedule.`,
+      '',
+      `Best regards,`,
+      `${settings.payee_name} — ${settings.company_name}`,
+      `Direct: (405) 816-0750 | contact@organicfinishesllc.org`,
+    ].join('\n');
+
+    openGmailCompose(contact?.email || '', subject, body);
+    toast.success('Opened Gmail! Tip: attach the downloaded Estimate PDF before sending.');
+  };
+
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <button onClick={() => navigate('/estimates')} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[10px] font-bold uppercase tracking-widest">
+        <button onClick={() => navigate('/estimates')} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[11px] font-bold uppercase tracking-widest">
           <ChevronLeft size={14} /> All Estimates
         </button>
         <div className="flex items-center gap-3 flex-wrap">
-          <button onClick={() => navigate(`/estimates/${estimate.id}/edit`)} className="flex items-center gap-1 text-foreground hover:text-primary text-[10px] font-bold uppercase tracking-widest">
+          <button onClick={() => navigate(`/estimates/${estimate.id}/edit`)} className="flex items-center gap-1 text-foreground hover:text-primary text-[11px] font-bold uppercase tracking-widest">
             <Pencil size={12} /> Edit
           </button>
-          <button onClick={handleDownload} disabled={!linesOk} className="disabled:opacity-40 flex items-center gap-1 text-primary hover:text-primary/80 text-[10px] font-bold uppercase tracking-widest">
+          <button onClick={handleDownload} disabled={!linesOk} className="disabled:opacity-40 flex items-center gap-1 text-primary hover:text-primary/80 text-[11px] font-bold uppercase tracking-widest">
             <FileDown size={14} /> PDF
+          </button>
+          <button onClick={handleEmailEstimate} className="flex items-center gap-1 text-primary hover:text-primary/80 text-[11px] font-bold uppercase tracking-widest" title="Draft estimate email in Gmail">
+            <Mail size={14} /> Email
           </button>
           <button onClick={openConvert}
             disabled={convertInvoice.isPending || !(estimate.status === 'Approved' || estimate.status === 'Invoiced')}
             title={estimate.status === 'Approved' || estimate.status === 'Invoiced' ? undefined : 'Set status to Approved to convert'}
-            className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest shadow-glow disabled:opacity-40 disabled:shadow-none">
+            className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest shadow-glow disabled:opacity-40 disabled:shadow-none">
             {estimate.status === 'Invoiced' ? 'Open Invoice' : convertInvoice.isPending ? 'Converting…' : 'Convert to Invoice'} <ArrowRight size={12} />
           </button>
-          <button onClick={handleDelete} className="text-[10px] text-destructive/60 hover:text-destructive font-bold uppercase tracking-widest">
+          <button onClick={() => setConfirmDeleteOpen(true)} className="text-[11px] text-destructive/80 hover:text-destructive font-bold uppercase tracking-widest">
             Delete
           </button>
         </div>
       </div>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this estimate?</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteEstimate.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); confirmDelete(); }} disabled={deleteEstimate.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteEstimate.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={depStep !== null} onOpenChange={(o) => { if (!o && !convertInvoice.isPending) setDepStep(null); }}>
         <DialogContent>

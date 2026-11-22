@@ -1,7 +1,7 @@
 import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle, FileDown, Trash2 } from 'lucide-react';
+import { ChevronLeft, Shield, CheckCircle, Clock, AlertCircle, FileDown, Trash2, Mail } from 'lucide-react';
 import { useInvoice, useDeleteInvoice } from '@/hooks/useInvoices';
 import { useInvoicePayments, useAddInvoicePayment, useDeleteInvoicePayment, localToday, PAYMENT_METHODS, type PaymentMethod } from '@/hooks/useInvoicePayments';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -9,7 +9,7 @@ import { useContact } from '@/hooks/useContacts';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { PRIVACY_NOTICE } from '@/lib/legal';
 import { useSettings, renderTerms } from '@/hooks/useSettings';
-import { downloadInvoicePdf, coerceToInvoiceDoc } from '@/lib/invoicePdf';
+import { openGmailCompose } from '@/lib/gmail';
 import { toast } from 'sonner';
 import { useProjects } from '@/hooks/useProjects';
 import { useChangeOrders, useAddChangeOrdersToInvoice } from '@/hooks/useChangeOrders';
@@ -38,6 +38,7 @@ const InvoiceDetail: React.FC = () => {
   const [payMethod, setPayMethod] = React.useState<PaymentMethod | ''>('');
   const [payRef, setPayRef] = React.useState('');
   const [toDelete, setToDelete] = React.useState<string | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
   const amountRef = React.useRef<HTMLInputElement>(null);
 
   const recordPayment = async (e: React.FormEvent) => {
@@ -63,15 +64,13 @@ const InvoiceDetail: React.FC = () => {
     setToDelete(null);
   };
 
-  const handleDelete = async () => {
+  const confirmDeleteInvoice = async () => {
     if (!invoice) return;
-    if (confirm('Delete this invoice? This cannot be undone.')) {
-      try {
-        await deleteInvoice.mutateAsync(invoice.id);
-        toast.success('Invoice deleted');
-        navigate('/invoices');
-      } catch { toast.error('Failed to delete invoice'); }
-    }
+    try {
+      await deleteInvoice.mutateAsync(invoice.id);
+      toast.success('Invoice deleted');
+      navigate('/invoices');
+    } catch { toast.error('Failed to delete invoice'); }
   };
 
   useAIPageContext(invoice ? {
@@ -106,8 +105,9 @@ const InvoiceDetail: React.FC = () => {
 
   const status = getStatusInfo();
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     try {
+      const { coerceToInvoiceDoc, downloadInvoicePdf } = await import('@/lib/invoicePdf');
       const doc = coerceToInvoiceDoc(invoice.line_items, {
         invoice_number: invoice.invoice_number || '',
         title: contact?.name ? `Invoice — ${contact.name}` : 'Invoice',
@@ -140,17 +140,69 @@ const InvoiceDetail: React.FC = () => {
   };
   const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const handleEmailInvoice = () => {
+    const firstName = contact?.name ? contact.name.split(' ')[0] : 'there';
+    const invLabel = invoice.invoice_number ? `Invoice ${invoice.invoice_number}` : 'Invoice';
+    const subject = `${invLabel} — ${settings.company_name}`;
+    const dueLine = invoice.due_date
+      ? `• Due Date: ${parseLocalDate(invoice.due_date).toLocaleDateString()}`
+      : '';
+    const body = [
+      `Hi ${firstName},`,
+      '',
+      `Please find your attached ${invLabel} from ${settings.company_name}.`,
+      '',
+      `• Invoice Total: ${fmt(total)}`,
+      `• Balance Due: ${fmt(balance)}`,
+      dueLine,
+      '',
+      `Payment Methods:`,
+      `• Check payable to: ${settings.payee_name}`,
+      `• Direct Zelle transfer: ${settings.zelle_contact}`,
+      '',
+      `Thank you for your business! Please let me know if you have any questions.`,
+      '',
+      `Best regards,`,
+      `${settings.payee_name} — ${settings.company_name}`,
+      `Direct: (405) 816-0750 | contact@organicfinishesllc.org`,
+    ].filter(Boolean).join('\n');
+
+    openGmailCompose(contact?.email || '', subject, body);
+    toast.success('Opened Gmail! Tip: attach the downloaded Invoice PDF before sending.');
+  };
+
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
-      <div className="flex items-center justify-between">
-        <button onClick={() => navigate('/invoices')} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[10px] font-bold uppercase tracking-widest">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <button onClick={() => navigate('/invoices')} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[11px] font-bold uppercase tracking-widest">
           <ChevronLeft size={14} /> All Invoices
         </button>
-        <button onClick={handleDelete} disabled={deleteInvoice.isPending}
-          className="flex items-center gap-1 text-destructive/60 hover:text-destructive text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">
-          <Trash2 size={12} /> Delete
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleEmailInvoice} className="flex items-center gap-1 text-primary hover:text-primary/80 text-[11px] font-bold uppercase tracking-widest" title="Draft invoice email in Gmail">
+            <Mail size={14} /> Email
+          </button>
+          <button onClick={() => setConfirmDeleteOpen(true)} disabled={deleteInvoice.isPending}
+            className="flex items-center gap-1 text-destructive/80 hover:text-destructive text-[11px] font-bold uppercase tracking-widest disabled:opacity-50">
+            <Trash2 size={12} /> Delete
+          </button>
+        </div>
       </div>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this invoice?</AlertDialogTitle>
+            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteInvoice.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); confirmDeleteInvoice(); }} disabled={deleteInvoice.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteInvoice.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="bg-card rounded-2xl border border-border p-5">
         <div className="flex justify-between items-start mb-4">

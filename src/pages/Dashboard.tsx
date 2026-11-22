@@ -16,6 +16,7 @@ import {
   Clock,
   Sparkles,
   ChevronRight,
+  Mail,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useInvoices, type DbInvoice } from '@/hooks/useInvoices';
@@ -107,6 +108,8 @@ const Dashboard: React.FC = () => {
   const ytdNet = ytdIncome - ytdDeductibleExpenses;
 
   const contactMap = useMemo(() => new Map(contacts.map((c) => [c.id, c])), [contacts]);
+  const clientCount = useMemo(() => contacts.filter((c) => c.type === 'Client').length, [contacts]);
+  const potentialClientCount = useMemo(() => contacts.filter((c) => c.type === 'Lead').length, [contacts]);
 
   const navCards = [
     {
@@ -151,9 +154,9 @@ const Dashboard: React.FC = () => {
     },
     {
       title: 'Contacts',
-      countLabel: `${contacts.length} total`,
-      amountLabel: 'Clients & GCs',
-      description: 'General contractors, commercial managers & client directories.',
+      countLabel: `${clientCount} clients`,
+      amountLabel: `${potentialClientCount} potential`,
+      description: 'Clients for bids & invoices, plus potential clients for email outreach.',
       icon: Users,
       path: '/contacts',
       color: 'from-primary/20',
@@ -177,20 +180,26 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-serif text-foreground tracking-tight">Studio Dashboard</h2>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-semibold mt-0.5">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-[0.2em] font-semibold mt-0.5">
             Organic Finishes LLC • Live Financial Snapshot
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => navigate('/estimates/new')}
-            className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-glow hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-widest shadow-glow hover:opacity-90 transition-opacity"
           >
             <Plus size={14} /> New Estimate
           </button>
           <button
+            onClick={() => navigate('/contacts?tab=Lead')}
+            className="inline-flex items-center gap-1.5 bg-accent border border-border hover:border-warning/50 text-foreground px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-colors"
+          >
+            <Mail size={14} className="text-warning" /> Outreach
+          </button>
+          <button
             onClick={() => navigate('/receipts')}
-            className="inline-flex items-center gap-1.5 bg-accent border border-border hover:border-primary/40 text-foreground px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-colors"
+            className="inline-flex items-center gap-1.5 bg-accent border border-border hover:border-primary/40 text-foreground px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-colors"
           >
             <Camera size={14} className="text-primary" /> Scan Receipt
           </button>

@@ -3,7 +3,6 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Save, Trash2, Plus, FileDown } from 'lucide-react';
 import { recalcEstimate, type EstimateDoc } from '@/lib/estimateSchema';
-import { downloadEstimatePdf } from '@/lib/estimatePdf';
 import { useContacts, useSaveContact } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useSaveEstimate } from '@/hooks/useEstimates';
@@ -296,8 +295,9 @@ export const EstimatePreview: React.FC<Props> = ({ initial, onClose }) => {
 
       <div className="p-3 border-t border-border flex gap-2">
         <button
-          onClick={() => {
+          onClick={async () => {
             try {
+              const { downloadEstimatePdf } = await import('@/lib/estimatePdf');
               downloadEstimatePdf(doc, { depositPct: settings.default_deposit_pct, company: { name: settings.company_name.toUpperCase() } });
               toast.success('PDF downloaded');
             } catch (e) {

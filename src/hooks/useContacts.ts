@@ -62,6 +62,28 @@ export const useSaveContact = () => {
   });
 };
 
+export const useBatchInsertContacts = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: (Partial<DbContact> & { name: string })[]): Promise<DbContact[]> => {
+      if (rows.length === 0) return [];
+      const payload: DbContactInsert[] = rows.map(c => ({
+        name: c.name,
+        type: c.type ?? 'Lead',
+        status: c.status ?? 'Pending',
+        email: c.email ?? null,
+        phone: c.phone ?? null,
+        address: c.address ?? null,
+        notes: c.notes ?? null,
+      }));
+      const { data, error } = await supabase.from('contacts').insert(payload).select();
+      if (error) throw error;
+      return data ?? [];
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['contacts'] }),
+  });
+};
+
 export const useDeleteContact = () => {
   const qc = useQueryClient();
   return useMutation({

@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { X, Save, Trash2, Plus, FileDown } from 'lucide-react';
 import { recalcInvoice, type InvoiceDoc } from '@/lib/invoiceSchema';
-import { downloadInvoicePdf } from '@/lib/invoicePdf';
 import { useContacts } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useSaveInvoice } from '@/hooks/useInvoices';
@@ -200,9 +199,15 @@ export const InvoicePreview: React.FC<Props> = ({ initial, onClose }) => {
 
       <div className="p-3 border-t border-border flex gap-2">
         <button
-          onClick={() => {
-            try { downloadInvoicePdf(doc); toast.success('PDF downloaded'); }
-            catch (e) { console.error(e); toast.error('Failed to generate PDF'); }
+          onClick={async () => {
+            try {
+              const { downloadInvoicePdf } = await import('@/lib/invoicePdf');
+              downloadInvoicePdf(doc);
+              toast.success('PDF downloaded');
+            } catch (e) {
+              console.error(e);
+              toast.error('Failed to generate PDF');
+            }
           }}
           className="flex-1 bg-card border border-primary/40 text-primary py-2.5 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-primary/10"
         >

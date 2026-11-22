@@ -5,7 +5,7 @@ import { ChevronLeft, Search, Trash2, Shield, UserPlus } from 'lucide-react';
 import { QuickContactDialog, QuickProjectDialog } from '@/components/QuickCreateDialogs';
 
 const NEW_PROJECT = '__new_project__';
-import { useContacts } from '@/hooks/useContacts';
+import { useContacts, useSaveContact } from '@/hooks/useContacts';
 import { useProjects } from '@/hooks/useProjects';
 import { useSaveEstimate, useEstimate } from '@/hooks/useEstimates';
 import { useSystems } from '@/hooks/useSystems';
@@ -45,6 +45,7 @@ const EstimateCreate: React.FC = () => {
   const isEdit = !!editId;
   const { data: existing, isLoading: loadingExisting } = useEstimate(editId || '');
   const { data: contacts = [] } = useContacts();
+  const saveContact = useSaveContact();
   const { data: projects = [] } = useProjects();
   const saveEstimate = useSaveEstimate();
   const { settings, isSuccess: settingsLoaded } = useSettings();
@@ -71,6 +72,7 @@ const EstimateCreate: React.FC = () => {
   const [otherLines, setOtherLines] = useState<OtherLine[]>([]);
   const [notes, setNotes] = useState('');
   const [taxRate, setTaxRate] = useState(0);
+  const [showTaxInput, setShowTaxInput] = useState(false);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
   // Apply user defaults to new estimates once settings load
   useEffect(() => {
@@ -121,9 +123,39 @@ const EstimateCreate: React.FC = () => {
     if (existing.valid_until) setValidUntil(existing.valid_until);
   }, [isEdit, existing]);
 
-  const filteredContacts = contacts.filter(c =>
-    c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || (c.email || '').toLowerCase().includes(clientSearchTerm.toLowerCase())
-  );
+  const filteredContacts = useMemo(() => {
+    const q = clientSearchTerm.toLowerCase();
+    return contacts
+      .filter(c => c.type !== 'Vendor')
+      .filter(c =>
+        c.name.toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q)
+      )
+      .sort((a, b) => {
+        if (a.type === 'Client' && b.type !== 'Client') return -1;
+        if (a.type !== 'Client' && b.type === 'Client') return 1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [contacts, clientSearchTerm]);
+
+  const handlePickContact = async (contact: typeof contacts[0]) => {
+    setSelectedContactId(contact.id);
+    if (contact.type === 'Lead') {
+      try {
+        await saveContact.mutateAsync({
+          ...contact,
+          type: 'Client',
+          status: 'Active',
+          notes: contact.notes
+            ? `${contact.notes}\n[Promoted to Client on ${new Date().toLocaleDateString()}]`
+            : `[Promoted to Client on ${new Date().toLocaleDateString()}]`,
+        });
+        toast.success(`${contact.name} promoted from Potential Client to Client`);
+      } catch {
+        // non-blocking
+      }
+    }
+    setStep('create');
+  };
 
   const selectedContact = contacts.find(c => c.id === selectedContactId);
   const filteredProjects = useMemo(
@@ -311,13 +343,27 @@ const EstimateCreate: React.FC = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {filteredContacts.map(contact => (
-                  <button key={contact.id} onClick={() => { setSelectedContactId(contact.id); setStep('create'); }}
-                    className="p-4 bg-card border border-border rounded-xl hover:border-primary/50 text-left transition-all">
-                    <h3 className="font-bold text-foreground text-sm">{contact.name}</h3>
-                    <p className="text-[10px] text-muted-foreground">{contact.email}</p>
-                  </button>
-                ))}
+                {filteredContacts.map(contact => {
+                  const isPotential = contact.type === 'Lead';
+                  return (
+                    <button key={contact.id} onClick={() => handlePickContact(contact)}
+                      className="p-4 bg-card border border-border rounded-xl hover:border-primary/50 text-left transition-all">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="font-bold text-foreground text-sm truncate">{contact.name}</h3>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 ${
+                          isPotential
+                            ? 'bg-warning/15 text-warning border border-warning/30'
+                            : 'bg-primary/10 text-primary border border-primary/25'
+                        }`}>
+                          {isPotential ? 'Potential' : 'Client'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        {contact.email || contact.phone || (isPotential ? 'Will promote to Client' : 'No email')}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </>
@@ -437,13 +483,26 @@ const EstimateCreate: React.FC = () => {
           className="w-full py-2 border border-dashed border-border text-muted-foreground rounded-xl hover:text-foreground text-[10px] uppercase tracking-widest font-bold">+ Add Line Item</button>
       </div>
 
-      <div className="bg-card p-4 rounded-xl space-y-2 border border-border">
-        <div className="flex justify-between items-center text-[10px]">
-          <span className="text-muted-foreground font-bold uppercase tracking-widest">Tax (%)</span>
-          <input type="number" inputMode="decimal" className="bg-accent border border-border rounded px-2 py-1 text-right w-16 text-xs text-foreground outline-none"
-            value={taxRate} onChange={e => setTaxRate(e.target.value === '' ? 0 : parseFloat(e.target.value))} />
-        </div>
-        <div className="flex justify-between items-center text-[10px]">
+      <div className="bg-card p-4 rounded-xl space-y-2.5 border border-border">
+        {showTaxInput || taxRate > 0 ? (
+          <div className="flex justify-between items-center text-[11px]">
+            <span className="text-muted-foreground font-bold uppercase tracking-widest">Sales Tax (%)</span>
+            <div className="flex items-center gap-2">
+              <input type="number" inputMode="decimal" className="bg-accent border border-border rounded px-2 py-1 text-right w-16 text-xs text-foreground outline-none"
+                value={taxRate} onChange={e => setTaxRate(e.target.value === '' ? 0 : parseFloat(e.target.value))} />
+              {taxRate === 0 && (
+                <button type="button" onClick={() => setShowTaxInput(false)} className="text-[10px] text-muted-foreground hover:text-foreground">Hide</button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <button type="button" onClick={() => setShowTaxInput(true)} className="text-[10px] text-muted-foreground hover:text-primary font-semibold uppercase tracking-widest">
+              + Add sales tax
+            </button>
+          </div>
+        )}
+        <div className="flex justify-between items-center text-[11px]">
           <span className="text-muted-foreground font-bold uppercase tracking-widest">Valid Until</span>
           <input type="date" className="bg-accent border border-border rounded px-2 py-1 text-xs text-foreground outline-none"
             value={validUntil} onChange={e => setValidUntil(e.target.value)} />

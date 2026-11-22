@@ -327,6 +327,7 @@ Supported action types:
 }}
 \`\`\`
 
+Contact types: use "Client" for people we make estimates/invoices for, "Lead" for Potential Clients (outreach/info emails), and "Vendor" for suppliers/subs.
 \`\`\`action
 { "type": "create_contact", "data": {
   "name": "string (required)", "type": "Client|Vendor|Lead|null",

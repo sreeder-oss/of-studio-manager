@@ -51,7 +51,7 @@ const mobilePrimaryNav = [
   { path: '/', label: 'Home', icon: LuminaIcon },
   { path: '/estimates', label: 'Estimates', icon: FileText },
   { path: '/invoices', label: 'Invoices', icon: FileSpreadsheet },
-  { path: '/receipts', label: 'Receipts', icon: Receipt },
+  { path: '/contacts', label: 'Contacts', icon: Users },
 ];
 
 const AppLayout: React.FC = () => {
@@ -301,9 +301,9 @@ const AppLayout: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {[
+                  { path: '/receipts', label: 'Receipts', icon: Receipt },
                   { path: '/projects', label: 'Projects', icon: FolderKanban },
                   { path: '/reports/tax', label: 'Tax Summary', icon: PieChart },
-                  { path: '/contacts', label: 'Contacts', icon: Users },
                   { path: '/services', label: 'Price Book', icon: Tag },
                   { path: '/systems', label: 'Systems Library', icon: Layers },
                   { path: '/settings', label: 'Settings', icon: SettingsIcon },
