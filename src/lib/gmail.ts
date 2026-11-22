@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { getStoredDeepSeekKey, getStoredModelId } from '@/lib/aiModels';
+import { getStoredDeepSeekKey, getStoredBackupKey, getStoredModelId } from '@/lib/aiModels';
 
 export function buildGmailComposeUrl(to: string, subject: string, body: string): string {
   return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -18,8 +18,8 @@ export function openMailto(to: string, subject: string, body: string): void {
 }
 
 /**
- * Calls the onboard AI (ai-chat edge function / DeepSeek V4.1 Flash) to draft
- * a tailored outreach email without polluting the main chat history.
+ * Calls the onboard AI (ai-chat edge function / DeepSeek V4.1 Flash or Gemma 4 31B backup)
+ * to draft a tailored outreach email without polluting the main chat history.
  */
 export async function generateOutreachDraftWithAI(params: {
   contactName: string;
@@ -60,6 +60,7 @@ export async function generateOutreachDraftWithAI(params: {
       currentPage: '/contacts',
       model: getStoredModelId(),
       apiKey: getStoredDeepSeekKey() || undefined,
+      backupApiKey: getStoredBackupKey() || undefined,
     }),
   });
 

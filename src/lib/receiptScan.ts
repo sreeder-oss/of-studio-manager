@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { getStoredDeepSeekKey } from '@/lib/aiModels';
+import { getStoredDeepSeekKey, getStoredBackupKey, getStoredModelId } from '@/lib/aiModels';
 
 export interface ReceiptScanResult {
   vendor: string | null;
@@ -30,7 +30,11 @@ async function toJpegDataUrl(file: File, maxSide = 1600): Promise<string> {
 export async function scanReceipt(file: File): Promise<ReceiptScanResult> {
   const image = await toJpegDataUrl(file);
   const apiKey = getStoredDeepSeekKey() || undefined;
-  const { data, error } = await supabase.functions.invoke('ai-chat', { body: { mode: 'receipt_scan', image, apiKey } });
+  const backupApiKey = getStoredBackupKey() || undefined;
+  const model = getStoredModelId();
+  const { data, error } = await supabase.functions.invoke('ai-chat', {
+    body: { mode: 'receipt_scan', image, model, apiKey, backupApiKey },
+  });
   if (error) {
     let msg = 'Could not read the receipt.';
     try {

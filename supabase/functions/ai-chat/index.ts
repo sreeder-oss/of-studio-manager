@@ -19,14 +19,93 @@ const corsHeaders = {
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
-/** Single pinned model for all assistant calls (deterministic scope extraction). */
+/** Primary model for all assistant calls (deterministic scope extraction). */
 const PINNED_MODEL = "deepseek/deepseek-v4.1-flash";
+/** Automatic backup model via OpenRouter when primary is unavailable or selected. */
+const BACKUP_MODEL = "google/gemma-4-31b-it";
 const FC = "https://api.firecrawl.dev/v2";
 const MAX_TOOL_ROUNDS = 16;
 const RESEARCH_SOFT_CAP = 6; // after this many tool rounds, force the model to wrap up
 const MAX_SCRAPES_PER_REQUEST = 30;
 const UPSTREAM_ROUND_TIMEOUT_MS = 90_000;
 const TOOL_TIMEOUT_MS = { search: 20_000, scrape: 30_000, portal: 45_000 };
+
+interface AITarget {
+  provider: "openrouter" | "deepseek";
+  url: string;
+  key: string;
+  model: string;
+  label: string;
+  extraHeaders: Record<string, string>;
+}
+
+const OPENROUTER_HEADERS: Record<string, string> = {
+  "HTTP-Referer": "https://of-manager.lovable.app",
+  "X-Title": "OF Manager",
+};
+
+function resolveAITargets(
+  requestedModel?: string,
+  clientApiKey?: string,
+  clientBackupKey?: string,
+): { primary: AITarget | null; fallback: AITarget | null } {
+  const envDeepSeek = (Deno.env.get("DEEPSEEK_API_KEY") ?? "").trim();
+  const envOpenRouter = (Deno.env.get("OPENROUTER_API_KEY") ?? "").trim();
+  const envGemma = (Deno.env.get("OPENROUTER_GEMMA_API_KEY") ?? "").trim();
+  const cKey = (clientApiKey ?? "").trim();
+  const cBackup = (clientBackupKey ?? "").trim();
+
+  const deepseekKey = cKey || envDeepSeek || envOpenRouter || cBackup;
+  const deepseekTarget: AITarget | null = deepseekKey
+    ? (deepseekKey.startsWith("sk-or-")
+        ? {
+            provider: "openrouter",
+            url: OPENROUTER_URL,
+            key: deepseekKey,
+            model: PINNED_MODEL,
+            label: "DeepSeek V4.1 Flash",
+            extraHeaders: OPENROUTER_HEADERS,
+          }
+        : {
+            provider: "deepseek",
+            url: DEEPSEEK_URL,
+            key: deepseekKey,
+            model: "deepseek-flash",
+            label: "DeepSeek V4.1 Flash",
+            extraHeaders: {},
+          })
+    : null;
+
+  const gemmaKey =
+    cBackup ||
+    envGemma ||
+    (cKey.startsWith("sk-or-") ? cKey : "") ||
+    (envOpenRouter.startsWith("sk-or-") ? envOpenRouter : "") ||
+    (envDeepSeek.startsWith("sk-or-") ? envDeepSeek : "");
+
+  const gemmaTarget: AITarget | null = gemmaKey
+    ? {
+        provider: "openrouter",
+        url: OPENROUTER_URL,
+        key: gemmaKey,
+        model: BACKUP_MODEL,
+        label: "Gemma 4 31B",
+        extraHeaders: OPENROUTER_HEADERS,
+      }
+    : null;
+
+  const wantsGemma = typeof requestedModel === "string" && requestedModel.trim().toLowerCase().includes("gemma");
+  if (wantsGemma) {
+    return {
+      primary: gemmaTarget ?? deepseekTarget,
+      fallback: gemmaTarget && deepseekTarget ? deepseekTarget : null,
+    };
+  }
+  return {
+    primary: deepseekTarget ?? gemmaTarget,
+    fallback: deepseekTarget && gemmaTarget ? gemmaTarget : null,
+  };
+}
 
 async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   const ctl = new AbortController();
@@ -52,10 +131,12 @@ interface RequestBody {
   currentPage?: string;
   currentRecord?: unknown;
   hasImages?: boolean;
-  /** Optional model override. If it matches an OpenRouter slug, route through OpenRouter. */
+  /** Optional model override (deepseek/deepseek-v4.1-flash or google/gemma-4-31b-it). */
   model?: string;
-  /** Optional client-provided API key (stored in app Settings) */
+  /** Optional client-provided primary API key (stored in app Settings). */
   apiKey?: string;
+  /** Optional client-provided backup Gemma OpenRouter API key (stored in app Settings). */
+  backupApiKey?: string;
 }
 
 const tools = [
@@ -639,27 +720,20 @@ async function fcNaaPortal(target: string, key: string) {
 // --- Receipt scan: image -> { vendor, amount, date, category } as strict JSON ---
 const RECEIPT_SCAN_CATEGORIES = ["Materials", "Labor", "Equipment", "Travel", "Supplies", "Miscellaneous"] as const;
 
-async function handleReceiptScan(input: { image?: unknown; apiKey?: unknown }): Promise<Response> {
+async function handleReceiptScan(input: { image?: unknown; model?: unknown; apiKey?: unknown; backupApiKey?: unknown }): Promise<Response> {
   const json = (status: number, b: unknown) =>
     new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   const image = typeof input.image === "string" ? input.image : "";
   if (!/^data:image\/(png|jpe?g|webp|gif|heic|heif);base64,/i.test(image) || image.length > 12_000_000) {
     return json(400, { error: "A receipt image (data URL, under ~9 MB) is required." });
   }
-  const clientKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
-  const key = clientKey || Deno.env.get("DEEPSEEK_API_KEY") || Deno.env.get("OPENROUTER_API_KEY") || "";
-  if (!key) return json(500, { error: "DEEPSEEK_API_KEY is not configured. Please add your key in Settings or environment." });
-
-  const isOpenRouter = key.startsWith("sk-or-");
-  const upstreamUrl = isOpenRouter ? OPENROUTER_URL : DEEPSEEK_URL;
-  const model = isOpenRouter ? "deepseek/deepseek-v4.1-flash" : "deepseek-flash";
-  const upstreamHeaders: Record<string, string> = {
-    Authorization: `Bearer ${key}`,
-    "Content-Type": "application/json",
-  };
-  if (isOpenRouter) {
-    upstreamHeaders["HTTP-Referer"] = "https://of-manager.lovable.app";
-    upstreamHeaders["X-Title"] = "OF Manager";
+  const { primary, fallback } = resolveAITargets(
+    typeof input.model === "string" ? input.model : undefined,
+    typeof input.apiKey === "string" ? input.apiKey : undefined,
+    typeof input.backupApiKey === "string" ? input.backupApiKey : undefined,
+  );
+  if (!primary) {
+    return json(500, { error: "No AI API key configured. Please add your OpenRouter / DeepSeek key in Settings." });
   }
 
   const schema = {
@@ -673,26 +747,38 @@ async function handleReceiptScan(input: { image?: unknown; apiKey?: unknown }): 
       category: { type: "string", enum: [...RECEIPT_SCAN_CATEGORIES, "Unknown"] },
     },
   };
-  const upstream = await fetch(upstreamUrl, {
-    method: "POST",
-    headers: upstreamHeaders,
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      stream: false,
-      response_format: { type: "json_schema", json_schema: { name: "receipt", strict: true, schema } },
-      messages: [
-        {
-          role: "system",
-          content: "You read a single purchase receipt. Return ONLY JSON matching the schema: vendor (store name), amount (the final total paid, number), date (YYYY-MM-DD), category (best match from: Materials, Labor, Equipment, Travel, Supplies, Miscellaneous). For anything you cannot read with confidence use an empty string, 0 for amount, or \"Unknown\" for category. Never guess.",
-        },
-        { role: "user", content: [
-          { type: "text", text: "Read this receipt." },
-          { type: "image_url", image_url: { url: image } },
-        ] },
-      ],
-    }),
-  });
+  const callScan = (target: AITarget) =>
+    fetch(target.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${target.key}`,
+        "Content-Type": "application/json",
+        ...target.extraHeaders,
+      },
+      body: JSON.stringify({
+        model: target.model,
+        temperature: 0,
+        stream: false,
+        response_format: { type: "json_schema", json_schema: { name: "receipt", strict: true, schema } },
+        messages: [
+          {
+            role: "system",
+            content: "You read a single purchase receipt. Return ONLY JSON matching the schema: vendor (store name), amount (the final total paid, number), date (YYYY-MM-DD), category (best match from: Materials, Labor, Equipment, Travel, Supplies, Miscellaneous). For anything you cannot read with confidence use an empty string, 0 for amount, or \"Unknown\" for category. Never guess.",
+          },
+          { role: "user", content: [
+            { type: "text", text: "Read this receipt." },
+            { type: "image_url", image_url: { url: image } },
+          ] },
+        ],
+      }),
+    });
+
+  let upstream = await callScan(primary);
+  if (!upstream.ok && fallback) {
+    const firstErr = await upstream.text().catch(() => "");
+    console.warn("receipt_scan primary failed, retrying with backup", primary.model, upstream.status, firstErr.slice(0, 200));
+    upstream = await callScan(fallback);
+  }
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => "");
     console.error("receipt_scan upstream", upstream.status, detail.slice(0, 300));
@@ -752,7 +838,7 @@ Deno.serve(async (req: Request) => {
 
     const body = (await req.json()) as RequestBody;
     if ((body as unknown as { mode?: string }).mode === "receipt_scan") {
-      return await handleReceiptScan(body as unknown as { image?: unknown; apiKey?: unknown });
+      return await handleReceiptScan(body as unknown as { image?: unknown; model?: unknown; apiKey?: unknown; backupApiKey?: unknown });
     }
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {
@@ -794,30 +880,24 @@ Deno.serve(async (req: Request) => {
       Array.isArray(m.content) && m.content.some((c) => c.type === "image_url")
     );
 
-    // Model & key selection: DeepSeek V4.1 Flash (direct API or OpenRouter)
-    const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY") ?? "";
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
-    const clientApiKey = (typeof body.apiKey === "string" && body.apiKey.trim()) ? body.apiKey.trim() : "";
-    const activeKey = clientApiKey || DEEPSEEK_API_KEY || OPENROUTER_API_KEY;
+    // Model & key selection: DeepSeek V4.1 Flash (primary) + Gemma 4 31B (backup via OpenRouter)
+    const { primary: initialTarget, fallback: fallbackTarget } = resolveAITargets(
+      body.model,
+      body.apiKey,
+      body.backupApiKey,
+    );
 
-    if (!activeKey) {
+    if (!initialTarget) {
       return new Response(JSON.stringify({
-        error: "DEEPSEEK_API_KEY is not configured. Please enter your API key in Settings or add DEEPSEEK_API_KEY in your Supabase environment secrets."
+        error: "No AI API key configured. Please enter your OpenRouter or DeepSeek API key in Settings (or configure OPENROUTER_API_KEY / DEEPSEEK_API_KEY in Supabase secrets)."
       }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const isOpenRouter = activeKey.startsWith("sk-or-");
-    const upstreamUrl = isOpenRouter ? OPENROUTER_URL : DEEPSEEK_URL;
-    const rawModel = (typeof body.model === "string" && body.model.trim()) ? body.model.trim() : PINNED_MODEL;
-    const model = isOpenRouter
-      ? (rawModel.startsWith("deepseek/") ? rawModel : "deepseek/deepseek-v4.1-flash")
-      : "deepseek-flash";
-    const upstreamKey = activeKey;
-    const upstreamExtraHeaders: Record<string, string> = isOpenRouter
-      ? { "HTTP-Referer": "https://of-manager.lovable.app", "X-Title": "OF Manager" }
-      : {};
+    let activeTarget: AITarget = initialTarget;
+    let fellBack = false;
+
     const lastUserMsg = [...body.messages].reverse().find((m) => m.role === "user");
     const userPromptText = !lastUserMsg ? "" : typeof lastUserMsg.content === "string"
       ? lastUserMsg.content
@@ -833,7 +913,12 @@ Deno.serve(async (req: Request) => {
       if (sv?.id) { validServiceIds.add(sv.id); if (sv.name) serviceIds.set(sv.name.toLowerCase(), sv.id); }
     }
 
-    console.log("ai-chat routing", { provider: useOpenRouter ? "openrouter" : "lovable", model });
+    console.log("ai-chat routing", {
+      provider: activeTarget.provider,
+      model: activeTarget.model,
+      hasFallback: Boolean(fallbackTarget),
+      fallbackModel: fallbackTarget?.model ?? null,
+    });
 
     // Tool-calling loop. We open the SSE stream IMMEDIATELY and write keepalive
     // comments between rounds so the edge runtime's 150s idle timer never trips.
@@ -884,42 +969,75 @@ Deno.serve(async (req: Request) => {
                 } as any);
               }
             }
-            const reqBody: Record<string, unknown> = {
-              model,
-              messages: conversation.map(({ _wrapUpNudge, ...m }: any) => m),
-              stream: false,
-              temperature: 0,
-            };
-            if (!forceWrapUp) {
-              reqBody.tools = tools;
-              reqBody.tool_choice = "auto";
-            }
 
-            console.log("ai-chat round", round, "scrapes_used", scrapesUsed);
-            let upstream: Response;
-            try {
-              upstream = await fetchWithTimeout(upstreamUrl, {
+            const callRound = (target: AITarget) => {
+              const reqBody: Record<string, unknown> = {
+                model: target.model,
+                messages: conversation.map(({ _wrapUpNudge, ...m }: any) => m),
+                stream: false,
+                temperature: 0,
+              };
+              if (!forceWrapUp) {
+                reqBody.tools = tools;
+                reqBody.tool_choice = "auto";
+              }
+              return fetchWithTimeout(target.url, {
                 method: "POST",
                 headers: {
-                  Authorization: `Bearer ${upstreamKey}`,
+                  Authorization: `Bearer ${target.key}`,
                   "Content-Type": "application/json",
-                  ...upstreamExtraHeaders,
+                  ...target.extraHeaders,
                 },
                 body: JSON.stringify(reqBody),
               }, UPSTREAM_ROUND_TIMEOUT_MS);
+            };
+
+            console.log("ai-chat round", round, "model", activeTarget.model, "scrapes_used", scrapesUsed);
+            let upstream: Response | null = null;
+            let failureReason = "";
+
+            try {
+              upstream = await callRound(activeTarget);
+              if (!upstream.ok) {
+                const t = await upstream.text().catch(() => "");
+                console.error("AI gateway error", activeTarget.model, upstream.status, t.slice(0, 300));
+                failureReason = `HTTP ${upstream.status}`;
+              }
             } catch (e) {
-              console.error("ai-chat upstream timeout/abort round", round, e);
-              send({ choices: [{ delta: { content: `_Model timed out on round ${round + 1} (${Math.round(UPSTREAM_ROUND_TIMEOUT_MS/1000)}s). Try again, or pick a faster model._` } }] });
+              console.error("ai-chat upstream timeout/abort round", round, activeTarget.model, e);
+              failureReason = "timeout";
+            }
+
+            // Automatic fallback to backup model (Gemma 4 31B) if primary fails
+            if ((!upstream || !upstream.ok) && !fellBack && fallbackTarget) {
+              const failedLabel = activeTarget.label;
+              activeTarget = fallbackTarget;
+              fellBack = true;
+              console.warn("ai-chat falling back to backup", { from: failedLabel, to: activeTarget.model, reason: failureReason });
+              send({ choices: [{ delta: { content: `_${failedLabel} unavailable (${failureReason}) — switched to backup **${activeTarget.label}**._\n\n` } }] });
+              ping();
+              try {
+                upstream = await callRound(activeTarget);
+              } catch (e) {
+                console.error("ai-chat backup timeout/abort round", round, activeTarget.model, e);
+                send({ choices: [{ delta: { content: `_Backup model (${activeTarget.label}) also timed out. Please try again._` } }] });
+                done();
+                return;
+              }
+            }
+
+            if (!upstream) {
+              send({ choices: [{ delta: { content: `_Model timed out on round ${round + 1} (${Math.round(UPSTREAM_ROUND_TIMEOUT_MS/1000)}s). Try again, or switch to Gemma 4 31B._` } }] });
               done();
               return;
             }
 
             if (!upstream.ok) {
               const t = await upstream.text().catch(() => "");
-              console.error("AI gateway error", upstream.status, t);
+              console.error("AI gateway error (final)", activeTarget.model, upstream.status, t.slice(0, 300));
               const errMsg =
                 upstream.status === 429 ? "_Rate limit reached. Please wait a moment and try again._" :
-                upstream.status === 402 ? "_AI credits exhausted. Add credits in workspace settings._" :
+                upstream.status === 402 ? "_AI credits exhausted. Add credits or check your OpenRouter key in Settings._" :
                 `_AI gateway error (${upstream.status})._`;
               send({ choices: [{ delta: { content: errMsg } }] });
               done();
@@ -997,7 +1115,7 @@ Deno.serve(async (req: Request) => {
                 if (!v.ok) {
                   result = { error: `Invalid scope: ${v.error}. Call emit_scope again with a corrected payload.` };
                 } else {
-                  const payload = { kind: "estimate_scope", model_used: model, prompt: userPromptText.slice(0, 8000), ...v.scope };
+                  const payload = { kind: "estimate_scope", model_used: activeTarget.model, prompt: userPromptText.slice(0, 8000), ...v.scope };
                   send({ choices: [{ delta: { content: "```json\n" + JSON.stringify(payload, null, 2) + "\n```\n" } }] });
                   result = { ok: true, note: "Scope accepted. The app will price it. Do not state any prices." };
                 }

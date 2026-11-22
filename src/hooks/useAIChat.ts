@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAIAssistant, type ChatAttachment, type ChatMessage } from '@/contexts/AIAssistantContext';
 import { useAIPageContextValue } from '@/contexts/AIContextProvider';
-import { getStoredDeepSeekKey } from '@/lib/aiModels';
+import { getStoredDeepSeekKey, getStoredBackupKey } from '@/lib/aiModels';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
@@ -79,6 +79,7 @@ export const useAIChat = () => {
             hasImages: !!attachments && attachments.length > 0,
             model: modelId,
             apiKey: getStoredDeepSeekKey() || undefined,
+            backupApiKey: getStoredBackupKey() || undefined,
           }),
         });
 

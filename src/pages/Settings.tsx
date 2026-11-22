@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useSettings, useSaveSettings, DEFAULT_TERMS_TEXT, type Settings as S } from '@/hooks/useSettings';
 import { useAIAssistantOptional } from '@/contexts/AIAssistantContext';
-import { AI_MODELS, getStoredModelId, setStoredModelId, getStoredDeepSeekKey, setStoredDeepSeekKey } from '@/lib/aiModels';
-import { Check, Brain, Key, Eye, EyeOff } from 'lucide-react';
+import { AI_MODELS, getStoredModelId, setStoredModelId, getStoredDeepSeekKey, setStoredDeepSeekKey, getStoredBackupKey, setStoredBackupKey } from '@/lib/aiModels';
+import { Check, Brain, Key, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 type PctKey = 'default_tax_rate' | 'default_deposit_pct' | 'default_waste_factor';
@@ -29,6 +29,8 @@ const Settings: React.FC = () => {
   const [f, setF] = useState<Record<string, string>>({});
   const [apiKey, setApiKey] = useState<string>(() => getStoredDeepSeekKey());
   const [showKey, setShowKey] = useState(false);
+  const [backupApiKey, setBackupApiKey] = useState<string>(() => getStoredBackupKey());
+  const [showBackupKey, setShowBackupKey] = useState(false);
 
   useEffect(() => {
     if (aiCtx?.modelId) {
@@ -42,15 +44,25 @@ const Settings: React.FC = () => {
     if (aiCtx) {
       aiCtx.setModelId(id);
     }
-    toast.success('Default AI model updated');
+    const label = AI_MODELS.find((m) => m.id === id)?.label ?? 'AI model';
+    toast.success(`Active AI engine switched to ${label}`);
   };
 
   const handleSaveApiKey = () => {
     setStoredDeepSeekKey(apiKey);
     if (apiKey.trim()) {
-      toast.success('DeepSeek API key saved');
+      toast.success('Primary API key saved');
     } else {
-      toast.info('DeepSeek API key cleared');
+      toast.info('Primary API key cleared');
+    }
+  };
+
+  const handleSaveBackupKey = () => {
+    setStoredBackupKey(backupApiKey);
+    if (backupApiKey.trim()) {
+      toast.success('Backup Gemma OpenRouter key saved');
+    } else {
+      toast.info('Backup Gemma key cleared (will reuse primary OpenRouter key)');
     }
   };
 
@@ -138,38 +150,65 @@ const Settings: React.FC = () => {
           </div>
           <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-muted-foreground font-mono">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            DeepSeek V4.1 Flash
+            {AI_MODELS.find((m) => m.id === currentModel)?.label ?? 'DeepSeek V4.1 Flash'}
           </span>
         </div>
 
-        {/* Model Card */}
-        <div className="p-3.5 rounded-lg border border-primary/40 bg-primary/5 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-foreground">DeepSeek V4.1 Flash</span>
-              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/20 text-primary">Default</span>
-            </div>
-            <span className="text-[10px] font-mono text-muted-foreground">CED MoE 552B</span>
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Multimodal Mixture-of-Experts model with native visual understanding, fast compressed KV caching, and superior trade estimating and blueprint extraction.
-          </p>
+        {/* Selectable Primary + Backup Model Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          {AI_MODELS.map((m) => {
+            const isSelected = m.id === currentModel;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => handleModelChange(m.id)}
+                className={`text-left p-3.5 rounded-lg border transition-all space-y-1.5 ${
+                  isSelected
+                    ? 'border-primary bg-primary/10 shadow-sm'
+                    : 'border-border bg-accent/40 hover:bg-accent hover:border-border'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-foreground">{m.label}</span>
+                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                      m.role === 'Primary'
+                        ? 'bg-primary/20 text-primary'
+                        : 'bg-accent text-muted-foreground'
+                    }`}>
+                      {m.role}
+                    </span>
+                  </div>
+                  {isSelected && <Check size={14} className="text-primary shrink-0" />}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-snug">{m.blurb}</p>
+              </button>
+            );
+          })}
         </div>
 
-        {/* API Key Configuration */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-muted-foreground">
+          <ShieldCheck size={14} className="text-emerald-500 shrink-0" />
+          <span>
+            <strong className="text-foreground">Auto-Fallback Active:</strong> If DeepSeek V4.1 Flash errors, rate-limits, or times out, the app automatically retries with <strong className="text-foreground">Gemma 4 31B</strong>.
+          </span>
+        </div>
+
+        {/* Primary API Key Configuration */}
         <div className="pt-2 border-t border-border space-y-2">
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
               <Key size={12} className="text-primary" />
-              DeepSeek API Key
+              Primary API Key (DeepSeek / OpenRouter)
             </label>
-            <span className="text-[9px] text-muted-foreground">Direct API or OpenRouter</span>
+            <span className="text-[9px] text-muted-foreground">Direct API or OpenRouter (sk-or-...)</span>
           </div>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <input
                 type={showKey ? 'text' : 'password'}
-                placeholder="sk-..."
+                placeholder="sk-or-v1-..."
                 className={`${inputCls} pr-9 font-mono text-xs`}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
@@ -191,8 +230,45 @@ const Settings: React.FC = () => {
               Save Key
             </button>
           </div>
+        </div>
+
+        {/* Backup Gemma API Key Configuration */}
+        <div className="pt-2 border-t border-border/60 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
+              <Key size={12} className="text-emerald-500" />
+              Backup Gemma API Key (OpenRouter)
+            </label>
+            <span className="text-[9px] text-muted-foreground">Optional if using same OpenRouter key</span>
+          </div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showBackupKey ? 'text' : 'password'}
+                placeholder="sk-or-v1-... (leave blank to reuse primary OpenRouter key)"
+                className={`${inputCls} pr-9 font-mono text-xs`}
+                value={backupApiKey}
+                onChange={(e) => setBackupApiKey(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowBackupKey(!showBackupKey)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                title={showBackupKey ? 'Hide key' : 'Show key'}
+              >
+                {showBackupKey ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveBackupKey}
+              className="px-3 py-1.5 rounded-lg border border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 font-bold text-[10px] uppercase tracking-wider shrink-0 transition-colors"
+            >
+              Save Backup
+            </button>
+          </div>
           <p className="text-[10px] text-muted-foreground">
-            Paste your DeepSeek API key here, or configure <code className="text-primary">DEEPSEEK_API_KEY</code> in your environment secrets.
+            Paste your Gemma OpenRouter key here (or set <code className="text-primary">OPENROUTER_GEMMA_API_KEY</code> in Supabase secrets).
           </p>
         </div>
       </section>
