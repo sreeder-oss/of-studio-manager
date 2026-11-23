@@ -5,7 +5,13 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import type { DbContact } from '@/hooks/useContacts';
 import { useSaveContact } from '@/hooks/useContacts';
-import { generateOutreachDraftWithAI, openGmailCompose, openMailto } from '@/lib/gmail';
+import {
+  buildGmailComposeUrl,
+  buildMailtoUrl,
+  generateOutreachDraftWithAI,
+  getOutreachSentInfo,
+  isBodyTruncatedForUrl,
+} from '@/lib/gmail';
 
 interface OutreachEmailModalProps {
   contact: DbContact | null;
@@ -131,6 +137,10 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
     }
   };
 
+  const sentInfo = getOutreachSentInfo(contact.notes);
+  const gmailUrl = buildGmailComposeUrl(contact.email || '', subject, body);
+  const mailtoUrl = buildMailtoUrl(contact.email || '', subject, body);
+
   const logOutreach = async () => {
     try {
       const topicTitle = TOPICS.find((t) => t.id === selectedTopic)?.title || selectedTopic;
@@ -143,25 +153,45 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
       await saveContact.mutateAsync({
         ...contact,
         notes: updatedNotes,
-        status: contact.status === 'Inactive' ? 'Active' : contact.status,
+        status: 'Active',
       });
     } catch {
       // quiet catch
     }
   };
 
-  const handleOpenGmail = () => {
-    openGmailCompose(contact.email || '', subject, body);
-    logOutreach();
-    toast.success('Opened in Gmail! Outreach logged to contact notes.');
+  const handleMarkSent = async () => {
+    await logOutreach();
+    toast.success(`Marked ${contact.name} as Sent!`);
     onClose();
   };
 
-  const handleOpenMailto = () => {
-    openMailto(contact.email || '', subject, body);
+  const handleOpenGmail = () => {
+    const truncated = isBodyTruncatedForUrl(body);
+    if (truncated && navigator.clipboard) {
+      navigator.clipboard.writeText(body).catch(() => {});
+    }
     logOutreach();
-    toast.success('Opened in email app! Outreach logged to contact notes.');
-    onClose();
+    toast.success(
+      truncated
+        ? 'Opened in Gmail & marked Sent! Full message copied to clipboard in case Gmail trims long text.'
+        : 'Opened in Gmail & marked as Sent!',
+    );
+    setTimeout(() => onClose(), 150);
+  };
+
+  const handleOpenMailto = () => {
+    const truncated = isBodyTruncatedForUrl(body);
+    if (truncated && navigator.clipboard) {
+      navigator.clipboard.writeText(body).catch(() => {});
+    }
+    logOutreach();
+    toast.success(
+      truncated
+        ? 'Opened Mail App & marked Sent! Full message copied to clipboard.'
+        : 'Opened Mail App & marked as Sent!',
+    );
+    setTimeout(() => onClose(), 150);
   };
 
   const handleCopy = async () => {
@@ -169,8 +199,8 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
       await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      logOutreach();
-      toast.success('Email draft copied to clipboard!');
+      await logOutreach();
+      toast.success('Draft copied & contact marked as Sent!');
     } catch {
       toast.error('Failed to copy');
     }
@@ -184,8 +214,16 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
             <div className="p-2 rounded-lg bg-primary/10 text-primary">
               <Mail className="h-5 w-5" />
             </div>
-            <div className="min-w-0">
-              <DialogTitle className="font-serif text-lg truncate">Email Outreach — {contact.name}</DialogTitle>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <DialogTitle className="font-serif text-lg truncate">Email Outreach — {contact.name}</DialogTitle>
+                {sentInfo.sent && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider">
+                    <Check className="h-3 w-3" />
+                    Sent{sentInfo.lastSentDate ? ` · ${sentInfo.lastSentDate}` : ''}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5 truncate">
                 {contact.email ? `To: ${contact.email}` : 'No email on file — enter recipient in Gmail or copy draft'}
               </p>
@@ -309,31 +347,46 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
         </div>
 
         <DialogFooter className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-3 border-t border-border mt-2">
-          <Button type="button" variant="ghost" size="sm" onClick={handleCopy} className="text-xs">
-            {copied ? <Check className="h-3.5 w-3.5 mr-1.5 text-primary" /> : <Copy className="h-3.5 w-3.5 mr-1.5" />}
-            {copied ? 'Copied' : 'Copy Draft'}
-          </Button>
-
-          <div className="flex items-center gap-2 justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleOpenMailto}
-              className="text-xs flex-1 sm:flex-initial"
-              title="Open default mail app (best on phone)"
-            >
-              <Smartphone className="h-3.5 w-3.5 mr-1.5" />
-              Mail App
+          <div className="flex items-center gap-1.5">
+            <Button type="button" variant="ghost" size="sm" onClick={handleCopy} className="text-xs">
+              {copied ? <Check className="h-3.5 w-3.5 mr-1.5 text-primary" /> : <Copy className="h-3.5 w-3.5 mr-1.5" />}
+              {copied ? 'Copied' : 'Copy Draft'}
             </Button>
             <Button
               type="button"
+              variant="ghost"
               size="sm"
-              onClick={handleOpenGmail}
+              onClick={handleMarkSent}
+              className="text-xs text-emerald-400 hover:text-emerald-300"
+              title="Mark this contact as emailed without opening a mail client"
+            >
+              <Check className="h-3.5 w-3.5 mr-1" />
+              Mark Sent
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2 justify-end">
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="text-xs flex-1 sm:flex-initial"
+              title="Open default mail app (best on phone)"
+            >
+              <a href={mailtoUrl} target="_top" onClick={handleOpenMailto}>
+                <Smartphone className="h-3.5 w-3.5 mr-1.5" />
+                Mail App
+              </a>
+            </Button>
+            <Button
+              asChild
+              size="sm"
               className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow flex-1 sm:flex-initial"
             >
-              <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-              Open in Gmail
+              <a href={gmailUrl} target="_blank" rel="noopener noreferrer" onClick={handleOpenGmail}>
+                <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                Open in Gmail
+              </a>
             </Button>
           </div>
         </DialogFooter>

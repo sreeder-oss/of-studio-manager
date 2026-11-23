@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, ChevronRight, Trash2, Mail, FileText, Sparkles, UserCheck, Briefcase, Pencil } from 'lucide-react';
+import { Plus, Search, ChevronRight, Trash2, Mail, FileText, Sparkles, UserCheck, Briefcase, Pencil, Check, Globe, Loader2 } from 'lucide-react';
 import { useContacts, useSaveContact, useBatchInsertContacts, useDeleteContact, type DbContact } from '@/hooks/useContacts';
-import { SEED_OUTREACH_LEADS } from '@/data/seedLeads';
+import { LEAD_BATCHES } from '@/data/seedLeads';
 import { OutreachEmailModal } from '@/components/OutreachEmailModal';
+import { enrichContactWithAI, getOutreachSentInfo } from '@/lib/gmail';
 import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -50,6 +51,8 @@ const Contacts: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<FilterTab>(initialTab);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [outreachContact, setOutreachContact] = useState<DbContact | null>(null);
+  const [outreachFilter, setOutreachFilter] = useState<'all' | 'unsent' | 'sent'>('all');
+  const [enrichingId, setEnrichingId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -78,21 +81,44 @@ const Contacts: React.FC = () => {
     );
   }, [contacts, searchTerm]);
 
-  const filteredContacts = useMemo(
-    () => searchMatches.filter(c => activeFilter === 'all' || c.type === activeFilter),
-    [searchMatches, activeFilter],
+  const leadMatches = useMemo(
+    () => searchMatches.filter(c => c.type === 'Lead'),
+    [searchMatches],
   );
+
+  const outreachCounts = useMemo(() => {
+    let sent = 0;
+    for (const c of leadMatches) {
+      if (getOutreachSentInfo(c.notes).sent) sent++;
+    }
+    return { all: leadMatches.length, sent, unsent: leadMatches.length - sent };
+  }, [leadMatches]);
+
+  const filteredContacts = useMemo(() => {
+    const byTab = searchMatches.filter(c => activeFilter === 'all' || c.type === activeFilter);
+    if (activeFilter !== 'Lead' || outreachFilter === 'all') return byTab;
+    return byTab.filter(c => {
+      const isSent = getOutreachSentInfo(c.notes).sent;
+      return outreachFilter === 'sent' ? isSent : !isSent;
+    });
+  }, [searchMatches, activeFilter, outreachFilter]);
 
   const contactCounts = useMemo(() => ({
     all: searchMatches.length,
     Client: searchMatches.filter(c => c.type === 'Client').length,
-    Lead: searchMatches.filter(c => c.type === 'Lead').length,
+    Lead: leadMatches.length,
     Vendor: searchMatches.filter(c => c.type === 'Vendor').length,
-  }), [searchMatches]);
+  }), [searchMatches, leadMatches]);
 
-  const missingSeedLeads = useMemo(() => {
+  const nextBatch = useMemo(() => {
     const existingNames = new Set(contacts.map(c => c.name.toLowerCase()));
-    return SEED_OUTREACH_LEADS.filter(lead => !existingNames.has(lead.name.toLowerCase()));
+    for (const batch of LEAD_BATCHES) {
+      const missing = batch.leads.filter(lead => !existingNames.has(lead.name.toLowerCase()));
+      if (missing.length > 0) {
+        return { batch, missing };
+      }
+    }
+    return null;
   }, [contacts]);
 
   const resetForm = () => {
@@ -195,14 +221,81 @@ const Contacts: React.FC = () => {
     navigate(`/estimates/new?contactId=${contactId}`);
   };
 
-  const handleSeedLeads = async () => {
-    if (batchInsert.isPending || missingSeedLeads.length === 0) return;
+  const handleLoadNextBatch = async () => {
+    if (batchInsert.isPending || !nextBatch) return;
     try {
-      const inserted = await batchInsert.mutateAsync(missingSeedLeads);
-      toast.success(`Imported ${inserted.length} outreach leads across OK, TX, AR, KS & MO!`);
+      const inserted = await batchInsert.mutateAsync(nextBatch.missing);
+      toast.success(`Loaded ${inserted.length} leads from ${nextBatch.batch.label}!`);
       selectTab('Lead');
     } catch (e: any) {
-      toast.error(e?.message || 'Failed to import leads');
+      toast.error(e?.message || 'Failed to load lead batch');
+    }
+  };
+
+  const handleEnrichContact = async (e: React.MouseEvent, contact: DbContact) => {
+    e.stopPropagation();
+    if (enrichingId) return;
+    setEnrichingId(contact.id);
+    try {
+      const found = await enrichContactWithAI({
+        name: contact.name,
+        address: contact.address,
+        email: contact.email,
+        phone: contact.phone,
+        notes: contact.notes,
+      });
+
+      const updates: string[] = [];
+      const nextEmail = contact.email || found.email;
+      const nextPhone = contact.phone || found.phone;
+      const nextAddress =
+        found.address && (!contact.address || found.address.length > contact.address.length + 5)
+          ? found.address
+          : contact.address;
+
+      if (!contact.email && found.email) updates.push(`email (${found.email})`);
+      if (!contact.phone && found.phone) updates.push(`phone (${found.phone})`);
+      if (nextAddress !== contact.address && found.address) updates.push('street address');
+
+      const extraNoteParts: string[] = [];
+      const existingNotes = contact.notes || '';
+      if (found.contact_person && !existingNotes.toLowerCase().includes(found.contact_person.toLowerCase())) {
+        extraNoteParts.push(`Contact: ${found.contact_person}`);
+        updates.push('contact name');
+      }
+      if (found.instagram && !existingNotes.toLowerCase().includes(found.instagram.toLowerCase())) {
+        extraNoteParts.push(`IG: ${found.instagram}`);
+        updates.push(`IG (${found.instagram})`);
+      }
+      if (found.website && !existingNotes.toLowerCase().includes(found.website.replace(/^https?:\/\//, '').toLowerCase())) {
+        extraNoteParts.push(`Website: ${found.website}`);
+        updates.push('website');
+      }
+      if (found.notes_summary && !existingNotes.includes(found.notes_summary)) {
+        extraNoteParts.push(found.notes_summary);
+      }
+
+      if (updates.length === 0 && extraNoteParts.length === 0) {
+        toast.info(`No additional public/IG details found for ${contact.name}.`);
+        return;
+      }
+
+      const combinedNotes = extraNoteParts.length
+        ? (existingNotes ? `${existingNotes}\n[Enriched: ${extraNoteParts.join(' | ')}]` : `[Enriched: ${extraNoteParts.join(' | ')}]`)
+        : existingNotes;
+
+      await saveContact.mutateAsync({
+        ...contact,
+        email: nextEmail,
+        phone: nextPhone,
+        address: nextAddress,
+        notes: combinedNotes || null,
+      });
+      toast.success(`Updated ${contact.name}: added ${updates.join(', ') || 'notes'}`);
+    } catch (err: any) {
+      toast.error(err?.message || `Could not enrich ${contact.name}`);
+    } finally {
+      setEnrichingId(null);
     }
   };
 
@@ -249,20 +342,24 @@ const Contacts: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {missingSeedLeads.length > 0 && activeFilter === 'Lead' && (
+          {nextBatch && activeFilter === 'Lead' && (
             <button
-              onClick={handleSeedLeads}
+              onClick={handleLoadNextBatch}
               disabled={batchInsert.isPending}
-              className="px-3 py-2 rounded-xl bg-card border border-border text-primary hover:bg-accent text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
-              title="Import remaining commercial GC & designer leads from 5-State Lead Tracker"
+              className="px-3 py-2 rounded-xl bg-card border border-primary/40 text-primary hover:bg-primary/10 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
+              title={nextBatch.batch.description}
             >
-              <Sparkles size={14} className="text-primary" />
-              <span>{batchInsert.isPending ? 'Importing...' : `Import Leads (${missingSeedLeads.length})`}</span>
+              <Sparkles size={14} className="text-primary shrink-0" />
+              <span className="truncate max-w-[200px] sm:max-w-none">
+                {batchInsert.isPending
+                  ? 'Loading batch...'
+                  : `Load Next Batch: ${nextBatch.batch.label.split(':')[0]} (+${nextBatch.missing.length})`}
+              </span>
             </button>
           )}
           <button
             onClick={() => { resetForm(); setIsModalOpen(true); }}
-            className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-primary hover:bg-accent hover:scale-105 transition-all shadow-glow"
+            className="w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-primary hover:bg-accent hover:scale-105 transition-all shadow-glow shrink-0"
             aria-label="Add contact"
           >
             <Plus size={20} />
@@ -341,27 +438,82 @@ const Contacts: React.FC = () => {
         </div>
       </div>
 
+      {/* Outreach Queue Sub-Filter (Potential Clients tab only) */}
+      {activeFilter === 'Lead' && (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-card/60 border border-border/70 rounded-xl px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setOutreachFilter('all')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                outreachFilter === 'all'
+                  ? 'bg-accent text-foreground border border-border'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              All ({outreachCounts.all})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOutreachFilter('unsent')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                outreachFilter === 'unsent'
+                  ? 'bg-warning/15 text-warning border border-warning/30'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              To Send ({outreachCounts.unsent})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOutreachFilter('sent')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 ${
+                outreachFilter === 'sent'
+                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Check size={11} />
+              Sent ({outreachCounts.sent})
+            </button>
+          </div>
+          {nextBatch && (
+            <span className="text-[11px] text-muted-foreground hidden md:inline">
+              Next up: <strong className="text-foreground">{nextBatch.batch.label}</strong> ({nextBatch.missing.length} ready)
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Contact List */}
       <div className="space-y-2">
         {filteredContacts.length === 0 ? (
           <div className="text-center py-12 bg-card rounded-xl border border-dashed border-border px-4">
             <p className="text-muted-foreground text-xs font-medium">
-              {activeFilter === 'Lead' ? 'No potential clients found.' : 'No contacts found.'}
+              {activeFilter === 'Lead'
+                ? (outreachFilter === 'sent'
+                    ? 'No leads marked as sent yet.'
+                    : outreachFilter === 'unsent'
+                      ? 'All loaded leads have been emailed! Load the next batch below.'
+                      : 'No potential clients found.')
+                : 'No contacts found.'}
             </p>
-            {activeFilter === 'Lead' && missingSeedLeads.length > 0 && (
+            {activeFilter === 'Lead' && nextBatch && (
               <button
-                onClick={handleSeedLeads}
+                onClick={handleLoadNextBatch}
                 disabled={batchInsert.isPending}
                 className="mt-3 px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-xl shadow-glow inline-flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Sparkles size={14} />
-                Import {missingSeedLeads.length} Leads from 5-State Lead Tracker
+                Load {nextBatch.batch.label} (+{nextBatch.missing.length} leads)
               </button>
             )}
           </div>
         ) : (
           filteredContacts.map(contact => {
             const isPotential = contact.type === 'Lead';
+            const sentInfo = isPotential ? getOutreachSentInfo(contact.notes) : { sent: false, lastSentDate: null, count: 0 };
+            const isEnriching = enrichingId === contact.id;
             return (
               <div
                 key={contact.id}
@@ -372,10 +524,12 @@ const Contacts: React.FC = () => {
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <div className={`h-10 w-10 rounded-full flex items-center justify-center font-serif font-bold text-sm border flex-shrink-0 transition-colors ${
                     isPotential
-                      ? 'bg-warning/10 text-warning border-warning/25'
+                      ? (sentInfo.sent
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : 'bg-warning/10 text-warning border-warning/25')
                       : 'bg-primary/10 text-primary border-primary/25'
                   }`}>
-                    {contact.name.charAt(0)}
+                    {sentInfo.sent ? <Check size={16} /> : contact.name.charAt(0)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -383,11 +537,22 @@ const Contacts: React.FC = () => {
                         {contact.name}
                       </h3>
                       <CategoryBadge category={contact.type || 'Client'} />
-                      <StatusBadge status={contact.status || 'Active'} />
+                      {isPotential && sentInfo.sent ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border uppercase font-bold tracking-wider bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                          <Check size={10} />
+                          Sent{sentInfo.lastSentDate ? ` · ${sentInfo.lastSentDate}` : ''}
+                        </span>
+                      ) : (
+                        <StatusBadge status={contact.status || 'Active'} />
+                      )}
                     </div>
 
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground truncate">
-                      {contact.email && <span className="truncate">{contact.email}</span>}
+                      {contact.email ? (
+                        <span className="truncate">{contact.email}</span>
+                      ) : (
+                        isPotential && <span className="text-warning/80 italic">No email yet</span>
+                      )}
                       {contact.phone && <span>{contact.phone}</span>}
                       {contact.address && <span className="hidden md:inline truncate">• {contact.address}</span>}
                     </div>
@@ -401,20 +566,35 @@ const Contacts: React.FC = () => {
                 </div>
 
                 {/* Right: Contextual Quick Actions */}
-                <div className="flex items-center gap-1.5 sm:self-center self-end flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40 w-full sm:w-auto justify-end">
+                <div className="flex items-center gap-1.5 sm:self-center self-end flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40 w-full sm:w-auto justify-end flex-wrap">
                   {isPotential && (
                     <>
+                      <button
+                        type="button"
+                        onClick={(e) => handleEnrichContact(e, contact)}
+                        disabled={!!enrichingId}
+                        className="px-2.5 py-1.5 rounded-lg bg-accent/70 hover:bg-accent text-foreground border border-border text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                        title="Cross-reference on Web & Instagram for email, phone, full address & IG handle"
+                      >
+                        {isEnriching ? <Loader2 size={13} className="animate-spin text-primary" /> : <Globe size={13} className="text-primary" />}
+                        <span>{isEnriching ? 'Checking...' : 'Lookup / IG'}</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setOutreachContact(contact);
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 text-xs font-semibold flex items-center gap-1.5 transition-all"
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                          sentInfo.sent
+                            ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                            : 'bg-primary/10 hover:bg-primary/20 text-primary border-primary/25'
+                        }`}
                         title="Draft email & open in Gmail"
                       >
                         <Mail size={13} />
-                        <span>Email Info</span>
+                        <span>{sentInfo.sent ? 'Follow Up' : 'Email Info'}</span>
                       </button>
 
                       <button

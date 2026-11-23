@@ -880,6 +880,121 @@ async function handleOutreachDraft(input: {
   return json(200, { text, model: usedTarget.model });
 }
 
+async function handleEnrichContact(
+  input: { contact?: unknown; model?: unknown; apiKey?: unknown; backupApiKey?: unknown },
+  firecrawlKey: string,
+): Promise<Response> {
+  const json = (status: number, b: unknown) =>
+    new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  const c = (input.contact && typeof input.contact === "object" ? input.contact : {}) as Record<string, unknown>;
+  const name = String(c.name ?? "").trim();
+  const address = String(c.address ?? "").trim();
+  const notes = String(c.notes ?? "").trim();
+  if (!name) return json(400, { error: "Contact name is required" });
+  if (!firecrawlKey) return json(500, { error: "FIRECRAWL_API_KEY is not configured for web/Instagram lookup." });
+
+  const { primary, fallback } = resolveAITargets(
+    typeof input.model === "string" ? input.model : undefined,
+    typeof input.apiKey === "string" ? input.apiKey : undefined,
+    typeof input.backupApiKey === "string" ? input.backupApiKey : undefined,
+  );
+  if (!primary) {
+    return json(500, { error: "No AI API key configured for contact enrichment." });
+  }
+
+  // Run parallel web + Instagram searches via Firecrawl
+  const qMain = `"${name}" ${address} contact email phone street address`;
+  const qIg = `"${name}" ${address} site:instagram.com`;
+  const [webRes, igRes] = await Promise.all([
+    fcSearch(qMain, firecrawlKey).catch((e) => ({ error: String(e) })),
+    fcSearch(qIg, firecrawlKey).catch((e) => ({ error: String(e) })),
+  ]);
+
+  const extractionPrompt = [
+    `Cross-reference the following live web and Instagram search results for this business lead and extract verified contact details.`,
+    `Business: ${name}`,
+    address ? `Known city/region: ${address}` : "",
+    notes ? `Existing notes: ${notes}` : "",
+    `\nWEB SEARCH RESULTS:\n${JSON.stringify(webRes).slice(0, 6000)}`,
+    `\nINSTAGRAM SEARCH RESULTS:\n${JSON.stringify(igRes).slice(0, 4000)}`,
+    `\nReturn ONLY a raw JSON object (no markdown fences) with these exact keys (use null if not clearly verified in the search results — NEVER invent or guess):`,
+    `{`,
+    `  "email": "string or null",`,
+    `  "phone": "string or null",`,
+    `  "address": "full street address, city, state zip or null",`,
+    `  "website": "https://... or null",`,
+    `  "instagram": "@handle or https://instagram.com/... or null",`,
+    `  "contact_person": "owner/principal/estimator name or null",`,
+    `  "notes_summary": "1 short sentence summarizing what they build/design if helpful, or null"`,
+    `}`,
+  ].filter(Boolean).join("\n");
+
+  const callExtract = (target: AITarget) =>
+    fetchWithTimeout(target.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${target.key}`,
+        "Content-Type": "application/json",
+        ...target.extraHeaders,
+      },
+      body: JSON.stringify({
+        model: target.model,
+        temperature: 0,
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content: "You extract verified business contact info from search results into strict JSON. Never hallucinate emails, phone numbers, or addresses.",
+          },
+          { role: "user", content: extractionPrompt },
+        ],
+      }),
+    }, 45_000);
+
+  let upstream: Response | null = null;
+  try {
+    upstream = await callExtract(primary);
+  } catch (e) {
+    console.warn("enrich_contact primary error", primary.model, e);
+  }
+  if ((!upstream || !upstream.ok) && fallback) {
+    try {
+      upstream = await callExtract(fallback);
+    } catch (e) {
+      console.error("enrich_contact backup error", fallback.model, e);
+      return json(504, { error: "Contact lookup timed out." });
+    }
+  }
+  if (!upstream || !upstream.ok) {
+    return json(502, { error: `Contact lookup failed (${upstream?.status ?? 502}).` });
+  }
+
+  let parsed: Record<string, unknown> = {};
+  try {
+    const data = await upstream.json();
+    let text = String(data?.choices?.[0]?.message?.content ?? "").trim();
+    const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fence) text = fence[1].trim();
+    const brace = text.match(/\{[\s\S]*\}/);
+    if (brace) text = brace[0];
+    parsed = JSON.parse(text);
+  } catch {
+    return json(502, { error: "Could not parse verified contact details." });
+  }
+
+  const clean = (v: unknown) => (typeof v === "string" && v.trim() && v.trim().toLowerCase() !== "null" ? v.trim() : null);
+  return json(200, {
+    email: clean(parsed.email),
+    phone: clean(parsed.phone),
+    address: clean(parsed.address),
+    website: clean(parsed.website),
+    instagram: clean(parsed.instagram),
+    contact_person: clean(parsed.contact_person),
+    notes_summary: clean(parsed.notes_summary),
+  });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -916,6 +1031,9 @@ Deno.serve(async (req: Request) => {
     }
     if (mode === "outreach_draft") {
       return await handleOutreachDraft(body as unknown as { prompt?: unknown; model?: unknown; apiKey?: unknown; backupApiKey?: unknown });
+    }
+    if (mode === "enrich_contact") {
+      return await handleEnrichContact(body as unknown as { contact?: unknown; model?: unknown; apiKey?: unknown; backupApiKey?: unknown }, FIRECRAWL_API_KEY);
     }
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages required" }), {

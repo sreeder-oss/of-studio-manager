@@ -8,21 +8,152 @@ import {
 } from '@/lib/aiModels';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const MAX_URL_BODY_CHARS = 1400;
+
+function trimBodyForUrl(body: string): { text: string; truncated: boolean } {
+  if (body.length <= MAX_URL_BODY_CHARS) {
+    return { text: body, truncated: false };
+  }
+  return {
+    text: `${body.slice(0, MAX_URL_BODY_CHARS - 60).trimEnd()}\n\n[Full message copied to clipboard — press Ctrl+V / Paste]`,
+    truncated: true,
+  };
+}
 
 export function buildGmailComposeUrl(to: string, subject: string, body: string): string {
-  return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const { text } = trimBodyForUrl(body);
+  const params = new URLSearchParams();
+  params.set('fs', '1');
+  params.set('tf', 'cm');
+  if (to.trim()) params.set('to', to.trim());
+  if (subject.trim()) params.set('su', subject.trim());
+  if (text.trim()) params.set('body', text);
+  return `https://mail.google.com/mail/u/0/?${params.toString()}`;
 }
 
 export function buildMailtoUrl(to: string, subject: string, body: string): string {
-  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const { text } = trimBodyForUrl(body);
+  const parts: string[] = [];
+  if (subject.trim()) parts.push(`subject=${encodeURIComponent(subject.trim())}`);
+  if (text.trim()) parts.push(`body=${encodeURIComponent(text)}`);
+  const recipient = to.trim() ? encodeURIComponent(to.trim()) : '';
+  return `mailto:${recipient}${parts.length ? `?${parts.join('&')}` : ''}`;
 }
 
-export function openGmailCompose(to: string, subject: string, body: string): void {
-  window.open(buildGmailComposeUrl(to, subject, body), '_blank', 'noopener,noreferrer');
+export function isBodyTruncatedForUrl(body: string): boolean {
+  return body.length > MAX_URL_BODY_CHARS;
 }
 
-export function openMailto(to: string, subject: string, body: string): void {
-  window.location.href = buildMailtoUrl(to, subject, body);
+/**
+ * Opens Gmail web compose in a new tab using a real anchor click (avoids iframe
+ * navigation 404s and popup blockers). Returns true if the body was truncated.
+ */
+export function openGmailCompose(to: string, subject: string, body: string): boolean {
+  const truncated = isBodyTruncatedForUrl(body);
+  if (truncated && typeof navigator !== 'undefined' && navigator.clipboard) {
+    navigator.clipboard.writeText(body).catch(() => {});
+  }
+  const a = document.createElement('a');
+  a.href = buildGmailComposeUrl(to, subject, body);
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  return truncated;
+}
+
+/**
+ * Opens the device's default mail app (phone / desktop) via an anchor element
+ * instead of mutating window.location.href (which can 404 inside iframes).
+ */
+export function openMailto(to: string, subject: string, body: string): boolean {
+  const truncated = isBodyTruncatedForUrl(body);
+  if (truncated && typeof navigator !== 'undefined' && navigator.clipboard) {
+    navigator.clipboard.writeText(body).catch(() => {});
+  }
+  const a = document.createElement('a');
+  a.href = buildMailtoUrl(to, subject, body);
+  a.target = '_top';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  return truncated;
+}
+
+export interface OutreachSentInfo {
+  sent: boolean;
+  lastSentDate: string | null;
+  count: number;
+}
+
+/**
+ * Parses contact notes to determine whether outreach email(s) have been sent.
+ */
+export function getOutreachSentInfo(notes?: string | null): OutreachSentInfo {
+  if (!notes) return { sent: false, lastSentDate: null, count: 0 };
+  const matches = [...notes.matchAll(/\[(?:AI )?Outreach: Emailed [^\]]*? on ([^\]]+)\]/gi)];
+  if (matches.length > 0) {
+    const lastDate = matches[matches.length - 1][1]?.trim() || null;
+    return { sent: true, lastSentDate: lastDate, count: matches.length };
+  }
+  if (/\[Sent\b/i.test(notes)) {
+    return { sent: true, lastSentDate: null, count: 1 };
+  }
+  return { sent: false, lastSentDate: null, count: 0 };
+}
+
+export interface ContactEnrichmentResult {
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  website: string | null;
+  instagram: string | null;
+  contact_person: string | null;
+  notes_summary: string | null;
+}
+
+/**
+ * Cross-references a lead across the web & Instagram via ai-chat (enrich_contact mode)
+ * to find missing street address, email, phone, website, and Instagram handle.
+ */
+export async function enrichContactWithAI(params: {
+  name: string;
+  address?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+}): Promise<ContactEnrichmentResult> {
+  const chatUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const resp = await fetch(chatUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({
+      mode: 'enrich_contact',
+      contact: params,
+      model: getStoredModelId(),
+      apiKey: getStoredDeepSeekKey() || undefined,
+      backupApiKey: getStoredBackupKey() || undefined,
+    }),
+  });
+
+  if (!resp.ok) {
+    let errMsg = `Contact lookup failed (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error) errMsg = json.error;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(errMsg);
+  }
+
+  return (await resp.json()) as ContactEnrichmentResult;
 }
 
 function parseDraftText(raw: string, fallbackSubject: string): { subject: string; body: string } {
