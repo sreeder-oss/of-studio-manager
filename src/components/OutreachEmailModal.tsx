@@ -26,6 +26,8 @@ interface TopicOption {
   title: string;
   description: string;
   defaultSubject: string;
+  guideTitle: string;
+  guideUrl: string;
 }
 
 const TOPICS: TopicOption[] = [
@@ -34,34 +36,40 @@ const TOPICS: TopicOption[] = [
     title: 'Microcement Rules & Wet Area Specs',
     description: 'Seamless waterproof wet rooms, zero grout lines, substrate prep & mesh reinforcement',
     defaultSubject: 'Architectural Microcement Systems & CSI Div 09 Specs — Organic Finishes',
+    guideTitle: 'Microcement Design & Application Guide',
+    guideUrl: 'https://docs.google.com/document/d/1cRkoRKcM_2lx3dGBEoDO0ZHEDY9w-CXzRuumHdkZAAM/preview',
   },
   {
     id: 'commercial',
     title: 'Commercial GC Intro (HEPA & Off-Hours)',
     description: 'Festool HEPA dust extraction, overnight/off-hours shifts, single-point owner accountability',
     defaultSubject: 'Commercial Specialty Finishes & Off-Hours Subcontracting — Organic Finishes',
+    guideTitle: 'Commercial Capability Statement',
+    guideUrl: 'https://docs.google.com/document/d/1wIhVKDqvqIsEClRNWJV1zYD1QB3t4Telk5EIL5cuPT0/preview',
   },
   {
     id: 'venetian',
     title: 'Venetian & Specialty Lime Plaster',
     description: 'Italian Marmorino, Tadelakt, integral color, luxury residential & boutique retail',
     defaultSubject: 'Artisan Venetian & Lime Plaster Finishes — Organic Finishes',
+    guideTitle: 'Architectural Plaster & Microcement Overview',
+    guideUrl: 'https://docs.google.com/document/d/1dTxfSjOSf91a5DMSP4q8v0-2j4QSWDx1QWa-osfoidc/preview',
   },
   {
     id: 'demofree',
     title: 'Demolition-Free Surface Renovations',
     description: 'Overlay sound tile, drywall & concrete without noisy demolition or landfill waste',
     defaultSubject: 'Demolition-Free Surface Transformations — Organic Finishes',
+    guideTitle: 'The Death of Demolition: Microcement vs. Tile',
+    guideUrl: 'https://docs.google.com/document/d/1ksad0frkXSkgqiuiMpUZMyw_2-nBRBgs-mwGuFjUPyo/preview',
   },
 ];
-
-const MICROCEMENT_GUIDE_URL = 'https://drive.google.com/file/d/1cRkoRKcM_2lx3dGBEoDO0ZHEDY9w-CXzRuumHdkZAAM/view';
 
 function buildInstantDraft(contact: DbContact, topicId: OutreachTopic, includeGuideLink: boolean) {
   const topic = TOPICS.find((t) => t.id === topicId) || TOPICS[0];
   const greeting = contact.name ? `Hi ${contact.name.split(' ')[0]},` : 'Hello,';
   const guideSection = includeGuideLink
-    ? `\n\nFor architectural details and installation mechanics, you can view our technical guide here:\n• Microcement Design & Application Guide: ${MICROCEMENT_GUIDE_URL}\n• Portfolio & Systems: https://organicfinishesllc.org`
+    ? `\n\nView our ${topic.guideTitle} here:\n${topic.guideUrl}\n\nPortfolio & Systems: https://organicfinishesllc.org`
     : `\n\nPortfolio & Systems: https://organicfinishesllc.org`;
 
   let topicMessage = '';
@@ -80,7 +88,7 @@ function buildInstantDraft(contact: DbContact, topicId: OutreachTopic, includeGu
       break;
   }
 
-  const signoff = `\n\nI'd welcome the opportunity to review any upcoming drawings or provide preliminary budget numbers for your team.\n\nBest regards,\nShawn Reeder — Owner & Principal Applicator\nOrganic Finishes LLC\nDirect: (405) 816-0750\nEmail: contact@organicfinishesllc.org\norganicfinishesllc.org`;
+  const signoff = `\n\nI'd welcome the opportunity to review any upcoming drawings or provide preliminary budget numbers for your team.\n\nBest regards,\nShawn Reeder — Owner & Principal Applicator\nOrganic Finishes LLC\nDirect: (405) 816-0750\nEmail: contact@organicfinishesllc.org\nhttps://organicfinishesllc.org`;
 
   return {
     subject: topic.defaultSubject,
@@ -99,6 +107,7 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
   const [draftSource, setDraftSource] = useState<'preset' | 'ai'>('preset');
 
   const saveContact = useSaveContact();
+  const currentTopic = TOPICS.find((t) => t.id === selectedTopic) || TOPICS[0];
 
   // Refresh instant preset when contact, topic, or guide toggle changes
   useEffect(() => {
@@ -112,7 +121,6 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
   if (!contact) return null;
 
   const handleGenerateWithAI = async () => {
-    const topic = TOPICS.find((t) => t.id === selectedTopic) || TOPICS[0];
     setIsGeneratingAI(true);
     try {
       const result = await generateOutreachDraftWithAI({
@@ -120,11 +128,11 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
         contactEmail: contact.email,
         contactAddress: contact.address,
         contactNotes: contact.notes,
-        topicTitle: topic.title,
-        topicSummary: topic.description,
+        topicTitle: currentTopic.title,
+        topicSummary: currentTopic.description,
         customInstruction,
         includeGuideLink,
-        guideUrl: MICROCEMENT_GUIDE_URL,
+        guideUrl: currentTopic.guideUrl,
       });
       setSubject(result.subject);
       setBody(result.body);
@@ -196,11 +204,35 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
+      const plain = `Subject: ${subject}\n\n${body}`;
+      const escapeHtml = (s: string) =>
+        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const linkify = (s: string) =>
+        escapeHtml(s).replace(
+          /(https?:\/\/[^\s<]+)/g,
+          (url) => {
+            const label = url === currentTopic.guideUrl
+              ? currentTopic.guideTitle
+              : url.replace(/^https?:\/\//, '');
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+          },
+        );
+      const html = `<div>${linkify(body).replace(/\n/g, '<br/>')}</div>`;
+
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([plain], { type: 'text/plain' }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(plain);
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       await logOutreach();
-      toast.success('Draft copied & contact marked as Sent!');
+      toast.success('Rich clickable email copied & marked as Sent!');
     } catch {
       toast.error('Failed to copy');
     }
@@ -261,8 +293,8 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
             <div className="flex items-center gap-2.5">
               <FileText className="h-4 w-4 text-primary shrink-0" />
               <div>
-                <p className="text-xs font-medium text-foreground">Include Microcement Spec Guide link</p>
-                <p className="text-[11px] text-muted-foreground">Embeds direct PDF view link in the email body</p>
+                <p className="text-xs font-medium text-foreground">Include "{currentTopic.guideTitle}" link</p>
+                <p className="text-[11px] text-muted-foreground">Auto-links on Send in Gmail (or pastes as a clickable link via Copy Draft)</p>
               </div>
             </div>
             <input
