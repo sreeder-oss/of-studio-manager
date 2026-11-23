@@ -20,24 +20,106 @@ function trimBodyForUrl(body: string): { text: string; truncated: boolean } {
   };
 }
 
-export function buildGmailComposeUrl(to: string, subject: string, body: string): string {
-  const { text } = trimBodyForUrl(body);
-  const params = new URLSearchParams();
-  params.set('fs', '1');
-  params.set('tf', 'cm');
-  if (to.trim()) params.set('to', to.trim());
-  if (subject.trim()) params.set('su', subject.trim());
-  if (text.trim()) params.set('body', text);
-  return `https://mail.google.com/mail/u/0/?${params.toString()}`;
+export type MailPlatform = 'android' | 'ios' | 'desktop';
+
+export function detectMailPlatform(userAgent?: string): MailPlatform {
+  const ua =
+    userAgent ??
+    (typeof navigator !== 'undefined' ? navigator.userAgent : '');
+  if (/Android/i.test(ua)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+  if (
+    userAgent === undefined &&
+    typeof navigator !== 'undefined' &&
+    /Macintosh/i.test(ua) &&
+    navigator.maxTouchPoints > 1
+  ) {
+    return 'ios';
+  }
+  return 'desktop';
 }
 
-export function buildMailtoUrl(to: string, subject: string, body: string): string {
+function formatMailtoRecipients(to: string): string {
+  const trimmed = to.trim();
+  if (!trimmed) return '';
+  return trimmed
+    .split(',')
+    .map((addr) => encodeURIComponent(addr.trim()).replace(/%40/gi, '@'))
+    .filter(Boolean)
+    .join(',');
+}
+
+function buildMailtoPath(to: string, subject: string, body: string): string {
   const { text } = trimBodyForUrl(body);
   const parts: string[] = [];
   if (subject.trim()) parts.push(`subject=${encodeURIComponent(subject.trim())}`);
   if (text.trim()) parts.push(`body=${encodeURIComponent(text)}`);
-  const recipient = to.trim() ? encodeURIComponent(to.trim()) : '';
-  return `mailto:${recipient}${parts.length ? `?${parts.join('&')}` : ''}`;
+  const recipient = formatMailtoRecipients(to);
+  return `${recipient}${parts.length ? `?${parts.join('&')}` : ''}`;
+}
+
+export function buildGmailWebComposeUrl(to: string, subject: string, body: string): string {
+  const { text } = trimBodyForUrl(body);
+  const parts: string[] = ['view=cm', 'fs=1'];
+  if (to.trim()) parts.push(`to=${encodeURIComponent(to.trim())}`);
+  if (subject.trim()) parts.push(`su=${encodeURIComponent(subject.trim())}`);
+  if (text.trim()) parts.push(`body=${encodeURIComponent(text)}`);
+  return `https://mail.google.com/mail/?${parts.join('&')}`;
+}
+
+/**
+ * Builds an Android Chrome Intent URI that targets the native Gmail app
+ * (`com.google.android.gm`) with a `mailto:` payload so To, Subject, and Body
+ * are pre-filled (desktop `mail.google.com/?tf=cm` links drop compose params
+ * when intercepted on mobile). Falls back to Gmail web compose if Gmail is not installed.
+ */
+export function buildAndroidGmailIntentUrl(to: string, subject: string, body: string): string {
+  const mailtoPath = buildMailtoPath(to, subject, body);
+  const webFallback = buildGmailWebComposeUrl(to, subject, body);
+  return (
+    `intent:${mailtoPath || '?'}#Intent;` +
+    `scheme=mailto;` +
+    `package=com.google.android.gm;` +
+    `S.browser_fallback_url=${encodeURIComponent(webFallback)};` +
+    `end`
+  );
+}
+
+/**
+ * Builds an iOS Gmail app deep link (`googlegmail:///co?...`) with pre-filled
+ * To, Subject, and Body.
+ */
+export function buildIosGmailComposeUrl(to: string, subject: string, body: string): string {
+  const { text } = trimBodyForUrl(body);
+  const parts: string[] = [];
+  if (to.trim()) parts.push(`to=${encodeURIComponent(to.trim())}`);
+  if (subject.trim()) parts.push(`subject=${encodeURIComponent(subject.trim())}`);
+  if (text.trim()) parts.push(`body=${encodeURIComponent(text)}`);
+  return `googlegmail:///co${parts.length ? `?${parts.join('&')}` : ''}`;
+}
+
+export function buildGmailComposeUrl(
+  to: string,
+  subject: string,
+  body: string,
+  userAgent?: string,
+): string {
+  const platform = detectMailPlatform(userAgent);
+  if (platform === 'android') {
+    return buildAndroidGmailIntentUrl(to, subject, body);
+  }
+  if (platform === 'ios') {
+    return buildIosGmailComposeUrl(to, subject, body);
+  }
+  return buildGmailWebComposeUrl(to, subject, body);
+}
+
+export function getGmailLinkTarget(userAgent?: string): '_top' | '_blank' {
+  return detectMailPlatform(userAgent) === 'desktop' ? '_blank' : '_top';
+}
+
+export function buildMailtoUrl(to: string, subject: string, body: string): string {
+  return `mailto:${buildMailtoPath(to, subject, body)}`;
 }
 
 export function isBodyTruncatedForUrl(body: string): boolean {
@@ -45,18 +127,22 @@ export function isBodyTruncatedForUrl(body: string): boolean {
 }
 
 /**
- * Opens Gmail web compose in a new tab using a real anchor click (avoids iframe
- * navigation 404s and popup blockers). Returns true if the body was truncated.
+ * Opens Gmail compose using a real anchor click: native Gmail app intent/scheme
+ * on Android & iOS (with `_top` target) and Gmail web compose in a new tab on
+ * desktop (with `_blank`). Returns true if the body was truncated.
  */
 export function openGmailCompose(to: string, subject: string, body: string): boolean {
   const truncated = isBodyTruncatedForUrl(body);
   if (truncated && typeof navigator !== 'undefined' && navigator.clipboard) {
     navigator.clipboard.writeText(body).catch(() => {});
   }
+  const target = getGmailLinkTarget();
   const a = document.createElement('a');
   a.href = buildGmailComposeUrl(to, subject, body);
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
+  a.target = target;
+  if (target === '_blank') {
+    a.rel = 'noopener noreferrer';
+  }
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
