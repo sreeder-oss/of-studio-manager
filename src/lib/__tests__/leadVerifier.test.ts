@@ -230,6 +230,54 @@ describe('buildVerifiedLeadsCsv & LEAD_SCOUT_PLAYBOOKS', () => {
     expect(lines[1]).toContain('"Notes: ""Luxury"" interiors"');
   });
 
+  it('neutralizes leading spreadsheet formula characters (=, +, -, @) in exported CSV cells', () => {
+    const csv = buildVerifiedLeadsCsv([
+      {
+        id: '2',
+        name: '=HYPERLINK("http://evil.com","Click")',
+        email: 'ok@studio.com',
+        phone: '+1-405-555-0100',
+        address: '-Tulsa, OK',
+        notes: '@studiohandle',
+        type: 'Lead',
+        status: 'Pending',
+      },
+    ]);
+    const row = csv.split('\n')[1];
+    expect(row).toContain(`"'=HYPERLINK(""http://evil.com"",""Click"")"`);
+    expect(row).toContain("'+1-405-555-0100");
+    expect(row).toContain(`"'-Tulsa, OK"`);
+    expect(row).toContain("'@studiohandle");
+  });
+
+  it('propagates AbortError immediately when verifySingleLead is cancelled via AbortSignal', async () => {
+    const controller = new AbortController();
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (_input, init) => {
+      if (init?.signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      throw new DOMException('Aborted', 'AbortError');
+    });
+    controller.abort();
+
+    await expect(
+      verifySingleLead(
+        {
+          name: 'Abort Test Studio',
+          email: null,
+          rejectedEmail: null,
+          phone: null,
+          address: 'OKC',
+          website: null,
+          instagram: null,
+          notes: null,
+        },
+        [],
+        controller.signal,
+      ),
+    ).rejects.toThrow();
+  });
+
   it('includes strict anti-hallucination and junk-domain guardrails in Lead Scout playbooks', () => {
     expect(LEAD_SCOUT_PLAYBOOKS.length).toBeGreaterThanOrEqual(2);
     for (const pb of LEAD_SCOUT_PLAYBOOKS) {

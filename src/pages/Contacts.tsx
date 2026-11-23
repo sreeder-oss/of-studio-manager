@@ -4,7 +4,7 @@ import { Plus, Search, ChevronRight, Trash2, Mail, FileText, Sparkles, UserCheck
 import { useContacts, useSaveContact, useBatchInsertContacts, useDeleteContact, type DbContact } from '@/hooks/useContacts';
 import { LEAD_BATCHES } from '@/data/seedLeads';
 import { OutreachEmailModal } from '@/components/OutreachEmailModal';
-import { LeadVerifierModal } from '@/components/LeadVerifierModal';
+import { LeadVerifierModal, type VerifierModalTab } from '@/components/LeadVerifierModal';
 import { enrichContactWithAI, getOutreachSentInfo } from '@/lib/gmail';
 import { parseVerifiedLeadsCsv, planLeadSync } from '@/lib/leadSync';
 import { buildVerifiedLeadsCsv } from '@/lib/leadVerifier';
@@ -58,7 +58,13 @@ const Contacts: React.FC = () => {
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const [isSyncingLeads, setIsSyncingLeads] = useState(false);
   const [verifierOpen, setVerifierOpen] = useState(false);
+  const [verifierInitialTab, setVerifierInitialTab] = useState<VerifierModalTab>('paste');
   const csvInputRef = useRef<HTMLInputElement | null>(null);
+
+  const openVerifier = (initialTab: VerifierModalTab) => {
+    setVerifierInitialTab(initialTab);
+    setVerifierOpen(true);
+  };
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -450,7 +456,7 @@ const Contacts: React.FC = () => {
               />
               <button
                 type="button"
-                onClick={() => setVerifierOpen(true)}
+                onClick={() => openVerifier('paste')}
                 disabled={isSyncingLeads || batchInsert.isPending}
                 className="px-3 py-2 rounded-xl bg-primary/15 border border-primary/40 text-primary hover:bg-primary/25 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
                 title="Paste raw leads from Gemini/Doc or verify existing leads missing emails (live /contact scrape + DNS MX)"
@@ -458,6 +464,18 @@ const Contacts: React.FC = () => {
                 <MailCheck size={14} className="shrink-0" />
                 <span>Verify Leads</span>
               </button>
+              {outreachCounts.noEmail > 0 && (
+                <button
+                  type="button"
+                  onClick={() => openVerifier('missing')}
+                  disabled={isSyncingLeads || batchInsert.isPending}
+                  className="px-2.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                  title="Jump directly to Missing Emails live enrichment"
+                >
+                  <Globe size={13} className="shrink-0" />
+                  <span>Enrich Missing ({outreachCounts.noEmail})</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => csvInputRef.current?.click()}
@@ -591,9 +609,60 @@ const Contacts: React.FC = () => {
         </div>
       </div>
 
-      {/* Outreach Queue Sub-Filter (Potential Clients tab only) */}
+      {/* Outreach KPI Strip + Queue Sub-Filter (Potential Clients tab only) */}
       {activeFilter === 'Lead' && (
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-card/60 border border-border/70 rounded-xl px-3 py-2">
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <button
+              type="button"
+              onClick={() => setOutreachFilter('all')}
+              className={`rounded-xl border px-3 py-2 text-left transition-all ${
+                outreachFilter === 'all'
+                  ? 'bg-card border-primary/40'
+                  : 'bg-card/60 border-border/70 hover:border-border'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Leads</div>
+              <div className="text-lg font-bold tabular-nums text-foreground mt-0.5">{outreachCounts.all}</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOutreachFilter('has_email')}
+              className={`rounded-xl border px-3 py-2 text-left transition-all ${
+                outreachFilter === 'has_email'
+                  ? 'bg-emerald-500/10 border-emerald-500/40'
+                  : 'bg-card/60 border-border/70 hover:border-border'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Email Ready</div>
+              <div className="text-lg font-bold tabular-nums text-emerald-400 mt-0.5">{outreachCounts.hasEmail}</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOutreachFilter('no_email')}
+              className={`rounded-xl border px-3 py-2 text-left transition-all ${
+                outreachFilter === 'no_email'
+                  ? 'bg-amber-500/10 border-amber-500/40'
+                  : 'bg-card/60 border-border/70 hover:border-border'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Missing Email</div>
+              <div className="text-lg font-bold tabular-nums text-amber-300 mt-0.5">{outreachCounts.noEmail}</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOutreachFilter('sent')}
+              className={`rounded-xl border px-3 py-2 text-left transition-all ${
+                outreachFilter === 'sent'
+                  ? 'bg-primary/10 border-primary/40'
+                  : 'bg-card/60 border-border/70 hover:border-border'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sent</div>
+              <div className="text-lg font-bold tabular-nums text-primary mt-0.5">{outreachCounts.sent}</div>
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-card/60 border border-border/70 rounded-xl px-3 py-2">
           <div className="flex items-center gap-1.5 flex-wrap">
             <button
               type="button"
@@ -658,6 +727,7 @@ const Contacts: React.FC = () => {
               Next up: <strong className="text-foreground">{nextBatch.batch.label}</strong> ({nextBatch.missing.length + nextBatch.toBackfill.length} ready)
             </span>
           )}
+          </div>
         </div>
       )}
 
@@ -935,6 +1005,7 @@ const Contacts: React.FC = () => {
       {/* Self-Serve Lead Verifier Modal */}
       <LeadVerifierModal
         open={verifierOpen}
+        initialTab={verifierInitialTab}
         onOpenChange={setVerifierOpen}
         contacts={contacts}
       />
