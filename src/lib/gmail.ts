@@ -200,6 +200,11 @@ export interface ContactEnrichmentResult {
   notes_summary: string | null;
 }
 
+function isAbortError(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  return typeof err === 'object' && err !== null && (err as { name?: string }).name === 'AbortError';
+}
+
 async function enrichViaWebTools(
   params: {
     name: string;
@@ -209,11 +214,13 @@ async function enrichViaWebTools(
     notes?: string | null;
   },
   authHeader: string,
+  signal?: AbortSignal,
 ): Promise<ContactEnrichmentResult> {
   const webToolsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/web-tools`;
   const postWebTools = async (payload: Record<string, unknown>) => {
     const r = await fetch(webToolsUrl, {
       method: 'POST',
+      signal,
       headers: {
         'Content-Type': 'application/json',
         Authorization: authHeader,
@@ -264,7 +271,8 @@ async function enrichViaWebTools(
         if (page?.markdown) combinedText += `\n${page.markdown}`;
         if (Array.isArray(page?.links)) combinedText += `\n${page.links.join('\n')}`;
       }
-    } catch {
+    } catch (e: unknown) {
+      if (isAbortError(e, signal)) throw e;
       /* ignore malformed URL */
     }
   }
@@ -293,13 +301,16 @@ async function enrichViaWebTools(
  * with automatic fallback to web-tools (search + /contact scrape) if the deployed ai-chat
  * edge function is unavailable or older (e.g. returns 400 "messages required").
  */
-export async function enrichContactWithAI(params: {
-  name: string;
-  address?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  notes?: string | null;
-}): Promise<ContactEnrichmentResult> {
+export async function enrichContactWithAI(
+  params: {
+    name: string;
+    address?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    notes?: string | null;
+  },
+  signal?: AbortSignal,
+): Promise<ContactEnrichmentResult> {
   const chatUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
   const { data: { session } } = await supabase.auth.getSession();
   const authHeader = `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`;
@@ -308,6 +319,7 @@ export async function enrichContactWithAI(params: {
   try {
     const resp = await fetch(chatUrl, {
       method: 'POST',
+      signal,
       headers: {
         'Content-Type': 'application/json',
         Authorization: authHeader,
@@ -340,23 +352,17 @@ export async function enrichContactWithAI(params: {
       primaryErr = `Contact lookup failed (${resp.status})`;
     }
   } catch (e: unknown) {
+    if (isAbortError(e, signal)) throw e;
     if (e instanceof Error && /Sign in required/i.test(e.message)) throw e;
     primaryErr = e instanceof Error ? e.message : 'Could not reach AI contact lookup';
   }
 
   // Fallback to live web-tools search + /contact page scrape (works even if ai-chat hasn't redeployed enrich_contact yet)
   try {
-    const fallbackResult = await enrichViaWebTools(params, authHeader);
-    if (
-      fallbackResult.email ||
-      fallbackResult.phone ||
-      fallbackResult.website ||
-      fallbackResult.instagram
-    ) {
-      return fallbackResult;
-    }
+    const fallbackResult = await enrichViaWebTools(params, authHeader, signal);
     return fallbackResult;
-  } catch {
+  } catch (e: unknown) {
+    if (isAbortError(e, signal)) throw e;
     throw new Error(primaryErr || 'Contact lookup failed — please try again.');
   }
 }

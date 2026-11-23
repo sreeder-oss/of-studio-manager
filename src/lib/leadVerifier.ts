@@ -59,6 +59,7 @@ const mxCache = new Map<string, { hasMx: boolean; mxHost: string | null; checked
  */
 export async function checkDomainMx(
   email: string | null | undefined,
+  signal?: AbortSignal,
 ): Promise<{ hasMx: boolean; mxHost: string | null; checked: boolean }> {
   if (!email || isJunkBusinessEmail(email)) {
     return { hasMx: false, mxHost: null, checked: true };
@@ -72,7 +73,7 @@ export async function checkDomainMx(
   try {
     const resp = await fetch(
       `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`,
-      { headers: { Accept: 'application/dns-json' } },
+      { headers: { Accept: 'application/dns-json' }, signal },
     );
     if (!resp.ok) {
       return { hasMx: true, mxHost: null, checked: false };
@@ -92,7 +93,10 @@ export async function checkDomainMx(
     const res = { hasMx: false, mxHost: null, checked: true };
     mxCache.set(domain, res);
     return res;
-  } catch {
+  } catch (e: unknown) {
+    if (signal?.aborted || (typeof e === 'object' && e !== null && (e as { name?: string }).name === 'AbortError')) {
+      throw e;
+    }
     return { hasMx: true, mxHost: null, checked: false };
   }
 }
@@ -302,6 +306,7 @@ function findMatchingContact(
 export async function verifySingleLead(
   candidate: RawLeadCandidate,
   existingContacts: SyncableContact[],
+  signal?: AbortSignal,
 ): Promise<VerifiedLeadResult> {
   const id = `${normalizeLeadName(candidate.name)}-${Math.random().toString(36).slice(2, 7)}`;
   const seedNotesParts = [
@@ -319,13 +324,16 @@ export async function verifySingleLead(
   let lookupError: string | undefined;
 
   try {
-    const enriched = await enrichContactWithAI({
-      name: candidate.name,
-      address: candidate.address,
-      email: candidate.email,
-      phone: candidate.phone,
-      notes: seedNotesParts.join(' | ') || null,
-    });
+    const enriched = await enrichContactWithAI(
+      {
+        name: candidate.name,
+        address: candidate.address,
+        email: candidate.email,
+        phone: candidate.phone,
+        notes: seedNotesParts.join(' | ') || null,
+      },
+      signal,
+    );
     foundEmail = enriched.email && !isJunkBusinessEmail(enriched.email) ? enriched.email : null;
     foundPhone = enriched.phone || null;
     foundAddress = enriched.address || null;
@@ -333,6 +341,9 @@ export async function verifySingleLead(
     foundInstagram = enriched.instagram || null;
     foundContactPerson = enriched.contact_person || null;
   } catch (err: unknown) {
+    if (signal?.aborted || (typeof err === 'object' && err !== null && (err as { name?: string }).name === 'AbortError')) {
+      throw err;
+    }
     lookupError = err instanceof Error ? err.message : 'Live lookup failed';
   }
 
@@ -344,7 +355,7 @@ export async function verifySingleLead(
 
   // Prefer live website-found email first, then pasted candidate email
   if (foundEmail) {
-    const mx = await checkDomainMx(foundEmail);
+    const mx = await checkDomainMx(foundEmail, signal);
     if (mx.hasMx) {
       finalEmail = foundEmail;
       mxHost = mx.mxHost;
@@ -356,7 +367,7 @@ export async function verifySingleLead(
   }
 
   if (!finalEmail && candidate.email && !isJunkBusinessEmail(candidate.email)) {
-    const mx = await checkDomainMx(candidate.email);
+    const mx = await checkDomainMx(candidate.email, signal);
     if (mx.hasMx) {
       finalEmail = candidate.email;
       mxHost = mx.mxHost;
@@ -444,7 +455,11 @@ export function verifiedResultToSeedLead(r: VerifiedLeadResult): SeedLead {
 }
 
 function csvEscape(val: string | null | undefined): string {
-  const s = String(val ?? '');
+  let s = String(val ?? '');
+  // Neutralize leading spreadsheet formula characters (=, +, -, @, tab, CR)
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
