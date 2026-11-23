@@ -1,6 +1,7 @@
 import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
-import React, { useState, useRef } from 'react';
-import { Camera, Upload, Search, X, Trash2, ChevronDown, ChevronRight, FolderOpen, Layers, Sparkles, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Camera, Upload, Search, X, Trash2, ChevronDown, ChevronRight, FolderOpen, Layers, Sparkles, Loader2, Plus } from 'lucide-react';
 import { scanReceipt } from '@/lib/receiptScan';
 import type { DbReceipt } from '@/hooks/useReceipts';
 import { useReceipts, useSaveReceipt, useDeleteReceipt, uploadReceiptImage } from '@/hooks/useReceipts';
@@ -27,6 +28,7 @@ const Receipts: React.FC = () => {
   const saveReceipt = useSaveReceipt();
   const deleteReceiptMut = useDeleteReceipt();
   const saveProject = useSaveProject();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -48,6 +50,24 @@ const Receipts: React.FC = () => {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
   type AutoField = 'vendor' | 'amount' | 'date' | 'category';
+
+  const handleOpenAdd = () => {
+    setEditing(null);
+    setImageFile(null);
+    setImagePreview('');
+    setScanError('');
+    setScanning(false);
+    setAutoFilled(new Set());
+    setFormData(emptyForm());
+    setIsModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (searchParams.get('scan') === '1' || searchParams.get('add') === '1') {
+      handleOpenAdd();
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [autoFilled, setAutoFilled] = useState<Set<AutoField>>(new Set());
   const clearAuto = (f: AutoField) => setAutoFilled(prev => { if (!prev.has(f)) return prev; const n = new Set(prev); n.delete(f); return n; });
   const autoCls = (f: AutoField) => autoFilled.has(f) ? ' ring-1 ring-primary/70 bg-primary/5' : '';
@@ -281,16 +301,36 @@ const Receipts: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-5xl mx-auto">
-      <header className="flex justify-between items-center">
+      <header className="flex justify-between items-center gap-2">
         <div>
           <h2 className="text-xl font-serif text-foreground tracking-tight">Receipts</h2>
           <p className="text-muted-foreground text-[9px] uppercase tracking-widest mt-0.5 font-bold">Expense Tracking</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)}
-          className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-glow flex items-center gap-1.5">
-          <Camera size={14} /> Add
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              handleOpenAdd();
+              cameraInputRef.current?.click();
+            }}
+            className="bg-primary text-primary-foreground px-3.5 py-2 rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-glow flex items-center gap-1.5 hover:bg-primary/90 transition-all"
+            title="Open phone camera to snap and scan receipt"
+          >
+            <Camera size={14} /> Scan Camera
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenAdd}
+            className="bg-card border border-border text-foreground hover:bg-accent px-3 py-2 rounded-xl font-bold uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-all"
+          >
+            <Plus size={14} /> Add
+          </button>
+        </div>
       </header>
+
+      {/* Hidden file inputs mounted permanently so camera/file triggers work anywhere */}
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageCapture} />
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageCapture} />
 
       {receipts.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
@@ -362,8 +402,6 @@ const Receipts: React.FC = () => {
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-accent border border-border rounded-xl text-foreground text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-all">
                   <Upload size={16} /> Upload
                 </button>
-                <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageCapture} />
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageCapture} />
               </div>
 
               {scanning && (

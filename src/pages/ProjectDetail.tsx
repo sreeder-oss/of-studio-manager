@@ -85,6 +85,7 @@ const ProjectDetail: React.FC = () => {
 
   const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file || !user || !docLabel.trim()) { toast.error('Enter a label first'); return; }
     setUploadingDoc(true);
     try {
@@ -98,6 +99,7 @@ const ProjectDetail: React.FC = () => {
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file || !user) return;
     setUploadingPhoto(true);
     try {

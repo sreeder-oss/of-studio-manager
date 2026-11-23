@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronRight, Phone, Mail, MapPin, ShieldCheck, FileText, UserCheck, ArrowRight, Pencil } from 'lucide-react';
+import { ChevronRight, Phone, Mail, MapPin, ShieldCheck, FileText, UserCheck, ArrowRight, Pencil, Sparkles, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useContact, useSaveContact, useDeleteContact } from '@/hooks/useContacts';
 import { useAIPageContext } from '@/hooks/useAIPageContext';
 import { OutreachEmailModal } from '@/components/OutreachEmailModal';
+import { enrichContactWithAI, getOutreachSentInfo } from '@/lib/gmail';
 import { PRIVACY_NOTICE } from '@/lib/legal';
 import { toast } from 'sonner';
 import {
@@ -116,6 +117,88 @@ const ContactDetail: React.FC = () => {
     }
   };
 
+  const [enriching, setEnriching] = useState(false);
+
+  const sentInfo = isPotential ? getOutreachSentInfo(contact.notes) : { sent: false, lastSentDate: null, count: 0 };
+
+  const handleToggleSent = async () => {
+    const currentSent = sentInfo.sent;
+    let nextNotes = contact.notes || '';
+    if (currentSent) {
+      nextNotes = nextNotes.replace(/\[Outreach sent[^\]]*\]/gi, '').trim();
+    } else {
+      const stamp = `[Outreach sent on ${new Date().toLocaleDateString()}]`;
+      nextNotes = nextNotes ? `${nextNotes}\n${stamp}` : stamp;
+    }
+    await saveContact.mutateAsync({ ...contact, notes: nextNotes || null });
+    toast.success(currentSent ? 'Marked unsent' : 'Marked as sent');
+  };
+
+  const handleEnrich = async () => {
+    setEnriching(true);
+    try {
+      const found = await enrichContactWithAI({
+        name: contact.name,
+        address: contact.address,
+        email: contact.email,
+        phone: contact.phone,
+        notes: contact.notes,
+      });
+
+      const updates: string[] = [];
+      const nextEmail = contact.email || found.email;
+      const nextPhone = contact.phone || found.phone;
+      const nextAddress =
+        found.address && (!contact.address || found.address.length > contact.address.length + 5)
+          ? found.address
+          : contact.address;
+
+      if (!contact.email && found.email) updates.push(`email (${found.email})`);
+      if (!contact.phone && found.phone) updates.push(`phone (${found.phone})`);
+      if (nextAddress !== contact.address && found.address) updates.push('street address');
+
+      const extraNoteParts: string[] = [];
+      const existingNotes = contact.notes || '';
+      if (found.contact_person && !existingNotes.toLowerCase().includes(found.contact_person.toLowerCase())) {
+        extraNoteParts.push(`Contact: ${found.contact_person}`);
+        updates.push('contact name');
+      }
+      if (found.instagram && !existingNotes.toLowerCase().includes(found.instagram.toLowerCase())) {
+        extraNoteParts.push(`IG: ${found.instagram}`);
+        updates.push(`IG (${found.instagram})`);
+      }
+      if (found.website && !existingNotes.toLowerCase().includes(found.website.replace(/^https?:\/\//, '').toLowerCase())) {
+        extraNoteParts.push(`Website: ${found.website}`);
+        updates.push('website');
+      }
+      if (found.notes_summary && !existingNotes.includes(found.notes_summary)) {
+        extraNoteParts.push(found.notes_summary);
+      }
+
+      if (updates.length === 0 && extraNoteParts.length === 0) {
+        toast.info(`No additional public/IG details found for ${contact.name}.`);
+        return;
+      }
+
+      const combinedNotes = extraNoteParts.length
+        ? (existingNotes ? `${existingNotes}\n[Enriched: ${extraNoteParts.join(' | ')}]` : `[Enriched: ${extraNoteParts.join(' | ')}]`)
+        : existingNotes;
+
+      await saveContact.mutateAsync({
+        ...contact,
+        email: nextEmail,
+        phone: nextPhone,
+        address: nextAddress,
+        notes: combinedNotes || null,
+      });
+      toast.success(`Updated ${contact.name}: added ${updates.join(', ') || 'notes'}`);
+    } catch (err: any) {
+      toast.error(err?.message || `Could not enrich ${contact.name}`);
+    } finally {
+      setEnriching(false);
+    }
+  };
+
   const handlePromoteToClient = async () => {
     try {
       await saveContact.mutateAsync({
@@ -183,9 +266,21 @@ const ContactDetail: React.FC = () => {
             </div>
             <div>
               <h2 className="font-serif text-foreground text-xl">{contact.name}</h2>
-              <div className="flex gap-2 mt-1.5 flex-wrap">
+              <div className="flex gap-2 mt-1.5 flex-wrap items-center">
                 <CategoryBadge category={contact.type || 'Client'} />
                 <StatusBadge status={contact.status || 'Active'} />
+                {isPotential && (
+                  sentInfo.sent ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                      <CheckCircle2 size={11} />
+                      Sent{sentInfo.lastSentDate ? ` · ${sentInfo.lastSentDate}` : ''}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      To Send
+                    </span>
+                  )
+                )}
               </div>
             </div>
           </div>
@@ -196,17 +291,38 @@ const ContactDetail: React.FC = () => {
               <>
                 <button
                   onClick={() => setIsOutreachOpen(true)}
-                  className="px-3.5 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs shadow-glow flex items-center gap-1.5 transition-all hover:bg-primary/90"
+                  className="px-3 py-1.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs shadow-glow flex items-center gap-1.5 transition-all hover:bg-primary/90"
                 >
-                  <Mail size={14} />
+                  <Mail size={13} />
                   <span>Email Info</span>
                 </button>
                 <button
+                  onClick={handleEnrich}
+                  disabled={enriching}
+                  className="px-3 py-1.5 rounded-xl bg-card border border-border text-foreground hover:border-primary/50 font-semibold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50"
+                  title="Cross-reference with web & Instagram for contact person, complete address, and social links"
+                >
+                  <RefreshCw size={12} className={enriching ? 'animate-spin text-primary' : 'text-primary'} />
+                  <span>{enriching ? 'Searching...' : 'Lookup / IG'}</span>
+                </button>
+                <button
+                  onClick={handleToggleSent}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    sentInfo.sent
+                      ? 'bg-card border-border text-muted-foreground hover:text-foreground'
+                      : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                  }`}
+                  title={sentInfo.sent ? 'Remove sent tag' : 'Mark as sent'}
+                >
+                  <CheckCircle2 size={12} />
+                  <span>{sentInfo.sent ? 'Mark Unsent' : 'Mark Sent'}</span>
+                </button>
+                <button
                   onClick={handlePromoteToClient}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold text-xs flex items-center gap-1.5 transition-all hover:bg-emerald-500/25"
+                  className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold text-xs flex items-center gap-1.5 transition-all hover:bg-emerald-500/25"
                   title="Promote to active Client and open New Estimate"
                 >
-                  <UserCheck size={14} />
+                  <UserCheck size={13} />
                   <span>Make Estimate</span>
                 </button>
               </>

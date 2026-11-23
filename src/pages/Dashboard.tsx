@@ -198,7 +198,7 @@ const Dashboard: React.FC = () => {
             <Mail size={14} className="text-warning" /> Outreach
           </button>
           <button
-            onClick={() => navigate('/receipts')}
+            onClick={() => navigate('/receipts?scan=1')}
             className="inline-flex items-center gap-1.5 bg-accent border border-border hover:border-primary/40 text-foreground px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-colors"
           >
             <Camera size={14} className="text-primary" /> Scan Receipt

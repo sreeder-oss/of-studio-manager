@@ -147,25 +147,28 @@ const InvoiceDetail: React.FC = () => {
     const dueLine = invoice.due_date
       ? `• Due Date: ${parseLocalDate(invoice.due_date).toLocaleDateString()}`
       : '';
-    const body = [
+    const lines = [
       `Hi ${firstName},`,
       '',
       `Please find your attached ${invLabel} from ${settings.company_name}.`,
       '',
       `• Invoice Total: ${fmt(total)}`,
       `• Balance Due: ${fmt(balance)}`,
-      dueLine,
+    ];
+    if (dueLine) lines.push(dueLine);
+    lines.push(
       '',
-      `Payment Methods:`,
+      'Payment Methods:',
       `• Check payable to: ${settings.payee_name}`,
       `• Direct Zelle transfer: ${settings.zelle_contact}`,
       '',
-      `Thank you for your business! Please let me know if you have any questions.`,
+      'Thank you for your business! Please let me know if you have any questions.',
       '',
-      `Best regards,`,
+      'Best regards,',
       `${settings.payee_name} — ${settings.company_name}`,
-      `Direct: (405) 816-0750 | contact@organicfinishesllc.org`,
-    ].filter(Boolean).join('\n');
+      'Direct: (405) 816-0750 | contact@organicfinishesllc.org',
+    );
+    const body = lines.join('\n');
 
     openGmailCompose(contact?.email || '', subject, body);
     toast.success('Opened Gmail! Tip: attach the downloaded Invoice PDF before sending.');

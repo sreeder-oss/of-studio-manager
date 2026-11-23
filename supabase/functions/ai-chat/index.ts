@@ -747,7 +747,7 @@ async function handleReceiptScan(input: { image?: unknown; model?: unknown; apiK
       category: { type: "string", enum: [...RECEIPT_SCAN_CATEGORIES, "Unknown"] },
     },
   };
-  const callScan = (target: AITarget) =>
+  const callScan = (target: AITarget, format: "schema" | "object" = "schema") =>
     fetch(target.url, {
       method: "POST",
       headers: {
@@ -759,7 +759,9 @@ async function handleReceiptScan(input: { image?: unknown; model?: unknown; apiK
         model: target.model,
         temperature: 0,
         stream: false,
-        response_format: { type: "json_schema", json_schema: { name: "receipt", strict: true, schema } },
+        ...(format === "schema"
+          ? { response_format: { type: "json_schema", json_schema: { name: "receipt", strict: true, schema } } }
+          : { response_format: { type: "json_object" } }),
         messages: [
           {
             role: "system",
@@ -773,11 +775,17 @@ async function handleReceiptScan(input: { image?: unknown; model?: unknown; apiK
       }),
     });
 
-  let upstream = await callScan(primary);
+  let upstream = await callScan(primary, "schema");
+  if (!upstream.ok && upstream.status === 400) {
+    upstream = await callScan(primary, "object");
+  }
   if (!upstream.ok && fallback) {
     const firstErr = await upstream.text().catch(() => "");
     console.warn("receipt_scan primary failed, retrying with backup", primary.model, upstream.status, firstErr.slice(0, 200));
-    upstream = await callScan(fallback);
+    upstream = await callScan(fallback, "schema");
+    if (!upstream.ok && upstream.status === 400) {
+      upstream = await callScan(fallback, "object");
+    }
   }
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => "");
@@ -1307,7 +1315,7 @@ Deno.serve(async (req: Request) => {
                 }
               } else if (fname === "emit_scope") {
                 const v = validateScope(args, validSystemIds, systemIds, validServiceIds, serviceIds);
-                if (!v.ok) {
+                if (v.ok === false) {
                   result = { error: `Invalid scope: ${v.error}. Call emit_scope again with a corrected payload.` };
                 } else {
                   const payload = { kind: "estimate_scope", model_used: activeTarget.model, prompt: userPromptText.slice(0, 8000), ...v.scope };
