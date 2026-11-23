@@ -1,10 +1,11 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, ChevronRight, Trash2, Mail, FileText, Sparkles, UserCheck, Briefcase, Pencil, Check, Globe, Loader2 } from 'lucide-react';
+import { Plus, Search, ChevronRight, Trash2, Mail, FileText, Sparkles, UserCheck, Briefcase, Pencil, Check, Globe, Loader2, Upload } from 'lucide-react';
 import { useContacts, useSaveContact, useBatchInsertContacts, useDeleteContact, type DbContact } from '@/hooks/useContacts';
 import { LEAD_BATCHES } from '@/data/seedLeads';
 import { OutreachEmailModal } from '@/components/OutreachEmailModal';
 import { enrichContactWithAI, getOutreachSentInfo } from '@/lib/gmail';
+import { parseVerifiedLeadsCsv, planLeadSync } from '@/lib/leadSync';
 import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -51,8 +52,10 @@ const Contacts: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<FilterTab>(initialTab);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [outreachContact, setOutreachContact] = useState<DbContact | null>(null);
-  const [outreachFilter, setOutreachFilter] = useState<'all' | 'unsent' | 'sent'>('all');
+  const [outreachFilter, setOutreachFilter] = useState<'all' | 'unsent' | 'sent' | 'has_email' | 'no_email'>('all');
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
+  const [isSyncingLeads, setIsSyncingLeads] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -88,16 +91,26 @@ const Contacts: React.FC = () => {
 
   const outreachCounts = useMemo(() => {
     let sent = 0;
+    let hasEmail = 0;
     for (const c of leadMatches) {
       if (getOutreachSentInfo(c.notes).sent) sent++;
+      if (c.email && c.email.trim()) hasEmail++;
     }
-    return { all: leadMatches.length, sent, unsent: leadMatches.length - sent };
+    return {
+      all: leadMatches.length,
+      sent,
+      unsent: leadMatches.length - sent,
+      hasEmail,
+      noEmail: leadMatches.length - hasEmail,
+    };
   }, [leadMatches]);
 
   const filteredContacts = useMemo(() => {
     const byTab = searchMatches.filter(c => activeFilter === 'all' || c.type === activeFilter);
     if (activeFilter !== 'Lead' || outreachFilter === 'all') return byTab;
     return byTab.filter(c => {
+      if (outreachFilter === 'has_email') return Boolean(c.email && c.email.trim());
+      if (outreachFilter === 'no_email') return !c.email || !c.email.trim();
       const isSent = getOutreachSentInfo(c.notes).sent;
       return outreachFilter === 'sent' ? isSent : !isSent;
     });
@@ -110,12 +123,16 @@ const Contacts: React.FC = () => {
     Vendor: searchMatches.filter(c => c.type === 'Vendor').length,
   }), [searchMatches, leadMatches]);
 
+  const backfillAllPlan = useMemo(() => {
+    const allSeedLeads = LEAD_BATCHES.flatMap((b) => b.leads);
+    return planLeadSync(contacts, allSeedLeads);
+  }, [contacts]);
+
   const nextBatch = useMemo(() => {
-    const existingNames = new Set(contacts.map(c => c.name.toLowerCase()));
     for (const batch of LEAD_BATCHES) {
-      const missing = batch.leads.filter(lead => !existingNames.has(lead.name.toLowerCase()));
-      if (missing.length > 0) {
-        return { batch, missing };
+      const plan = planLeadSync(contacts, batch.leads);
+      if (plan.toInsert.length > 0 || plan.toBackfill.length > 0) {
+        return { batch, missing: plan.toInsert, toBackfill: plan.toBackfill };
       }
     }
     return null;
@@ -221,14 +238,73 @@ const Contacts: React.FC = () => {
     navigate(`/estimates/new?contactId=${contactId}`);
   };
 
-  const handleLoadNextBatch = async () => {
-    if (batchInsert.isPending || !nextBatch) return;
+  const applyLeadSyncPlan = async (
+    plan: ReturnType<typeof planLeadSync>,
+    sourceLabel: string,
+  ) => {
+    setIsSyncingLeads(true);
     try {
-      const inserted = await batchInsert.mutateAsync(nextBatch.missing);
-      toast.success(`Loaded ${inserted.length} leads from ${nextBatch.batch.label}!`);
+      let insertedCount = 0;
+      let updatedCount = 0;
+      if (plan.toInsert.length > 0) {
+        const inserted = await batchInsert.mutateAsync(plan.toInsert);
+        insertedCount = inserted.length;
+      }
+      for (const item of plan.toBackfill) {
+        await saveContact.mutateAsync({
+          ...item.existing,
+          ...item.patch,
+        });
+        updatedCount++;
+      }
+      if (insertedCount === 0 && updatedCount === 0) {
+        toast.info(`All leads from ${sourceLabel} are already up to date.`);
+      } else {
+        const parts: string[] = [];
+        if (insertedCount > 0) parts.push(`added ${insertedCount} new`);
+        if (updatedCount > 0) parts.push(`backfilled ${updatedCount} existing`);
+        toast.success(`${sourceLabel}: ${parts.join(' & ')} verified leads!`);
+      }
       selectTab('Lead');
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to load lead batch');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to sync verified leads', { duration: 6000 });
+    } finally {
+      setIsSyncingLeads(false);
+    }
+  };
+
+  const handleLoadNextBatch = async () => {
+    if (batchInsert.isPending || isSyncingLeads || !nextBatch) return;
+    await applyLeadSyncPlan(
+      { toInsert: nextBatch.missing, toBackfill: nextBatch.toBackfill },
+      nextBatch.batch.label.split(':')[0],
+    );
+  };
+
+  const handleSyncVerifiedEmails = async () => {
+    if (batchInsert.isPending || isSyncingLeads) return;
+    if (backfillAllPlan.toBackfill.length === 0) return;
+    await applyLeadSyncPlan(
+      { toInsert: [], toBackfill: backfillAllPlan.toBackfill },
+      'Verified Email Sync',
+    );
+  };
+
+  const handleImportCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = parseVerifiedLeadsCsv(text);
+      if (parsed.length === 0) {
+        toast.error('No valid leads found in that CSV file.', { duration: 5000 });
+        return;
+      }
+      const plan = planLeadSync(contacts, parsed);
+      await applyLeadSyncPlan(plan, file.name);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Could not read CSV file', { duration: 6000 });
     }
   };
 
@@ -292,8 +368,9 @@ const Contacts: React.FC = () => {
         notes: combinedNotes || null,
       });
       toast.success(`Updated ${contact.name}: added ${updates.join(', ') || 'notes'}`);
-    } catch (err: any) {
-      toast.error(err?.message || `Could not enrich ${contact.name}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `Could not enrich ${contact.name}`;
+      toast.error(msg, { duration: 6000 });
     } finally {
       setEnrichingId(null);
     }
@@ -341,21 +418,57 @@ const Contacts: React.FC = () => {
             {contactCounts.Client} Clients • {contactCounts.Lead} Potential Clients
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {nextBatch && activeFilter === 'Lead' && (
-            <button
-              onClick={handleLoadNextBatch}
-              disabled={batchInsert.isPending}
-              className="px-3 py-2 rounded-xl bg-card border border-primary/40 text-primary hover:bg-primary/10 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
-              title={nextBatch.batch.description}
-            >
-              <Sparkles size={14} className="text-primary shrink-0" />
-              <span className="truncate max-w-[200px] sm:max-w-none">
-                {batchInsert.isPending
-                  ? 'Loading batch...'
-                  : `Load Next Batch: ${nextBatch.batch.label.split(':')[0]} (+${nextBatch.missing.length})`}
-              </span>
-            </button>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {activeFilter === 'Lead' && (
+            <>
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleImportCsv}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => csvInputRef.current?.click()}
+                disabled={isSyncingLeads || batchInsert.isPending}
+                className="px-2.5 py-2 rounded-xl bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-accent text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                title="Import verified leads CSV from Google Drive (deduplicates & backfills missing emails)"
+              >
+                <Upload size={13} className="shrink-0" />
+                <span className="hidden sm:inline">Import CSV</span>
+              </button>
+              {backfillAllPlan.toBackfill.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSyncVerifiedEmails}
+                  disabled={isSyncingLeads || batchInsert.isPending}
+                  className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
+                  title="Fill in verified emails & Sent badges on existing leads without creating duplicates"
+                >
+                  <Check size={14} className="shrink-0" />
+                  <span>
+                    {isSyncingLeads ? 'Syncing...' : `Sync Emails (${backfillAllPlan.toBackfill.length})`}
+                  </span>
+                </button>
+              )}
+              {nextBatch && (
+                <button
+                  type="button"
+                  onClick={handleLoadNextBatch}
+                  disabled={batchInsert.isPending || isSyncingLeads}
+                  className="px-3 py-2 rounded-xl bg-card border border-primary/40 text-primary hover:bg-primary/10 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
+                  title={nextBatch.batch.description}
+                >
+                  <Sparkles size={14} className="text-primary shrink-0" />
+                  <span className="truncate max-w-[180px] sm:max-w-none">
+                    {batchInsert.isPending || isSyncingLeads
+                      ? 'Syncing batch...'
+                      : `Load ${nextBatch.batch.label.split(':')[0]} (+${nextBatch.missing.length + nextBatch.toBackfill.length})`}
+                  </span>
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={() => { resetForm(); setIsModalOpen(true); }}
@@ -441,7 +554,7 @@ const Contacts: React.FC = () => {
       {/* Outreach Queue Sub-Filter (Potential Clients tab only) */}
       {activeFilter === 'Lead' && (
         <div className="flex flex-wrap items-center justify-between gap-2 bg-card/60 border border-border/70 rounded-xl px-3 py-2">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               type="button"
               onClick={() => setOutreachFilter('all')}
@@ -452,6 +565,29 @@ const Contacts: React.FC = () => {
               }`}
             >
               All ({outreachCounts.all})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOutreachFilter('has_email')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 ${
+                outreachFilter === 'has_email'
+                  ? 'bg-primary/15 text-primary border border-primary/30'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Mail size={11} />
+              Has Email ({outreachCounts.hasEmail})
+            </button>
+            <button
+              type="button"
+              onClick={() => setOutreachFilter('no_email')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                outreachFilter === 'no_email'
+                  ? 'bg-destructive/15 text-destructive border border-destructive/30'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Needs Email ({outreachCounts.noEmail})
             </button>
             <button
               type="button"
@@ -479,7 +615,7 @@ const Contacts: React.FC = () => {
           </div>
           {nextBatch && (
             <span className="text-[11px] text-muted-foreground hidden md:inline">
-              Next up: <strong className="text-foreground">{nextBatch.batch.label}</strong> ({nextBatch.missing.length} ready)
+              Next up: <strong className="text-foreground">{nextBatch.batch.label}</strong> ({nextBatch.missing.length + nextBatch.toBackfill.length} ready)
             </span>
           )}
         </div>
@@ -495,17 +631,21 @@ const Contacts: React.FC = () => {
                     ? 'No leads marked as sent yet.'
                     : outreachFilter === 'unsent'
                       ? 'All loaded leads have been emailed! Load the next batch below.'
-                      : 'No potential clients found.')
+                      : outreachFilter === 'no_email'
+                        ? 'Every loaded lead has an email address!'
+                        : outreachFilter === 'has_email'
+                          ? 'No leads with emails match your search.'
+                          : 'No potential clients found.')
                 : 'No contacts found.'}
             </p>
             {activeFilter === 'Lead' && nextBatch && (
               <button
                 onClick={handleLoadNextBatch}
-                disabled={batchInsert.isPending}
+                disabled={batchInsert.isPending || isSyncingLeads}
                 className="mt-3 px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-xl shadow-glow inline-flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Sparkles size={14} />
-                Load {nextBatch.batch.label} (+{nextBatch.missing.length} leads)
+                Load {nextBatch.batch.label} (+{nextBatch.missing.length + nextBatch.toBackfill.length})
               </button>
             )}
           </div>
