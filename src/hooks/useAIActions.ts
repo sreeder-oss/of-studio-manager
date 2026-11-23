@@ -9,6 +9,7 @@ import { useSaveProject } from './useProjects';
 import { useSaveReceipt } from './useReceipts';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AIAction } from '@/lib/actionSchema';
+import { isJunkBusinessEmail, normalizeLeadName, normalizeLeadPhone } from '@/lib/leadSync';
 
 export const useAIActions = () => {
   const navigate = useNavigate();
@@ -61,26 +62,71 @@ export const useAIActions = () => {
         }
         case 'create_contact': {
           const d = action.data;
+          const cleanEmail = d.email && !isJunkBusinessEmail(d.email) ? d.email.trim() : null;
+          const blockedJunk = Boolean(d.email && !cleanEmail);
+
+          // Deduplicate against existing contacts by normalized company name or phone
+          const { data: existingRows } = await supabase
+            .from('contacts')
+            .select('id, name, email, phone, address, notes, type, status');
+          const nameKey = normalizeLeadName(d.name);
+          const phoneKey = normalizeLeadPhone(d.phone);
+          const isBranch = /—/.test(d.name);
+          const existing = (existingRows || []).find(
+            (c) =>
+              (nameKey && normalizeLeadName(c.name) === nameKey) ||
+              (!isBranch && phoneKey && normalizeLeadPhone(c.phone) === phoneKey),
+          );
+
+          if (existing) {
+            const existingEmailBad = !existing.email || isJunkBusinessEmail(existing.email);
+            const nextEmail = existingEmailBad && cleanEmail ? cleanEmail : existing.email;
+            const nextPhone = existing.phone || d.phone || null;
+            const nextAddress =
+              d.address && (!existing.address || d.address.length > existing.address.length + 5)
+                ? d.address
+                : existing.address;
+            const nextNotes =
+              d.notes && !(existing.notes || '').includes(d.notes)
+                ? existing.notes
+                  ? `${existing.notes}\n${d.notes}`
+                  : d.notes
+                : existing.notes;
+            await saveContact.mutateAsync({
+              id: existing.id,
+              name: existing.name,
+              type: existing.type ?? d.type ?? 'Lead',
+              status: existing.status ?? d.status ?? 'Pending',
+              email: nextEmail,
+              phone: nextPhone,
+              address: nextAddress,
+              notes: nextNotes ?? null,
+            });
+            toast.success(`Merged into existing contact: ${existing.name}${blockedJunk ? ' (blocked junk email)' : ''}`);
+            return true;
+          }
+
           await saveContact.mutateAsync({
             name: d.name,
             type: d.type ?? null,
             status: d.status ?? null,
-            email: d.email ?? null,
+            email: cleanEmail,
             phone: d.phone ?? null,
             address: d.address ?? null,
             notes: d.notes ?? null,
           });
-          toast.success(`Created contact: ${d.name}`);
+          toast.success(`Created contact: ${d.name}${blockedJunk ? ' (blocked junk email)' : ''}`);
           return true;
         }
         case 'update_contact': {
           const d = action.data;
+          const cleanEmail = d.email && !isJunkBusinessEmail(d.email) ? d.email.trim() : null;
           await saveContact.mutateAsync({
             id: d.id,
             name: d.name ?? '',
             type: d.type ?? null,
             status: d.status ?? null,
-            email: d.email ?? null,
+            email: cleanEmail,
             phone: d.phone ?? null,
             address: d.address ?? null,
             notes: d.notes ?? null,
