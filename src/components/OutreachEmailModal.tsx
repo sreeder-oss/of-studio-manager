@@ -9,6 +9,7 @@ import {
   buildGmailComposeUrl,
   buildMailtoUrl,
   generateOutreachDraftWithAI,
+  getGmailLinkTarget,
   getOutreachSentInfo,
   isBodyTruncatedForUrl,
 } from '@/lib/gmail';
@@ -147,6 +148,7 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
 
   const sentInfo = getOutreachSentInfo(contact.notes);
   const gmailUrl = buildGmailComposeUrl(contact.email || '', subject, body);
+  const gmailTarget = getGmailLinkTarget();
   const mailtoUrl = buildMailtoUrl(contact.email || '', subject, body);
 
   const logOutreach = async () => {
@@ -185,7 +187,7 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
         ? 'Opened in Gmail & marked Sent! Full message copied to clipboard in case Gmail trims long text.'
         : 'Opened in Gmail & marked as Sent!',
     );
-    setTimeout(() => onClose(), 150);
+    setTimeout(() => onClose(), 300);
   };
 
   const handleOpenMailto = () => {
@@ -199,7 +201,7 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
         ? 'Opened Mail App & marked Sent! Full message copied to clipboard.'
         : 'Opened Mail App & marked as Sent!',
     );
-    setTimeout(() => onClose(), 150);
+    setTimeout(() => onClose(), 300);
   };
 
   const handleCopy = async () => {
@@ -415,7 +417,12 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
               size="sm"
               className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow flex-1 sm:flex-initial"
             >
-              <a href={gmailUrl} target="_blank" rel="noopener noreferrer" onClick={handleOpenGmail}>
+              <a
+                href={gmailUrl}
+                target={gmailTarget}
+                rel={gmailTarget === '_blank' ? 'noopener noreferrer' : undefined}
+                onClick={handleOpenGmail}
+              >
                 <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                 Open in Gmail
               </a>
