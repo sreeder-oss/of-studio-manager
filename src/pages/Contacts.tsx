@@ -1,11 +1,13 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, ChevronRight, Trash2, Mail, FileText, Sparkles, UserCheck, Briefcase, Pencil, Check, Globe, Loader2, Upload } from 'lucide-react';
+import { Plus, Search, ChevronRight, Trash2, Mail, FileText, Sparkles, UserCheck, Briefcase, Pencil, Check, Globe, Loader2, Upload, MailCheck, Download } from 'lucide-react';
 import { useContacts, useSaveContact, useBatchInsertContacts, useDeleteContact, type DbContact } from '@/hooks/useContacts';
 import { LEAD_BATCHES } from '@/data/seedLeads';
 import { OutreachEmailModal } from '@/components/OutreachEmailModal';
+import { LeadVerifierModal } from '@/components/LeadVerifierModal';
 import { enrichContactWithAI, getOutreachSentInfo } from '@/lib/gmail';
 import { parseVerifiedLeadsCsv, planLeadSync } from '@/lib/leadSync';
+import { buildVerifiedLeadsCsv } from '@/lib/leadVerifier';
 import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -55,6 +57,7 @@ const Contacts: React.FC = () => {
   const [outreachFilter, setOutreachFilter] = useState<'all' | 'unsent' | 'sent' | 'has_email' | 'no_email'>('all');
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const [isSyncingLeads, setIsSyncingLeads] = useState(false);
+  const [verifierOpen, setVerifierOpen] = useState(false);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -308,6 +311,23 @@ const Contacts: React.FC = () => {
     }
   };
 
+  const handleExportLeadsCsv = () => {
+    const leadsOnly = contacts.filter((c) => c.type === 'Lead');
+    if (leadsOnly.length === 0) {
+      toast.info('No leads to export yet.');
+      return;
+    }
+    const csv = buildVerifiedLeadsCsv(leadsOnly);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `organic-finishes-verified-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${leadsOnly.length} leads to CSV`);
+  };
+
   const handleEnrichContact = async (e: React.MouseEvent, contact: DbContact) => {
     e.stopPropagation();
     if (enrichingId) return;
@@ -430,6 +450,16 @@ const Contacts: React.FC = () => {
               />
               <button
                 type="button"
+                onClick={() => setVerifierOpen(true)}
+                disabled={isSyncingLeads || batchInsert.isPending}
+                className="px-3 py-2 rounded-xl bg-primary/15 border border-primary/40 text-primary hover:bg-primary/25 text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
+                title="Paste raw leads from Gemini/Doc or verify existing leads missing emails (live /contact scrape + DNS MX)"
+              >
+                <MailCheck size={14} className="shrink-0" />
+                <span>Verify Leads</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => csvInputRef.current?.click()}
                 disabled={isSyncingLeads || batchInsert.isPending}
                 className="px-2.5 py-2 rounded-xl bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-accent text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
@@ -437,6 +467,16 @@ const Contacts: React.FC = () => {
               >
                 <Upload size={13} className="shrink-0" />
                 <span className="hidden sm:inline">Import CSV</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportLeadsCsv}
+                disabled={contactCounts.Lead === 0}
+                className="px-2.5 py-2 rounded-xl bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-accent text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                title="Export verified leads CSV backup for Google Drive"
+              >
+                <Download size={13} className="shrink-0" />
+                <span className="hidden md:inline">Export CSV</span>
               </button>
               {backfillAllPlan.toBackfill.length > 0 && (
                 <button
@@ -892,6 +932,12 @@ const Contacts: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Self-Serve Lead Verifier Modal */}
+      <LeadVerifierModal
+        open={verifierOpen}
+        onOpenChange={setVerifierOpen}
+        contacts={contacts}
+      />
     </div>
   );
 };

@@ -479,6 +479,13 @@ RULES:
   contact_id to that contact's uuid only if you actually have it.
 - query_tax_summary: opens the report; no DB write.
 
+LEAD SCOUTING & VERIFICATION (when the user asks to find, scout, or verify outreach leads):
+- Use web_search to locate each company's real website, then call web_scrape on their homepage and /contact page.
+- NEVER invent, guess, or fabricate an email address (no guessing info@ or hello@ unless seen verbatim on the live page or search snippet).
+- REJECT temporary/staging/builder/noreply emails (sg-host.com, wixpress.com, sentry.io, squarespace.com, noreply@, example.com). If no real public email is published, set "email": null and include their Instagram @handle and website contact URL in notes.
+- Format notes concisely: "Category: <segment> | Email Status: <Verified (On Website) or No Public Email (Web Form / IG Only)> | Website: <url> | IG: <@handle>".
+- Emit one \`\`\`action create_contact block per verified lead (type: "Lead", status: "Pending") right away — do NOT wait for an extra "yes" confirmation when the user asks to scout or verify leads.
+
 
 
 ESTIMATING — When the user asks for an estimate, your ONLY job is to extract

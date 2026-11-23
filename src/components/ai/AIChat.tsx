@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Mic, Paperclip, Camera, Send, Square, X, Sparkles, Zap, History, Plus, FileText } from 'lucide-react';
+import { Mic, Paperclip, Camera, Send, Square, X, Sparkles, Zap, History, Plus, FileText, UserSearch } from 'lucide-react';
 import { toast } from 'sonner';
 import { extractPdfText, renderPdfPagesToImages } from '@/lib/pdfExtract';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
@@ -15,6 +15,7 @@ import { parseEstimateFromText, type EstimateDoc } from '@/lib/estimateSchema';
 import { parseInvoiceFromText, type InvoiceDoc } from '@/lib/invoiceSchema';
 import { parseScopeFromText, type EstimateScope } from '@/lib/scopeSchema';
 import { ScopePreview } from './ScopePreview';
+import { LEAD_SCOUT_PLAYBOOKS } from '@/lib/leadScoutPrompts';
 import type { ChatAttachment } from '@/contexts/AIAssistantContext';
 
 const HANDS_FREE_KEY = 'of-ai-handsfree';
@@ -152,6 +153,18 @@ export const AIChat: React.FC = () => {
           </div>
           <div className="flex items-center gap-1">
             <button
+              type="button"
+              onClick={() => {
+                setInput(LEAD_SCOUT_PLAYBOOKS[0].template);
+                toast.info('Swap [CITY, STATE] and press Send to scout 5 verified leads.');
+              }}
+              title="Insert Lead Scout playbook prompt"
+              className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 border border-primary/30 rounded-md hover:bg-primary/20 flex items-center gap-1 transition-colors"
+            >
+              <UserSearch size={12} />
+              <span className="hidden sm:inline">Lead Scout</span>
+            </button>
+            <button
               onClick={() => setHistoryOpen(true)}
               title="Recent chats"
               className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent"
@@ -176,8 +189,24 @@ export const AIChat: React.FC = () => {
                 <Sparkles size={20} />
               </div>
               <p className="text-[12px] font-bold text-foreground mb-1">OF Assistant</p>
-              <p className="text-[11px] max-w-xs">Ask me to write an estimate, log a receipt, look up a contact, or summarize a project. You can also attach photos or plan drawings.</p>
+              <p className="text-[11px] max-w-xs">Ask me to scout &amp; verify leads, write an estimate, log a receipt, or summarize a project. You can also attach photos or plan drawings.</p>
               <div className="mt-4 grid grid-cols-1 gap-1.5 text-[10px] w-full max-w-xs">
+                {LEAD_SCOUT_PLAYBOOKS.map((pb) => (
+                  <button
+                    key={pb.id}
+                    type="button"
+                    onClick={() => {
+                      setInput(pb.template);
+                      toast.info('Playbook loaded — edit the bracketed line and tap Send.');
+                    }}
+                    className="bg-primary/10 border border-primary/30 rounded-lg px-3 py-1.5 text-left hover:bg-primary/20 transition-colors"
+                  >
+                    <div className="font-bold text-primary flex items-center gap-1.5">
+                      <UserSearch size={11} /> {pb.label}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground mt-0.5">{pb.shortDesc}</div>
+                  </button>
+                ))}
                 <SuggestionChip text="Write an estimate for 2,900 SF Biolime exterior" onClick={setInput} />
                 <SuggestionChip text="What projects are open right now?" onClick={setInput} />
                 <SuggestionChip text="Add a $340 Sullivan Supply receipt for materials" onClick={setInput} />

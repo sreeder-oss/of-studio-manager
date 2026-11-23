@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Sparkles, FileText } from 'lucide-react';
+import { Sparkles, FileText, CheckCheck, Loader2 } from 'lucide-react';
 import type { ChatMessage as Msg } from '@/contexts/AIAssistantContext';
 import { parseEstimateFromText } from '@/lib/estimateSchema';
 import { parseInvoiceFromText } from '@/lib/invoiceSchema';
@@ -8,6 +8,7 @@ import { parseScopeFromText } from '@/lib/scopeSchema';
 import { parseActionsFromText, parseActionFailures, stripActionBlocks } from '@/lib/actionSchema';
 import { ActionCard } from './ActionCard';
 import { useAIAssistant } from '@/contexts/AIAssistantContext';
+import { useAIActions } from '@/hooks/useAIActions';
 
 interface Props {
   message: Msg;
@@ -17,11 +18,33 @@ interface Props {
 
 export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenInvoice }) => {
   const { markActionApplied } = useAIAssistant();
+  const { run } = useAIActions();
+  const [applyingAll, setApplyingAll] = useState(false);
+
   const isUser = message.role === 'user';
   const hasEstimate = !isUser && (!!parseScopeFromText(message.content) || !!parseEstimateFromText(message.content));
   const hasInvoice = !isUser && !hasEstimate && !!parseInvoiceFromText(message.content);
   const actions = isUser ? [] : parseActionsFromText(message.content);
   const failedActions = isUser || message.streaming ? [] : parseActionFailures(message.content);
+
+  const pendingContactActions = actions.filter(
+    (p) =>
+      (p.action.type === 'create_contact' || p.action.type === 'update_contact') &&
+      !message.appliedActions?.includes(p.id),
+  );
+
+  const handleApplyAllContacts = async () => {
+    if (applyingAll || pendingContactActions.length === 0) return;
+    setApplyingAll(true);
+    try {
+      for (const p of pendingContactActions) {
+        const ok = await run(p.action);
+        if (ok) markActionApplied(message.id, p.id);
+      }
+    } finally {
+      setApplyingAll(false);
+    }
+  };
 
   // Hide raw fenced blocks from prose
   let display = message.content;
@@ -81,6 +104,17 @@ export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenIn
             <p className="text-muted-foreground mt-0.5 break-words">{f.reason}</p>
           </div>
         ))}
+        {!message.streaming && pendingContactActions.length >= 2 && (
+          <button
+            type="button"
+            disabled={applyingAll}
+            onClick={handleApplyAllContacts}
+            className="mt-2 w-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25 rounded-lg px-3 py-2 flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors disabled:opacity-50"
+          >
+            {applyingAll ? <Loader2 size={12} className="animate-spin" /> : <CheckCheck size={13} />}
+            {applyingAll ? 'Saving leads…' : `Save All Verified Leads (${pendingContactActions.length})`}
+          </button>
+        )}
         {actions.map((p) => (
           <ActionCard
             key={p.id}
