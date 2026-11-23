@@ -6,6 +6,7 @@ import {
   getStoredDeepSeekKey,
   getStoredModelId,
 } from '@/lib/aiModels';
+import { extractVerifiedEmailsFromText, isJunkBusinessEmail } from '@/lib/leadSync';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MAX_URL_BODY_CHARS = 1400;
@@ -199,9 +200,98 @@ export interface ContactEnrichmentResult {
   notes_summary: string | null;
 }
 
+async function enrichViaWebTools(
+  params: {
+    name: string;
+    address?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    notes?: string | null;
+  },
+  authHeader: string,
+): Promise<ContactEnrichmentResult> {
+  const webToolsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/web-tools`;
+  const postWebTools = async (payload: Record<string, unknown>) => {
+    const r = await fetch(webToolsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) return null;
+    return r.json().catch(() => null);
+  };
+
+  const notes = params.notes || '';
+  const notesSiteMatch = notes.match(/(?:Website:\s*|https?:\/\/)([a-z0-9.-]+\.[a-z]{2,})/i);
+  const query = `"${params.name}" ${params.address || ''} contact email`;
+  const igQuery = `"${params.name}" ${params.address || ''} site:instagram.com`;
+
+  const [searchData, igData] = await Promise.all([
+    postWebTools({ op: 'search', query, limit: 6 }),
+    postWebTools({ op: 'search', query: igQuery, limit: 3 }),
+  ]);
+
+  const searchResults: Array<{ url?: string; title?: string; description?: string }> =
+    Array.isArray(searchData?.results) ? searchData.results : [];
+  const igResults: Array<{ url?: string; title?: string; description?: string }> =
+    Array.isArray(igData?.results) ? igData.results : [];
+
+  const companyUrl =
+    (notesSiteMatch ? `https://${notesSiteMatch[1]}` : null) ||
+    searchResults.find(
+      (r) =>
+        typeof r.url === 'string' &&
+        !/instagram\.com|facebook\.com|linkedin\.com|yelp\.com|houzz\.com|thumbtack\.com|mapquest\.com|bbb\.org/i.test(
+          r.url,
+        ),
+    )?.url ||
+    null;
+
+  let combinedText = [
+    ...searchResults.map((r) => `${r.title || ''} ${r.description || ''} ${r.url || ''}`),
+    ...igResults.map((r) => `${r.title || ''} ${r.description || ''} ${r.url || ''}`),
+  ].join('\n');
+
+  if (companyUrl) {
+    try {
+      const origin = new URL(companyUrl).origin;
+      const targets = Array.from(new Set([companyUrl, `${origin}/contact`, `${origin}/contact-us`])).slice(0, 3);
+      const scraped = await Promise.all(targets.map((url) => postWebTools({ op: 'scrape', url })));
+      for (const page of scraped) {
+        if (page?.markdown) combinedText += `\n${page.markdown}`;
+        if (Array.isArray(page?.links)) combinedText += `\n${page.links.join('\n')}`;
+      }
+    } catch {
+      /* ignore malformed URL */
+    }
+  }
+
+  const emails = extractVerifiedEmailsFromText(combinedText, companyUrl);
+  const phoneMatch = combinedText.match(/(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}/);
+  const igMatch = combinedText.match(/https?:\/\/(?:www\.)?instagram\.com\/([a-zA-Z0-9._]+)/i);
+  const igHandle =
+    igMatch && !/^(p|reel|stories|explore|accounts|share)$/i.test(igMatch[1])
+      ? `@${igMatch[1].replace(/\/$/, '')}`
+      : null;
+
+  return {
+    email: emails[0] || null,
+    phone: phoneMatch ? phoneMatch[0].trim() : null,
+    address: null,
+    website: companyUrl,
+    instagram: igHandle,
+    contact_person: null,
+    notes_summary: emails[0] ? `Verified via live website lookup` : null,
+  };
+}
+
 /**
- * Cross-references a lead across the web & Instagram via ai-chat (enrich_contact mode)
- * to find missing street address, email, phone, website, and Instagram handle.
+ * Cross-references a lead across the web & Instagram via ai-chat (enrich_contact mode),
+ * with automatic fallback to web-tools (search + /contact scrape) if the deployed ai-chat
+ * edge function is unavailable or older (e.g. returns 400 "messages required").
  */
 export async function enrichContactWithAI(params: {
   name: string;
@@ -212,34 +302,63 @@ export async function enrichContactWithAI(params: {
 }): Promise<ContactEnrichmentResult> {
   const chatUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
   const { data: { session } } = await supabase.auth.getSession();
+  const authHeader = `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`;
 
-  const resp = await fetch(chatUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-    },
-    body: JSON.stringify({
-      mode: 'enrich_contact',
-      contact: params,
-      model: getStoredModelId(),
-      apiKey: getStoredDeepSeekKey() || undefined,
-      backupApiKey: getStoredBackupKey() || undefined,
-    }),
-  });
+  let primaryErr = '';
+  try {
+    const resp = await fetch(chatUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader,
+      },
+      body: JSON.stringify({
+        mode: 'enrich_contact',
+        contact: params,
+        model: getStoredModelId(),
+        apiKey: getStoredDeepSeekKey() || undefined,
+        backupApiKey: getStoredBackupKey() || undefined,
+      }),
+    });
 
-  if (!resp.ok) {
-    let errMsg = `Contact lookup failed (${resp.status})`;
+    if (resp.ok) {
+      const result = (await resp.json()) as ContactEnrichmentResult;
+      if (result.email && isJunkBusinessEmail(result.email)) {
+        result.email = null;
+      }
+      return result;
+    }
+
+    if (resp.status === 401 || resp.status === 403) {
+      throw new Error('Sign in required to run contact lookup.');
+    }
+
     try {
       const json = await resp.json();
-      if (json?.error) errMsg = json.error;
+      primaryErr = json?.error || `Contact lookup failed (${resp.status})`;
     } catch {
-      /* ignore */
+      primaryErr = `Contact lookup failed (${resp.status})`;
     }
-    throw new Error(errMsg);
+  } catch (e: unknown) {
+    if (e instanceof Error && /Sign in required/i.test(e.message)) throw e;
+    primaryErr = e instanceof Error ? e.message : 'Could not reach AI contact lookup';
   }
 
-  return (await resp.json()) as ContactEnrichmentResult;
+  // Fallback to live web-tools search + /contact page scrape (works even if ai-chat hasn't redeployed enrich_contact yet)
+  try {
+    const fallbackResult = await enrichViaWebTools(params, authHeader);
+    if (
+      fallbackResult.email ||
+      fallbackResult.phone ||
+      fallbackResult.website ||
+      fallbackResult.instagram
+    ) {
+      return fallbackResult;
+    }
+    return fallbackResult;
+  } catch {
+    throw new Error(primaryErr || 'Contact lookup failed — please try again.');
+  }
 }
 
 function parseDraftText(raw: string, fallbackSubject: string): { subject: string; body: string } {

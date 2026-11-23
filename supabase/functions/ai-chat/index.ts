@@ -919,14 +919,42 @@ async function handleEnrichContact(
     fcSearch(qIg, firecrawlKey).catch((e) => ({ error: String(e) })),
   ]);
 
+  // Also scrape the company's own homepage & /contact page for published emails
+  const notesSiteMatch = notes.match(/(?:Website:\s*|https?:\/\/)([a-z0-9.-]+\.[a-z]{2,})/i);
+  const searchResults = Array.isArray((webRes as { results?: unknown[] })?.results)
+    ? ((webRes as { results: Array<{ url?: string }> }).results)
+    : [];
+  const firstCompanyUrl =
+    (notesSiteMatch ? `https://${notesSiteMatch[1]}` : null) ||
+    searchResults.find((r) =>
+      typeof r?.url === "string" &&
+      !/instagram\.com|facebook\.com|linkedin\.com|yelp\.com|houzz\.com|thumbtack\.com|mapquest\.com|bbb\.org/i.test(r.url)
+    )?.url ||
+    null;
+
+  let scrapedPages: unknown[] = [];
+  if (firstCompanyUrl) {
+    try {
+      const origin = new URL(firstCompanyUrl).origin;
+      const targets = Array.from(new Set([firstCompanyUrl, `${origin}/contact`, `${origin}/contact-us`])).slice(0, 3);
+      scrapedPages = await Promise.all(
+        targets.map((u) => fcScrape(u, firecrawlKey).catch(() => null)),
+      );
+      scrapedPages = scrapedPages.filter(Boolean);
+    } catch {
+      /* ignore invalid URL */
+    }
+  }
+
   const extractionPrompt = [
-    `Cross-reference the following live web and Instagram search results for this business lead and extract verified contact details.`,
+    `Cross-reference the following live web search, scraped website/contact pages, and Instagram results for this business lead and extract verified contact details.`,
     `Business: ${name}`,
     address ? `Known city/region: ${address}` : "",
     notes ? `Existing notes: ${notes}` : "",
-    `\nWEB SEARCH RESULTS:\n${JSON.stringify(webRes).slice(0, 6000)}`,
-    `\nINSTAGRAM SEARCH RESULTS:\n${JSON.stringify(igRes).slice(0, 4000)}`,
-    `\nReturn ONLY a raw JSON object (no markdown fences) with these exact keys (use null if not clearly verified in the search results — NEVER invent or guess):`,
+    `\nSCRAPED WEBSITE & CONTACT PAGES:\n${JSON.stringify(scrapedPages).slice(0, 7000)}`,
+    `\nWEB SEARCH RESULTS:\n${JSON.stringify(webRes).slice(0, 4500)}`,
+    `\nINSTAGRAM SEARCH RESULTS:\n${JSON.stringify(igRes).slice(0, 3000)}`,
+    `\nReturn ONLY a raw JSON object (no markdown fences) with these exact keys (use null if not clearly verified in the results — NEVER invent, guess, or return staging/temp emails like sg-host.com, wixpress.com, or sentry.io):`,
     `{`,
     `  "email": "string or null",`,
     `  "phone": "string or null",`,
@@ -953,7 +981,7 @@ async function handleEnrichContact(
         messages: [
           {
             role: "system",
-            content: "You extract verified business contact info from search results into strict JSON. Never hallucinate emails, phone numbers, or addresses.",
+            content: "You extract verified business contact info from search results and scraped pages into strict JSON. Never hallucinate emails, phone numbers, or addresses.",
           },
           { role: "user", content: extractionPrompt },
         ],
@@ -992,8 +1020,10 @@ async function handleEnrichContact(
   }
 
   const clean = (v: unknown) => (typeof v === "string" && v.trim() && v.trim().toLowerCase() !== "null" ? v.trim() : null);
+  const rawEmail = clean(parsed.email);
+  const blockedDomain = rawEmail && /(?:sg-host|wixpress|sentry|squarespace|example|godaddy|ueniweb)\./i.test(rawEmail);
   return json(200, {
-    email: clean(parsed.email),
+    email: blockedDomain ? null : rawEmail,
     phone: clean(parsed.phone),
     address: clean(parsed.address),
     website: clean(parsed.website),

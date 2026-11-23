@@ -192,8 +192,9 @@ const ContactDetail: React.FC = () => {
         notes: combinedNotes || null,
       });
       toast.success(`Updated ${contact.name}: added ${updates.join(', ') || 'notes'}`);
-    } catch (err: any) {
-      toast.error(err?.message || `Could not enrich ${contact.name}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `Could not enrich ${contact.name}`;
+      toast.error(msg, { duration: 6000 });
     } finally {
       setEnriching(false);
     }

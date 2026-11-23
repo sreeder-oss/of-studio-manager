@@ -6,6 +6,7 @@ import {
   buildIosGmailComposeUrl,
   buildMailtoUrl,
   detectMailPlatform,
+  enrichContactWithAI,
   getGmailLinkTarget,
   openGmailCompose,
 } from '@/lib/gmail';
@@ -133,3 +134,97 @@ describe('getGmailLinkTarget & openGmailCompose', () => {
     expect(capturedAnchor!.rel).toBe('noopener noreferrer');
   });
 });
+
+describe('enrichContactWithAI', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('falls back to web-tools search + /contact scrape when ai-chat returns 400 messages required', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/functions/v1/ai-chat')) {
+        return new Response(JSON.stringify({ error: 'messages required' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/functions/v1/web-tools')) {
+        const body = JSON.parse(String(init?.body || '{}')) as { op?: string; query?: string; url?: string };
+        if (body.op === 'search' && body.query?.includes('site:instagram.com')) {
+          return new Response(
+            JSON.stringify({
+              results: [{ url: 'https://www.instagram.com/cliffwrightdesign/', title: 'Cliff Wright Design' }],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        if (body.op === 'search') {
+          return new Response(
+            JSON.stringify({
+              results: [
+                {
+                  url: 'https://cliffwrightdesign.com/',
+                  title: 'Cliff Wright Design',
+                  description: 'Architecture in Oklahoma City',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        if (body.op === 'scrape' && body.url?.includes('/contact')) {
+          return new Response(
+            JSON.stringify({
+              markdown: 'Email us at cwright@cliffwrightdesign.com or call (405) 555-0199. Ignore info@cadec10.sg-host.com.',
+              links: [],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(JSON.stringify({ markdown: '', links: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 404 });
+    });
+
+    const result = await enrichContactWithAI({
+      name: 'Cliff Wright Design',
+      address: 'OKC, OK',
+    });
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(result.email).toBe('cwright@cliffwrightdesign.com');
+    expect(result.phone).toBe('(405) 555-0199');
+    expect(result.website).toBe('https://cliffwrightdesign.com/');
+    expect(result.instagram).toBe('@cliffwrightdesign');
+  });
+
+  it('strips junk staging emails returned by ai-chat enrich_contact', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          email: 'info@cadec10.sg-host.com',
+          phone: '918-555-0102',
+          address: 'Tulsa, OK',
+          website: 'https://massimointeriors.com',
+          instagram: '@massimointeriors',
+          contact_person: null,
+          notes_summary: 'Interior design studio',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const result = await enrichContactWithAI({
+      name: 'Massimo Interior Design',
+      address: 'Tulsa, OK',
+    });
+
+    expect(result.email).toBeNull();
+    expect(result.instagram).toBe('@massimointeriors');
+  });
+});
+
