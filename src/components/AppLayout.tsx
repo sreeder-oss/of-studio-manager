@@ -303,6 +303,7 @@ const AppLayout: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {[
+                  { path: '/visualizer', label: 'Finish Visualizer', icon: Wand2 },
                   { path: '/receipts', label: 'Receipts', icon: Receipt },
                   { path: '/projects', label: 'Projects', icon: FolderKanban },
                   { path: '/reports/tax', label: 'Tax Summary', icon: PieChart },
