@@ -1,7 +1,7 @@
 import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, MapPin, Calendar, DollarSign, TrendingUp, FileText, Receipt, FileBox, Camera, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ChevronLeft, MapPin, Calendar, DollarSign, TrendingUp, FileText, Receipt, FileBox, Camera, Plus, Trash2, Upload, X, Wand2 } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
 import { useContacts } from '@/hooks/useContacts';
 import { useEstimates } from '@/hooks/useEstimates';
@@ -332,6 +332,13 @@ const ProjectDetail: React.FC = () => {
             </div>
             <input ref={photoCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
             <input ref={photoFileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+            <button
+              type="button"
+              onClick={() => navigate(`/visualizer?projectId=${id}`)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary/15 border border-primary/40 rounded-xl text-primary text-[10px] font-bold uppercase tracking-widest hover:bg-primary/25 transition-all"
+            >
+              <Wand2 size={14} /> Open Finish Visualizer for This Project
+            </button>
           </div>
 
           {projectPhotos.length === 0 ? (
