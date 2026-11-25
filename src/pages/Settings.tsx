@@ -1,8 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { useSettings, useSaveSettings, DEFAULT_TERMS_TEXT, type Settings as S } from '@/hooks/useSettings';
 import { useAIAssistantOptional } from '@/contexts/AIAssistantContext';
-import { AI_MODELS, getStoredModelId, setStoredModelId, getStoredDeepSeekKey, setStoredDeepSeekKey, getStoredBackupKey, setStoredBackupKey } from '@/lib/aiModels';
-import { Check, Brain, Key, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import {
+  AI_MODELS,
+  getStoredModelId,
+  setStoredModelId,
+  getStoredDeepSeekKey,
+  setStoredDeepSeekKey,
+  getStoredBackupKey,
+  setStoredBackupKey,
+  VISUALIZER_MODELS,
+  getStoredVisualizerModel,
+  setStoredVisualizerModel,
+  getStoredVisualizerKey,
+  setStoredVisualizerKey,
+} from '@/lib/aiModels';
+import { Check, Brain, Key, Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 type PctKey = 'default_tax_rate' | 'default_deposit_pct' | 'default_waste_factor';
@@ -31,6 +44,9 @@ const Settings: React.FC = () => {
   const [showKey, setShowKey] = useState(false);
   const [backupApiKey, setBackupApiKey] = useState<string>(() => getStoredBackupKey());
   const [showBackupKey, setShowBackupKey] = useState(false);
+  const [visualizerModel, setVisualizerModel] = useState<string>(() => getStoredVisualizerModel());
+  const [visualizerKey, setVisualizerKey] = useState<string>(() => getStoredVisualizerKey());
+  const [showVisualizerKey, setShowVisualizerKey] = useState(false);
 
   useEffect(() => {
     if (aiCtx?.modelId) {
@@ -63,6 +79,22 @@ const Settings: React.FC = () => {
       toast.success('Backup Gemma OpenRouter key saved');
     } else {
       toast.info('Backup Gemma key cleared (will reuse primary OpenRouter key)');
+    }
+  };
+
+  const handleVisualizerModelChange = (id: string) => {
+    setVisualizerModel(id);
+    setStoredVisualizerModel(id);
+    const label = VISUALIZER_MODELS.find((m) => m.id === id)?.label ?? 'Visualizer model';
+    toast.success(`Finish Visualizer model set to ${label}`);
+  };
+
+  const handleSaveVisualizerKey = () => {
+    setStoredVisualizerKey(visualizerKey);
+    if (visualizerKey.trim()) {
+      toast.success('Finish Visualizer OpenRouter key saved');
+    } else {
+      toast.info('Visualizer key cleared (will reuse primary OpenRouter key)');
     }
   };
 
@@ -270,6 +302,82 @@ const Settings: React.FC = () => {
           <p className="text-[10px] text-muted-foreground">
             Paste your Gemma OpenRouter key here (or set <code className="text-primary">OPENROUTER_GEMMA_API_KEY</code> in Supabase secrets).
           </p>
+        </div>
+
+        {/* Finish Visualizer (Image Generation) Model & Key */}
+        <div className="pt-3 border-t border-border space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Sparkles size={13} className="text-primary" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Finish Visualizer (Image Generation)</p>
+            </div>
+            <span className="text-[9px] text-muted-foreground font-mono">
+              {VISUALIZER_MODELS.find((m) => m.id === visualizerModel)?.label ?? 'Seedream 5.0 Lite'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {VISUALIZER_MODELS.map((vm) => {
+              const selected = vm.id === visualizerModel;
+              return (
+                <button
+                  key={vm.id}
+                  type="button"
+                  onClick={() => handleVisualizerModelChange(vm.id)}
+                  className={`text-left p-2.5 rounded-lg border transition-all space-y-1 ${
+                    selected
+                      ? 'border-primary bg-primary/10 shadow-sm'
+                      : 'border-border bg-accent/40 hover:bg-accent'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-[11px] font-bold text-foreground leading-tight">{vm.label}</span>
+                    {selected && <Check size={12} className="text-primary shrink-0" />}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">{vm.blurb}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
+                <Key size={12} className="text-primary" />
+                Finish Visualizer API Key (OpenRouter)
+              </label>
+              <span className="text-[9px] text-muted-foreground">Optional if reusing primary sk-or- key</span>
+            </div>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showVisualizerKey ? 'text' : 'password'}
+                  placeholder="sk-or-v1-... (Seedream 5.0 Lite / Image Gen OpenRouter key)"
+                  className={`${inputCls} pr-9 font-mono text-xs`}
+                  value={visualizerKey}
+                  onChange={(e) => setVisualizerKey(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowVisualizerKey(!showVisualizerKey)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  title={showVisualizerKey ? 'Hide key' : 'Show key'}
+                >
+                  {showVisualizerKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveVisualizerKey}
+                className="px-3 py-1.5 rounded-lg border border-primary bg-primary/10 hover:bg-primary/20 text-primary font-bold text-[10px] uppercase tracking-wider shrink-0 transition-colors"
+              >
+                Save Visualizer Key
+              </button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Dedicated OpenRouter key for <strong className="text-foreground">Seedream 5.0 Lite</strong> image editing. Leaves your DeepSeek &amp; Gemma chat/OCR keys untouched.
+            </p>
+          </div>
         </div>
       </section>
 

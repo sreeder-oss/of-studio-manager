@@ -1,4 +1,10 @@
-import { getStoredBackupKey, getStoredDeepSeekKey } from '@/lib/aiModels';
+import {
+  getStoredBackupKey,
+  getStoredDeepSeekKey,
+  getStoredVisualizerKey,
+  getStoredVisualizerModel,
+  VISUALIZER_MODELS,
+} from '@/lib/aiModels';
 
 export type FinishSystem =
   | 'Biolime'
@@ -142,6 +148,8 @@ export function compileFinishPrompt(input: CompilePromptInput): string {
 }
 
 export function getVisualizerOpenRouterKey(): string {
+  const dedicated = getStoredVisualizerKey();
+  if (dedicated) return dedicated;
   const primary = getStoredDeepSeekKey();
   if (primary.startsWith('sk-or-')) return primary;
   const backup = getStoredBackupKey();
@@ -149,11 +157,16 @@ export function getVisualizerOpenRouterKey(): string {
   return '';
 }
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-export const VISUALIZER_IMAGE_MODELS = [
-  'google/gemini-2.5-flash-image-preview',
-  'google/gemini-2.5-flash-image',
-];
+const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_IMAGES_URL = 'https://openrouter.ai/api/v1/images';
+export const VISUALIZER_IMAGE_MODELS = VISUALIZER_MODELS.map((m) => m.id);
+
+function getOrderedVisualizerModels() {
+  const preferredId = getStoredVisualizerModel();
+  const preferred = VISUALIZER_MODELS.find((m) => m.id === preferredId);
+  const rest = VISUALIZER_MODELS.filter((m) => m.id !== preferredId);
+  return preferred ? [preferred, ...rest] : VISUALIZER_MODELS;
+}
 
 export async function generateFinishVisualization(params: {
   roomImageDataUrl: string;
@@ -164,37 +177,97 @@ export async function generateFinishVisualization(params: {
   const apiKey = getVisualizerOpenRouterKey();
   if (!apiKey) {
     throw new Error(
-      'OpenRouter API key required for image generation. Paste your sk-or- key in Settings first.',
+      'OpenRouter API key required for image generation. Paste your sk-or- key in Settings → Finish Visualizer.',
     );
   }
 
-  const contentParts: Array<
-    | { type: 'text'; text: string }
-    | { type: 'image_url'; image_url: { url: string } }
-  > = [
-    { type: 'text', text: params.prompt },
-    { type: 'image_url', image_url: { url: params.roomImageDataUrl } },
-  ];
-
-  if (params.inspirationImageDataUrl) {
-    contentParts.push({
-      type: 'image_url',
-      image_url: { url: params.inspirationImageDataUrl },
-    });
-  }
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://of-manager.lovable.app',
+    'X-Title': 'OF Studio Manager — Finish Visualizer',
+  };
 
   let lastError = 'Image generation failed — please try again.';
 
-  for (const model of VISUALIZER_IMAGE_MODELS) {
-    const resp = await fetch(OPENROUTER_URL, {
+  for (const modelCfg of getOrderedVisualizerModels()) {
+    const model = modelCfg.id;
+
+    if (modelCfg.endpoint === 'images') {
+      const inputReferences: Array<{ type: 'image_url'; image_url: { url: string } }> = [
+        { type: 'image_url', image_url: { url: params.roomImageDataUrl } },
+      ];
+      if (params.inspirationImageDataUrl) {
+        inputReferences.push({
+          type: 'image_url',
+          image_url: { url: params.inspirationImageDataUrl },
+        });
+      }
+
+      const resp = await fetch(OPENROUTER_IMAGES_URL, {
+        method: 'POST',
+        signal: params.signal,
+        headers,
+        body: JSON.stringify({
+          model,
+          prompt: params.prompt,
+          response_format: 'b64_json',
+          input_references: inputReferences,
+        }),
+      });
+
+      if (!resp.ok) {
+        let errDetail = `HTTP ${resp.status}`;
+        try {
+          const j = (await resp.json()) as { error?: { message?: string } | string };
+          if (typeof j?.error === 'string') errDetail = j.error;
+          else if (j?.error?.message) errDetail = j.error.message;
+        } catch {
+          /* ignore */
+        }
+        lastError = `${model}: ${errDetail}`;
+        if (resp.status === 401 || resp.status === 402 || resp.status === 403) {
+          throw new Error(`OpenRouter rejected the request (${errDetail}). Check your key/credits in Settings.`);
+        }
+        continue;
+      }
+
+      const imgJson = (await resp.json()) as {
+        data?: Array<{ b64_json?: string; url?: string; media_type?: string }>;
+      };
+      const first = imgJson?.data?.[0];
+      if (first?.b64_json) {
+        const mime = first.media_type || 'image/png';
+        return { imageDataUrl: `data:${mime};base64,${first.b64_json}`, modelUsed: model };
+      }
+      if (first?.url) {
+        const dataUrl = await urlToDataUrl(first.url);
+        return { imageDataUrl: dataUrl, modelUsed: model };
+      }
+
+      lastError = `${model} returned no image data.`;
+      continue;
+    }
+
+    const contentParts: Array<
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string } }
+    > = [
+      { type: 'text', text: params.prompt },
+      { type: 'image_url', image_url: { url: params.roomImageDataUrl } },
+    ];
+
+    if (params.inspirationImageDataUrl) {
+      contentParts.push({
+        type: 'image_url',
+        image_url: { url: params.inspirationImageDataUrl },
+      });
+    }
+
+    const resp = await fetch(OPENROUTER_CHAT_URL, {
       method: 'POST',
       signal: params.signal,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://of-manager.lovable.app',
-        'X-Title': 'OF Studio Manager — Finish Visualizer',
-      },
+      headers,
       body: JSON.stringify({
         model,
         modalities: ['image', 'text'],

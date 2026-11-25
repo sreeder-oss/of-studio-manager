@@ -41,6 +41,38 @@ export const AI_MODEL_STORAGE_KEY = 'of-ai-model';
 export const DEEPSEEK_KEY_STORAGE_KEY = 'of-deepseek-api-key';
 export const GEMMA_KEY_STORAGE_KEY = 'of-gemma-api-key';
 
+export interface VisualizerModelOption {
+  id: string;
+  label: string;
+  endpoint: 'images' | 'chat';
+  blurb: string;
+}
+
+export const VISUALIZER_MODELS: VisualizerModelOption[] = [
+  {
+    id: 'bytedance-seed/seedream-5-0-lite',
+    label: 'Seedream 5.0 Lite',
+    endpoint: 'images',
+    blurb: 'Dedicated image editing & multi-reference generation (~$0.035/image, 2K–4K).',
+  },
+  {
+    id: 'google/gemini-2.5-flash-image-preview',
+    label: 'Gemini 2.5 Flash Image (Preview)',
+    endpoint: 'chat',
+    blurb: 'Multimodal image-edit fallback via OpenRouter Chat API.',
+  },
+  {
+    id: 'google/gemini-2.5-flash-image',
+    label: 'Gemini 2.5 Flash Image',
+    endpoint: 'chat',
+    blurb: 'Stable Gemini image-edit fallback via OpenRouter Chat API.',
+  },
+];
+
+export const DEFAULT_VISUALIZER_MODEL_ID = 'bytedance-seed/seedream-5-0-lite';
+export const VISUALIZER_MODEL_STORAGE_KEY = 'of-visualizer-model';
+export const VISUALIZER_KEY_STORAGE_KEY = 'of-visualizer-api-key';
+
 export function getStoredModelId(): string {
   if (typeof window === 'undefined') return DEFAULT_AI_MODEL_ID;
   const v = window.localStorage.getItem(AI_MODEL_STORAGE_KEY);
@@ -80,5 +112,32 @@ export function setStoredBackupKey(key: string) {
     window.localStorage.removeItem(GEMMA_KEY_STORAGE_KEY);
   } else {
     window.localStorage.setItem(GEMMA_KEY_STORAGE_KEY, trimmed);
+  }
+}
+
+export function getStoredVisualizerModel(): string {
+  if (typeof window === 'undefined') return DEFAULT_VISUALIZER_MODEL_ID;
+  const v = window.localStorage.getItem(VISUALIZER_MODEL_STORAGE_KEY);
+  if (v && VISUALIZER_MODELS.some((m) => m.id === v)) return v;
+  return DEFAULT_VISUALIZER_MODEL_ID;
+}
+
+export function setStoredVisualizerModel(id: string) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(VISUALIZER_MODEL_STORAGE_KEY, id);
+}
+
+export function getStoredVisualizerKey(): string {
+  if (typeof window === 'undefined') return '';
+  return window.localStorage.getItem(VISUALIZER_KEY_STORAGE_KEY) || '';
+}
+
+export function setStoredVisualizerKey(key: string) {
+  if (typeof window === 'undefined') return;
+  const trimmed = key.trim();
+  if (!trimmed) {
+    window.localStorage.removeItem(VISUALIZER_KEY_STORAGE_KEY);
+  } else {
+    window.localStorage.setItem(VISUALIZER_KEY_STORAGE_KEY, trimmed);
   }
 }

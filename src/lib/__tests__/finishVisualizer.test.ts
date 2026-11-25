@@ -5,7 +5,12 @@ import {
   generateFinishVisualization,
   OF_SAMPLE_PRESETS,
 } from '@/lib/finishVisualizer';
-import { DEEPSEEK_KEY_STORAGE_KEY, GEMMA_KEY_STORAGE_KEY } from '@/lib/aiModels';
+import {
+  DEEPSEEK_KEY_STORAGE_KEY,
+  GEMMA_KEY_STORAGE_KEY,
+  VISUALIZER_KEY_STORAGE_KEY,
+  VISUALIZER_MODEL_STORAGE_KEY,
+} from '@/lib/aiModels';
 
 describe('compileFinishPrompt', () => {
   it('includes surface preservation, craftsmanship variables, inspiration reference, and refinement note', () => {
@@ -45,6 +50,8 @@ describe('generateFinishVisualization', () => {
     vi.restoreAllMocks();
     window.localStorage.removeItem(DEEPSEEK_KEY_STORAGE_KEY);
     window.localStorage.removeItem(GEMMA_KEY_STORAGE_KEY);
+    window.localStorage.removeItem(VISUALIZER_KEY_STORAGE_KEY);
+    window.localStorage.removeItem(VISUALIZER_MODEL_STORAGE_KEY);
   });
 
   it('throws a clear Settings error when no OpenRouter sk-or- key is stored', async () => {
@@ -56,8 +63,40 @@ describe('generateFinishVisualization', () => {
     ).rejects.toThrow(/OpenRouter API key required/i);
   });
 
-  it('sends room + inspiration images to OpenRouter and returns generated image data URL', async () => {
+  it('uses dedicated Visualizer key & Seedream 5.0 Lite Images API by default', async () => {
+    window.localStorage.setItem(VISUALIZER_KEY_STORAGE_KEY, 'sk-or-seedream-key-999');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [{ b64_json: 'ZmFrZQ==', media_type: 'image/png' }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const res = await generateFinishVisualization({
+      roomImageDataUrl: 'data:image/jpeg;base64,cm9vbQ==',
+      inspirationImageDataUrl: 'data:image/jpeg;base64,aW5zcA==',
+      prompt: 'Render Biolime',
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toBe('https://openrouter.ai/api/v1/images');
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body || '{}')) as {
+      model?: string;
+      response_format?: string;
+      input_references?: Array<{ type?: string }>;
+    };
+    expect(body.model).toBe('bytedance-seed/seedream-5-0-lite');
+    expect(body.response_format).toBe('b64_json');
+    expect(body.input_references).toHaveLength(2);
+    expect(res.imageDataUrl).toBe('data:image/png;base64,ZmFrZQ==');
+    expect(res.modelUsed).toBe('bytedance-seed/seedream-5-0-lite');
+  });
+
+  it('supports Gemini Chat API when Gemini is selected and reuses primary OpenRouter key', async () => {
     window.localStorage.setItem(DEEPSEEK_KEY_STORAGE_KEY, 'sk-or-test-key-123');
+    window.localStorage.setItem(VISUALIZER_MODEL_STORAGE_KEY, 'google/gemini-2.5-flash-image-preview');
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -80,6 +119,7 @@ describe('generateFinishVisualization', () => {
     });
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toBe('https://openrouter.ai/api/v1/chat/completions');
     const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body || '{}')) as {
       modalities?: string[];
       messages?: Array<{ content?: Array<{ type?: string }> }>;
