@@ -23,6 +23,7 @@ import { Suspense, lazy } from "react";
 const Index = lazy(() => import("./pages/Index"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Contacts = lazy(() => import("./pages/Contacts"));
+const Outreach = lazy(() => import("./pages/Outreach"));
 const ContactDetail = lazy(() => import("./pages/ContactDetail"));
 const Projects = lazy(() => import("./pages/Projects"));
 const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
@@ -116,6 +117,7 @@ const App = () => (
                   <Route element={<AppLayout />}>
                     <Route path="/" element={<Index />} />
                     <Route path="/contacts" element={<Contacts />} />
+                    <Route path="/outreach" element={<Outreach />} />
                     <Route path="/contacts/:id" element={<ContactDetail />} />
                     <Route path="/projects" element={<Projects />} />
                     <Route path="/projects/:id" element={<ProjectDetail />} />

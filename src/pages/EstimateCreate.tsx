@@ -11,6 +11,7 @@ import { useSaveEstimate, useEstimate } from '@/hooks/useEstimates';
 import { useSystems } from '@/hooks/useSystems';
 import { useServices } from '@/hooks/useServices';
 import { priceLines, materialUnits, materialCost, r2, type EstimateLine } from '@/lib/pricing';
+import { filterEstimateClientCandidates } from '@/lib/contactFilters';
 import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSettings';
 import { toast } from 'sonner';
 
@@ -52,6 +53,7 @@ const EstimateCreate: React.FC = () => {
 
   const [step, setStep] = useState<'select-context' | 'create'>(isEdit ? 'create' : 'select-context');
   const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [includeOutreachLeads, setIncludeOutreachLeads] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
 
@@ -123,19 +125,15 @@ const EstimateCreate: React.FC = () => {
     if (existing.valid_until) setValidUntil(existing.valid_until);
   }, [isEdit, existing]);
 
-  const filteredContacts = useMemo(() => {
-    const q = clientSearchTerm.toLowerCase();
-    return contacts
-      .filter(c => c.type !== 'Vendor')
-      .filter(c =>
-        c.name.toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q)
-      )
-      .sort((a, b) => {
-        if (a.type === 'Client' && b.type !== 'Client') return -1;
-        if (a.type !== 'Client' && b.type === 'Client') return 1;
-        return a.name.localeCompare(b.name);
-      });
-  }, [contacts, clientSearchTerm]);
+  const filteredContacts = useMemo(
+    () => filterEstimateClientCandidates(contacts, clientSearchTerm, includeOutreachLeads),
+    [contacts, clientSearchTerm, includeOutreachLeads],
+  );
+
+  const outreachLeadCount = useMemo(
+    () => contacts.filter((c) => c.type === 'Lead').length,
+    [contacts],
+  );
 
   const handlePickContact = async (contact: typeof contacts[0]) => {
     setSelectedContactId(contact.id);
@@ -333,6 +331,20 @@ const EstimateCreate: React.FC = () => {
               <input type="text" placeholder="Search clients..." value={clientSearchTerm} onChange={e => setClientSearchTerm(e.target.value)}
                 className="w-full bg-card border border-border rounded-xl py-2.5 pl-10 pr-4 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
             </div>
+            {outreachLeadCount > 0 && (
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
+                <span>Showing active Clients only</span>
+                <label className="inline-flex items-center gap-1.5 cursor-pointer select-none hover:text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={includeOutreachLeads}
+                    onChange={(e) => setIncludeOutreachLeads(e.target.checked)}
+                    className="accent-primary rounded"
+                  />
+                  <span>Include Outreach Leads ({outreachLeadCount})</span>
+                </label>
+              </div>
+            )}
             {filteredContacts.length === 0 ? (
               <div className="text-center py-10 bg-card rounded-xl border border-dashed border-border space-y-3">
                 <p className="text-muted-foreground text-[11px]">{contacts.length === 0 ? 'No contacts yet.' : 'No matching contacts.'}</p>

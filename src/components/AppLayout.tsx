@@ -16,6 +16,7 @@ import {
   ChevronRight,
   ExternalLink,
   Wand2,
+  Send,
 } from 'lucide-react';
 import LuminaIcon from '@/components/icons/LuminaIcon';
 import { cn } from '@/lib/utils';
@@ -42,6 +43,7 @@ const coreNav: NavItem[] = [
 
 const studioNav: NavItem[] = [
   { path: '/contacts', label: 'Contacts', icon: Users },
+  { path: '/outreach', label: 'Outreach', icon: Send },
   { path: '/visualizer', label: 'Finish Visualizer', icon: Wand2 },
   { path: '/services', label: 'Price Book', icon: Tag },
   { path: '/systems', label: 'Systems Library', icon: Layers },
@@ -303,6 +305,7 @@ const AppLayout: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {[
+                  { path: '/outreach', label: 'Outreach', icon: Send },
                   { path: '/visualizer', label: 'Finish Visualizer', icon: Wand2 },
                   { path: '/receipts', label: 'Receipts', icon: Receipt },
                   { path: '/projects', label: 'Projects', icon: FolderKanban },

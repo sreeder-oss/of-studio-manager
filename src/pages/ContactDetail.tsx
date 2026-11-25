@@ -243,8 +243,8 @@ const ContactDetail: React.FC = () => {
   return (
     <div className="space-y-4 animate-fade-in pb-20 max-w-2xl mx-auto">
       <div className="flex items-center justify-between">
-        <button onClick={() => navigate(isPotential ? '/contacts?tab=Lead' : '/contacts')} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[11px] font-bold uppercase tracking-widest">
-          <ChevronRight size={14} className="rotate-180" /> All Contacts
+        <button onClick={() => navigate(isPotential ? '/outreach' : '/contacts')} className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[11px] font-bold uppercase tracking-widest">
+          <ChevronRight size={14} className="rotate-180" /> {isPotential ? 'Back to Outreach' : 'All Contacts'}
         </button>
         <button
           onClick={openEditModal}
