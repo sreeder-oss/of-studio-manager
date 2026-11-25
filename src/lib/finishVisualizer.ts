@@ -148,11 +148,12 @@ export function compileFinishPrompt(input: CompilePromptInput): string {
 }
 
 export function getVisualizerOpenRouterKey(): string {
-  const dedicated = getStoredVisualizerKey();
+  const clean = (s: string) => s.replace(/[^\x20-\x7E]/g, '').trim();
+  const dedicated = clean(getStoredVisualizerKey());
   if (dedicated) return dedicated;
-  const primary = getStoredDeepSeekKey();
+  const primary = clean(getStoredDeepSeekKey());
   if (primary.startsWith('sk-or-')) return primary;
-  const backup = getStoredBackupKey();
+  const backup = clean(getStoredBackupKey());
   if (backup.startsWith('sk-or-')) return backup;
   return '';
 }
@@ -177,7 +178,7 @@ export async function generateFinishVisualization(params: {
   const apiKey = getVisualizerOpenRouterKey();
   if (!apiKey) {
     throw new Error(
-      'OpenRouter API key required for image generation. Paste your sk-or- key in Settings → Finish Visualizer.',
+      'OpenRouter API key required for image generation. Paste your sk-or- key in Settings -> Finish Visualizer.',
     );
   }
 
@@ -185,7 +186,7 @@ export async function generateFinishVisualization(params: {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
     'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://of-manager.lovable.app',
-    'X-Title': 'OF Studio Manager — Finish Visualizer',
+    'X-Title': 'OF Studio Manager - Finish Visualizer',
   };
 
   let lastError = 'Image generation failed — please try again.';
