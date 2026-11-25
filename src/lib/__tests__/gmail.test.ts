@@ -31,14 +31,15 @@ describe('Gmail compose URL builders', () => {
   const subject = 'Microcement #1; Specs & Pricing';
   const body = 'Hi John,\n\nView guide: https://docs.google.com/document/d/abc/preview#top';
 
-  it('builds a desktop web compose URL without hardcoding /u/0/ and uses %20 encoding', () => {
+  it('builds a desktop web compose URL using Google extsrc=mailto handler without hardcoding /u/0/', () => {
     const url = buildGmailComposeUrl(to, subject, body, DESKTOP_UA);
     expect(url).toBe(buildGmailWebComposeUrl(to, subject, body));
-    expect(url.startsWith('https://mail.google.com/mail/?view=cm&fs=1&')).toBe(true);
+    expect(url.startsWith('https://mail.google.com/mail/?extsrc=mailto&url=')).toBe(true);
     expect(url).not.toContain('/u/0/');
-    expect(url).toContain('to=builder%40example.com');
-    expect(url).toContain('su=Microcement%20%231%3B%20Specs%20%26%20Pricing');
-    expect(url).toContain('body=Hi%20John%2C%0A%0AView%20guide');
+    const decoded = decodeURIComponent(url.split('&url=')[1] || '');
+    expect(decoded).toContain('mailto:builder@example.com?');
+    expect(decoded).toContain('subject=Microcement%20%231%3B%20Specs%20%26%20Pricing');
+    expect(decoded).toContain('body=Hi%20John%2C%0A%0AView%20guide');
   });
 
   it('builds an Android Intent URI targeting com.google.android.gm with mailto payload and web fallback', () => {
@@ -88,11 +89,11 @@ describe('Gmail compose URL builders', () => {
     expect(url).toBe('mailto:a@example.com,b@example.com?subject=Hi&body=Body');
   });
 
-  it('truncates bodies longer than 1400 chars with clipboard paste notice', () => {
+  it('truncates bodies longer than 1050 chars with clipboard paste notice', () => {
     const longBody = 'A'.repeat(2000);
     const webUrl = buildGmailWebComposeUrl(to, 'Sub', longBody);
     const androidUrl = buildAndroidGmailIntentUrl(to, 'Sub', longBody);
-    expect(decodeURIComponent(webUrl)).toContain('[Full message copied to clipboard');
+    expect(decodeURIComponent(decodeURIComponent(webUrl))).toContain('[Full message copied to clipboard');
     expect(decodeURIComponent(androidUrl)).toContain('[Full message copied to clipboard');
   });
 });
@@ -129,7 +130,7 @@ describe('getGmailLinkTarget & openGmailCompose', () => {
 
     uaSpy.mockReturnValue(DESKTOP_UA);
     openGmailCompose('lead@example.com', 'Test Subject', 'Hello body');
-    expect(capturedAnchor!.getAttribute('href')).toMatch(/^https:\/\/mail\.google\.com\/mail\/\?view=cm&fs=1&/);
+    expect(capturedAnchor!.getAttribute('href')).toMatch(/^https:\/\/mail\.google\.com\/mail\/\?extsrc=mailto&url=/);
     expect(capturedAnchor!.target).toBe('_blank');
     expect(capturedAnchor!.rel).toBe('noopener noreferrer');
   });
