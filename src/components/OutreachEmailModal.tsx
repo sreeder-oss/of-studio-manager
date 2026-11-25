@@ -240,6 +240,16 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
     }
   };
 
+  const copyQuickField = async (label: string, value: string) => {
+    if (!value.trim()) return;
+    try {
+      await navigator.clipboard.writeText(value.trim());
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error(`Failed to copy ${label.toLowerCase()}`);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={(o) => (!o ? onClose() : undefined)}>
       <DialogContent className="max-w-2xl max-h-[92vh] flex flex-col p-5 sm:p-6">
@@ -258,9 +268,22 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                {contact.email ? `To: ${contact.email}` : 'No email on file — enter recipient in Gmail or copy draft'}
-              </p>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <p className="text-xs text-muted-foreground truncate">
+                  {contact.email ? `To: ${contact.email}` : 'No email on file — enter recipient in Gmail or copy draft'}
+                </p>
+                {contact.email && (
+                  <button
+                    type="button"
+                    onClick={() => copyQuickField('Email address', contact.email || '')}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-accent hover:bg-accent/80 text-[10px] font-semibold text-foreground transition-colors"
+                    title="Copy recipient email address"
+                  >
+                    <Copy className="h-2.5 w-2.5" />
+                    Copy To
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </DialogHeader>
@@ -349,9 +372,20 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
 
           {/* Subject Line */}
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
-              Subject Line
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                Subject Line
+              </label>
+              <button
+                type="button"
+                onClick={() => copyQuickField('Subject', subject)}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-accent hover:bg-accent/80 text-[10px] font-semibold text-foreground transition-colors"
+                title="Copy subject line"
+              >
+                <Copy className="h-2.5 w-2.5" />
+                Copy Subject
+              </button>
+            </div>
             <input
               type="text"
               value={subject}

@@ -9,7 +9,7 @@ import {
 import { extractVerifiedEmailsFromText, isJunkBusinessEmail } from '@/lib/leadSync';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MAX_URL_BODY_CHARS = 1400;
+const MAX_URL_BODY_CHARS = 1050;
 
 function trimBodyForUrl(body: string): { text: string; truncated: boolean } {
   if (body.length <= MAX_URL_BODY_CHARS) {
