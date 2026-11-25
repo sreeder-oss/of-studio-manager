@@ -29,14 +29,52 @@ export type TextureDepth = 'Smooth' | 'Light Trowel' | 'Rustic';
 export const FINISH_SYSTEMS: Array<{
   id: FinishSystem;
   desc: string;
+  physicsPrompt: string;
+  isBrushApplied?: boolean;
 }> = [
-  { id: 'Biolime', desc: 'Breathable eco-mineral lime plaster with soft organic movement' },
-  { id: 'Venetian Marmorino', desc: 'Classic crushed-marble plaster with layered depth & soft sheen' },
-  { id: 'Limewash', desc: 'Chalky mineral brush-applied wash with natural clouding' },
-  { id: 'Tadelakt', desc: 'Seamless burnished waterproof Moroccan lime plaster' },
-  { id: 'Microcement', desc: 'Modern architectural thin-set seamless concrete finish' },
-  { id: 'Roman Clay', desc: 'Velvety, hand-troweled mineral clay with subtle suede-like depth' },
-  { id: 'Travertino', desc: 'Textured porous stone-like lime plaster with mineral pitting' },
+  {
+    id: 'Biolime',
+    desc: 'Breathable eco-mineral lime plaster with soft organic movement',
+    physicsPrompt:
+      'Breathable eco-mineral Biolime plaster with soft, organic hand-applied tonal movement and natural matte mineral warmth.',
+  },
+  {
+    id: 'Venetian Marmorino',
+    desc: 'Classic crushed-marble plaster with layered depth & soft sheen',
+    physicsPrompt:
+      'Multi-coat compressed crushed-marble Venetian Marmorino plaster burnished flat with a steel trowel. Smooth to the touch with ZERO coarse grit or heavy stucco ridges, showing deep translucent tonal veining and subtle light-reflecting polish.',
+  },
+  {
+    id: 'Limewash',
+    desc: 'Chalky mineral brush-applied wash with natural clouding',
+    physicsPrompt:
+      'Thin, chalky, dead-flat mineral limewash applied with a wide masonry block brush in soft cross-hatch and cloudy strokes. ZERO plaster thickness, ZERO trowel marks, ZERO ridges, and ZERO specular sheen. Soft, airy, powdery mineral color variation.',
+    isBrushApplied: true,
+  },
+  {
+    id: 'Tadelakt',
+    desc: 'Seamless burnished waterproof Moroccan lime plaster',
+    physicsPrompt:
+      'Dense, seamless waterproof Moroccan Tadelakt lime plaster compressed and burnished with a polishing stone, showing organic mottled mineral depth and a soft, waxy stone-polished sheen.',
+  },
+  {
+    id: 'Microcement',
+    desc: 'Modern architectural thin-set seamless concrete finish',
+    physicsPrompt:
+      'Ultra-thin, sleek monolithic architectural microcement skim-coat. Contemporary seamless concrete aesthetic with subtle fine-aggregate micro-pitting and soft tonal clouding — NOT chunky stucco and NOT busy marble veining.',
+  },
+  {
+    id: 'Roman Clay',
+    desc: 'Velvety, hand-troweled mineral clay with subtle suede-like depth',
+    physicsPrompt:
+      'Ultra-thin, velvety mineral Roman Clay with soft suede-like tonal variation, delicate feathered edges, and warm matte-to-satin depth — no heavy ridges or coarse sand.',
+  },
+  {
+    id: 'Travertino',
+    desc: 'Textured porous stone-like lime plaster with mineral pitting',
+    physicsPrompt:
+      'Porous, carved natural limestone Travertino plaster with subtle horizontal mineral pitting/striations and crisp matte stone character.',
+  },
 ];
 
 export const SURFACE_TARGETS: SurfaceTarget[] = [
@@ -91,8 +129,8 @@ export const OF_SAMPLE_PRESETS: OfsSamplePreset[] = [
     imagePath: '/samples/sample-limewash.jpg',
     defaultSystem: 'Limewash',
     defaultSheen: 'Dead Flat Matte',
-    defaultMovement: 'Dramatic',
-    defaultTexture: 'Light Trowel',
+    defaultMovement: 'Medium',
+    defaultTexture: 'Smooth',
   },
   {
     id: 'aged-copper',
@@ -102,7 +140,7 @@ export const OF_SAMPLE_PRESETS: OfsSamplePreset[] = [
     defaultSystem: 'Venetian Marmorino',
     defaultSheen: 'Burnished',
     defaultMovement: 'Medium',
-    defaultTexture: 'Light Trowel',
+    defaultTexture: 'Smooth',
   },
 ];
 
@@ -130,15 +168,18 @@ const SURFACE_PRESERVATION: Record<SurfaceTarget, string> = {
 };
 
 export function compileFinishPrompt(input: CompilePromptInput): string {
+  const sysMeta = FINISH_SYSTEMS.find((s) => s.id === input.finishSystem);
+  const movementLabel = sysMeta?.isBrushApplied ? 'Brush clouding / movement' : 'Movement / variation';
   const parts = [
-    `Edit Photo 1 (the real jobsite space) to show an authentic, hand-troweled ${input.finishSystem} mineral plaster finish applied to the ${input.surfaceTarget}.`,
+    `Edit Photo 1 (the real jobsite space) to show an authentic ${input.finishSystem} finish applied to the ${input.surfaceTarget}.`,
+    sysMeta ? `Material & application physics: ${sysMeta.physicsPrompt}` : '',
     SURFACE_PRESERVATION[input.surfaceTarget],
-    `Craftsmanship variables: Trowel movement = ${input.movement}; Surface sheen = ${input.sheen}; Texture depth = ${input.texture}.`,
+    `Finish parameters: ${movementLabel} = ${input.movement}; Surface sheen = ${input.sheen}; Surface profile = ${input.texture}.`,
     input.hasInspirationImage
-      ? `Use Photo 2 (the Client Inspiration / Sample Board reference) strictly for the mineral color warmth, tonal mottling, and plaster character — adapt it realistically to Photo 1's exact perspective and ambient daylight/lighting.`
+      ? `Use Photo 2 (the Client Inspiration / Sample Board reference) for color tone, mineral depth, and surface character — adapt it realistically to Photo 1's exact architectural scale, perspective, and ambient daylight.`
       : `Use a refined, natural architectural mineral tone suited to the room's existing lighting.`,
-    `Photorealism rules: Render genuine mineral plaster micro-texture, subtle natural trowel passes, and realistic light falloff. Do NOT make it look like flat latex paint, CGI, or plastic 3D rendering. Preserve the exact camera angle, lens geometry, and room proportions of Photo 1.`,
-  ];
+    `Photorealism rules: Render genuine architectural surface micro-detail and realistic light falloff. Do NOT make it look like flat latex paint, CGI, or plastic 3D rendering. Preserve the exact camera angle, lens geometry, and room proportions of Photo 1.`,
+  ].filter(Boolean);
 
   if (input.refinementNote && input.refinementNote.trim()) {
     parts.push(`Specific refinement instruction: ${input.refinementNote.trim()}`);

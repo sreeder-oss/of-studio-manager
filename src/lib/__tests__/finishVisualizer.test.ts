@@ -27,12 +27,28 @@ describe('compileFinishPrompt', () => {
     expect(prompt).toContain('Biolime');
     expect(prompt).toContain('Range Hood');
     expect(prompt).toContain('wood cabinetry');
-    expect(prompt).toContain('Trowel movement = Dramatic');
+    expect(prompt).toContain('Movement / variation = Dramatic');
     expect(prompt).toContain('Surface sheen = Dead Flat Matte');
-    expect(prompt).toContain('Texture depth = Light Trowel');
+    expect(prompt).toContain('Surface profile = Light Trowel');
     expect(prompt).toContain('Photo 2 (the Client Inspiration / Sample Board reference)');
     expect(prompt).toContain('Do NOT make it look like flat latex paint, CGI');
     expect(prompt).toContain('Keep the wood cabinets untouched and warmer cream tone');
+  });
+
+  it('uses brush-applied physics for Limewash and forbids trowel marks', () => {
+    const prompt = compileFinishPrompt({
+      surfaceTarget: 'Fireplace',
+      finishSystem: 'Limewash',
+      movement: 'Medium',
+      sheen: 'Dead Flat Matte',
+      texture: 'Smooth',
+      hasInspirationImage: false,
+    });
+
+    expect(prompt).toContain('masonry block brush');
+    expect(prompt).toContain('ZERO trowel marks');
+    expect(prompt).toContain('Brush clouding / movement = Medium');
+    expect(prompt).not.toContain('hand-troweled');
   });
 });
 

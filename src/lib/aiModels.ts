@@ -50,10 +50,16 @@ export interface VisualizerModelOption {
 
 export const VISUALIZER_MODELS: VisualizerModelOption[] = [
   {
+    id: 'bytedance-seed/seedream-5-0-pro',
+    label: 'Seedream 5.0 Pro',
+    endpoint: 'images',
+    blurb: 'Highest material realism & reference fidelity (~$0.045/image, 2K–4K).',
+  },
+  {
     id: 'bytedance-seed/seedream-5-0-lite',
     label: 'Seedream 5.0 Lite',
     endpoint: 'images',
-    blurb: 'Dedicated image editing & multi-reference generation (~$0.035/image, 2K–4K).',
+    blurb: 'Fast, budget-friendly image editing & multi-reference (~$0.035/image).',
   },
   {
     id: 'google/gemini-2.5-flash-image-preview',
