@@ -241,52 +241,60 @@ export const AIChat: React.FC = () => {
               ))}
             </div>
           )}
-          <div className="flex items-end gap-1.5">
-            <button onClick={() => fileInputRef.current?.click()} title="Attach photos" className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
-              <Paperclip size={16} />
-            </button>
-            <button onClick={() => cameraInputRef.current?.click()} title="Take a site photo" className="p-2 text-muted-foreground hover:text-primary rounded-lg hover:bg-accent">
-              <Camera size={16} />
-            </button>
+          <div className="bg-card border border-border rounded-2xl p-2.5 focus-within:ring-1 focus-within:ring-primary transition-shadow space-y-2">
+            <textarea
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`;
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              placeholder={listening ? 'Listening…' : 'Ask anything… (Shift+Enter for new line)'}
+              rows={3}
+              className="w-full bg-transparent text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground outline-none resize-y min-h-[68px] max-h-60 px-1"
+            />
             <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.pdf" multiple className="hidden"
               onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              placeholder={listening ? 'Listening…' : 'Ask anything…'}
-              rows={1}
-              className="flex-1 bg-card border border-border rounded-xl py-2 px-3 text-[12px] text-foreground outline-none focus:ring-1 focus:ring-primary resize-none max-h-32"
-            />
-            {micSupported && (
-              <>
-                <button
-                  onClick={toggleHandsFree}
-                  title={handsFree ? 'Hands-free on (auto-send after silence)' : 'Hands-free off'}
-                  className={`p-2 rounded-lg transition-colors ${handsFree ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
-                >
-                  <Zap size={14} />
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
+              <div className="flex items-center gap-1">
+                <button onClick={() => fileInputRef.current?.click()} title="Attach photos" className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
+                  <Paperclip size={16} />
                 </button>
-                <button
-                  onClick={() => (listening ? stopMic() : startMic())}
-                  className={`p-2 rounded-lg transition-colors ${listening ? 'bg-destructive text-destructive-foreground animate-pulse' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
-                >
-                  <Mic size={16} />
+                <button onClick={() => cameraInputRef.current?.click()} title="Take a site photo" className="p-2 text-muted-foreground hover:text-primary rounded-lg hover:bg-accent">
+                  <Camera size={16} />
                 </button>
-              </>
-            )}
-            {isLoading ? (
-              <button onClick={cancel} className="p-2 bg-destructive text-destructive-foreground rounded-lg">
-                <Square size={16} />
-              </button>
-            ) : (
-              <button onClick={() => handleSend()} disabled={!input.trim() && attachments.length === 0}
-                className="p-2 bg-primary text-primary-foreground rounded-lg shadow-glow disabled:opacity-40">
-                <Send size={16} />
-              </button>
-            )}
+                {micSupported && (
+                  <>
+                    <button
+                      onClick={toggleHandsFree}
+                      title={handsFree ? 'Hands-free on (auto-send after silence)' : 'Hands-free off'}
+                      className={`p-2 rounded-lg transition-colors ${handsFree ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                    >
+                      <Zap size={14} />
+                    </button>
+                    <button
+                      onClick={() => (listening ? stopMic() : startMic())}
+                      className={`p-2 rounded-lg transition-colors ${listening ? 'bg-destructive text-destructive-foreground animate-pulse' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                    >
+                      <Mic size={16} />
+                    </button>
+                  </>
+                )}
+              </div>
+              {isLoading ? (
+                <button onClick={cancel} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-destructive text-destructive-foreground rounded-lg text-[11px] font-bold uppercase tracking-wider">
+                  <Square size={14} /> Stop
+                </button>
+              ) : (
+                <button onClick={() => handleSend()} disabled={!input.trim() && attachments.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg shadow-glow disabled:opacity-40 text-[11px] font-bold uppercase tracking-wider">
+                  <Send size={14} /> Send
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
