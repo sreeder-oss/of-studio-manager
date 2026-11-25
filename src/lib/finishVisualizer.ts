@@ -148,9 +148,20 @@ export function compileFinishPrompt(input: CompilePromptInput): string {
 }
 
 export function getVisualizerOpenRouterKey(): string {
-  const clean = (s: string) => s.replace(/[^\x20-\x7E]/g, '').trim();
+  const clean = (s: string) =>
+    s
+      .replace(/^Bearer\s+/i, '')
+      .replace(/[^\x20-\x7E]/g, '')
+      .trim();
   const dedicated = clean(getStoredVisualizerKey());
-  if (dedicated) return dedicated;
+  if (dedicated) {
+    if (!dedicated.startsWith('sk-or-')) {
+      throw new Error(
+        'Finish Visualizer key must be an OpenRouter key starting with "sk-or-". Check Settings -> Finish Visualizer.',
+      );
+    }
+    return dedicated;
+  }
   const primary = clean(getStoredDeepSeekKey());
   if (primary.startsWith('sk-or-')) return primary;
   const backup = clean(getStoredBackupKey());
@@ -228,6 +239,11 @@ export async function generateFinishVisualization(params: {
         }
         lastError = `${model}: ${errDetail}`;
         if (resp.status === 401 || resp.status === 402 || resp.status === 403) {
+          if (/missing authentication header/i.test(errDetail)) {
+            throw new Error(
+              'OpenRouter rejected your API key (invalid or incomplete sk-or-v1-... key). Re-copy your full key from openrouter.ai/keys and click "Save Visualizer Key" in Settings.',
+            );
+          }
           throw new Error(`OpenRouter rejected the request (${errDetail}). Check your key/credits in Settings.`);
         }
         continue;

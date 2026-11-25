@@ -90,8 +90,14 @@ const Settings: React.FC = () => {
   };
 
   const handleSaveVisualizerKey = () => {
-    setStoredVisualizerKey(visualizerKey);
-    if (visualizerKey.trim()) {
+    const cleaned = visualizerKey.replace(/^Bearer\s+/i, '').trim();
+    if (cleaned && !cleaned.startsWith('sk-or-')) {
+      toast.error('OpenRouter keys must start with sk-or-... (copy the full key from openrouter.ai/keys)');
+      return;
+    }
+    setVisualizerKey(cleaned);
+    setStoredVisualizerKey(cleaned);
+    if (cleaned) {
       toast.success('Finish Visualizer OpenRouter key saved');
     } else {
       toast.info('Visualizer key cleared (will reuse primary OpenRouter key)');
@@ -127,6 +133,14 @@ const Settings: React.FC = () => {
     }
     if (!f.company_name?.trim()) { toast.error('Company name is required'); return; }
     if (!f.payee_name?.trim()) { toast.error('Checks payable to is required'); return; }
+    const cleanedVisKey = visualizerKey.replace(/^Bearer\s+/i, '').trim();
+    if (cleanedVisKey && !cleanedVisKey.startsWith('sk-or-')) {
+      toast.error('Finish Visualizer OpenRouter key must start with sk-or-...');
+      return;
+    }
+    setStoredDeepSeekKey(apiKey);
+    setStoredBackupKey(backupApiKey);
+    setStoredVisualizerKey(cleanedVisKey);
     try {
       await save.mutateAsync({
         ...(out as S),
