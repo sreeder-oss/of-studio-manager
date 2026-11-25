@@ -398,6 +398,18 @@ export async function resizeImageFileToDataUrl(file: File, maxEdge = 1400): Prom
   return resizeDataUrl(rawUrl, maxEdge);
 }
 
+async function urlToDataUrl(url: string): Promise<string> {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Could not load generated image (${resp.status})`);
+  const blob = await resp.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to convert generated image'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function urlToResizedDataUrl(url: string, maxEdge = 1200): Promise<string> {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Could not load image (${resp.status})`);

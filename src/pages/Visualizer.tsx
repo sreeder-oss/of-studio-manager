@@ -731,7 +731,7 @@ const Visualizer: React.FC = () => {
               <Layers size={13} /> 3. Craftsmanship Variables
             </span>
 
-            <PillRow
+            <PillRow<SurfaceTarget>
               label="Target Surface (Strict Preservation)"
               options={SURFACE_TARGETS}
               value={surfaceTarget}
@@ -761,21 +761,21 @@ const Visualizer: React.FC = () => {
               </div>
             </div>
 
-            <PillRow
+            <PillRow<TrowelMovement>
               label="Trowel Movement"
               options={TROWEL_MOVEMENTS}
               value={movement}
               onChange={setMovement}
             />
 
-            <PillRow
+            <PillRow<SurfaceSheen>
               label="Surface Sheen"
               options={SURFACE_SHEENS}
               value={sheen}
               onChange={setSheen}
             />
 
-            <PillRow
+            <PillRow<TextureDepth>
               label="Texture Depth"
               options={TEXTURE_DEPTHS}
               value={texture}

@@ -15,7 +15,7 @@ async function toJpegDataUrl(file: File, maxSide = 1600): Promise<string> {
     try {
       const img = new Image();
       img.src = url;
-      if ('decode' in img) {
+      if (typeof (img as { decode?: () => Promise<void> }).decode === 'function') {
         try {
           await img.decode();
         } catch {
