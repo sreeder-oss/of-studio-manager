@@ -137,10 +137,19 @@ const Services: React.FC = () => {
 
   const seed = async () => {
     try {
+      let added = 0;
       for (const s of SEED_SERVICES) {
-        await create.mutateAsync(s);
+        const exists = services.some(existing => existing.name.toLowerCase() === s.name.toLowerCase());
+        if (!exists) {
+          await create.mutateAsync(s);
+          added++;
+        }
       }
-      toast.success(`Seeded ${SEED_SERVICES.length} starter services`);
+      if (added === 0) {
+        toast.info('All starter services already exist in your price book');
+      } else {
+        toast.success(`Added ${added} starter service${added > 1 ? 's' : ''} to your price book`);
+      }
     } catch (e: any) {
       toast.error(e?.message || 'Failed to seed price book');
     }
@@ -176,7 +185,7 @@ const Services: React.FC = () => {
           <Sparkles className="mx-auto text-primary" size={24} />
           <p className="text-foreground text-sm font-bold">No services in price book yet</p>
           <p className="text-muted-foreground text-[11px] max-w-sm mx-auto">
-            Seed Organic Finishes' verified starter services (Vasari Marmorino @ $8.50/SF, Microcement @ $38/SF, Night Shifts @ $1,475/shift, Travel per diem).
+            Seed Organic Finishes' 2026–2027 regional price book (Limewash @ $5.50/SF, Marmorino @ $16.50/SF, Microcement @ $22–$38/SF, Artisan Day @ $950/day, Night Shifts & Travel).
           </p>
           <Button onClick={seed} disabled={create.isPending} size="sm" className="shadow-glow">
             <Sparkles className="h-4 w-4 mr-1" /> Seed Starter Price Book
