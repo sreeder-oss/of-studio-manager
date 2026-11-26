@@ -1,61 +1,60 @@
 import React, { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { LogOut, Menu, X } from 'lucide-react';
 import {
-  Users,
-  FolderKanban,
-  FileText,
-  FileSpreadsheet,
-  Receipt,
-  Layers,
-  Tag,
-  LogOut,
-  Settings as SettingsIcon,
-  PieChart,
-  Menu,
-  X,
-  ChevronRight,
-  ExternalLink,
-  Wand2,
-  Send,
-} from 'lucide-react';
-import LuminaIcon from '@/components/icons/LuminaIcon';
+  DashboardIcon,
+  EstimatesIcon,
+  InvoicesIcon,
+  ProjectsIcon,
+  ReceiptsIcon,
+  TaxSummaryIcon,
+  ContactsIcon,
+  OutreachIcon,
+  VisualizerIcon,
+  PriceBookIcon,
+  SystemsLibraryIcon,
+  SettingsIcon,
+} from '@/components/icons/StudioIcons';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import logoSrc from '@/assets/of-letters.svg';
 import { FloatingAIButton } from '@/components/ai/FloatingAIButton';
 import { AIAssistant } from '@/components/ai/AIAssistant';
 
+type NavTone = 'green' | 'gold';
+
 interface NavItem {
   path: string;
   label: string;
   icon: React.ComponentType<{ size?: string | number; className?: string; strokeWidth?: string | number }>;
+  tone: NavTone;
   badge?: string;
 }
 
 const coreNav: NavItem[] = [
-  { path: '/', label: 'Dashboard', icon: LuminaIcon },
-  { path: '/estimates', label: 'Estimates', icon: FileText },
-  { path: '/invoices', label: 'Invoices', icon: FileSpreadsheet },
-  { path: '/projects', label: 'Projects', icon: FolderKanban },
-  { path: '/receipts', label: 'Receipts', icon: Receipt },
-  { path: '/reports/tax', label: 'Tax Summary', icon: PieChart },
+  { path: '/', label: 'Dashboard', icon: DashboardIcon, tone: 'green' },
+  { path: '/estimates', label: 'Estimates', icon: EstimatesIcon, tone: 'green' },
+  { path: '/invoices', label: 'Invoices', icon: InvoicesIcon, tone: 'green' },
+  { path: '/projects', label: 'Projects', icon: ProjectsIcon, tone: 'green' },
+  { path: '/receipts', label: 'Receipts', icon: ReceiptsIcon, tone: 'gold' },
+  { path: '/reports/tax', label: 'Tax Summary', icon: TaxSummaryIcon, tone: 'gold' },
 ];
 
 const studioNav: NavItem[] = [
-  { path: '/contacts', label: 'Contacts', icon: Users },
-  { path: '/outreach', label: 'Outreach', icon: Send },
-  { path: '/visualizer', label: 'Finish Visualizer', icon: Wand2 },
-  { path: '/services', label: 'Price Book', icon: Tag },
-  { path: '/systems', label: 'Systems Library', icon: Layers },
-  { path: '/settings', label: 'Settings', icon: SettingsIcon },
+  { path: '/contacts', label: 'Contacts', icon: ContactsIcon, tone: 'gold' },
+  { path: '/outreach', label: 'Outreach', icon: OutreachIcon, tone: 'gold' },
+  { path: '/visualizer', label: 'Finish Visualizer', icon: VisualizerIcon, tone: 'green' },
+  { path: '/services', label: 'Price Book', icon: PriceBookIcon, tone: 'gold' },
+  { path: '/systems', label: 'Systems Library', icon: SystemsLibraryIcon, tone: 'green' },
+  { path: '/settings', label: 'Settings', icon: SettingsIcon, tone: 'gold' },
 ];
 
 // Mobile primary bar items
-const mobilePrimaryNav = [
-  { path: '/', label: 'Home', icon: LuminaIcon },
-  { path: '/estimates', label: 'Estimates', icon: FileText },
-  { path: '/invoices', label: 'Invoices', icon: FileSpreadsheet },
-  { path: '/contacts', label: 'Contacts', icon: Users },
+const mobilePrimaryNav: NavItem[] = [
+  { path: '/', label: 'Home', icon: DashboardIcon, tone: 'green' },
+  { path: '/estimates', label: 'Estimates', icon: EstimatesIcon, tone: 'green' },
+  { path: '/invoices', label: 'Invoices', icon: InvoicesIcon, tone: 'green' },
+  { path: '/contacts', label: 'Contacts', icon: ContactsIcon, tone: 'gold' },
 ];
 
 const AppLayout: React.FC = () => {
@@ -99,8 +98,9 @@ const AppLayout: React.FC = () => {
             <p className="px-3 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/80 mb-2">
               Operations
             </p>
-            {coreNav.map(({ path, label, icon: Icon }) => {
+            {coreNav.map(({ path, label, icon: Icon, tone }) => {
               const active = isNavActive(path);
+              const isGold = tone === 'gold';
               return (
                 <button
                   key={path}
@@ -108,21 +108,34 @@ const AppLayout: React.FC = () => {
                   className={cn(
                     'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all group text-left',
                     active
-                      ? 'bg-primary/10 text-primary font-semibold shadow-sm'
+                      ? isGold
+                        ? 'bg-[#d9a441]/12 text-[#d9a441] font-semibold shadow-sm'
+                        : 'bg-primary/12 text-primary font-semibold shadow-sm'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
                   )}
                 >
                   <Icon
-                    size={17}
+                    size={18}
                     className={cn(
                       'shrink-0 transition-colors',
-                      active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'
+                      active
+                        ? isGold
+                          ? 'text-[#d9a441]'
+                          : 'text-primary'
+                        : isGold
+                          ? 'text-[#d9a441]/70 group-hover:text-[#d9a441]'
+                          : 'text-primary/70 group-hover:text-primary'
                     )}
-                    strokeWidth={active ? 2.5 : 1.75}
+                    strokeWidth={active ? 2.1 : 1.75}
                   />
                   <span className="flex-1 truncate">{label}</span>
                   {active && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 shadow-glow" />
+                    <span
+                      className={cn(
+                        'w-1.5 h-1.5 rounded-full shrink-0',
+                        isGold ? 'bg-[#d9a441]' : 'bg-primary shadow-glow'
+                      )}
+                    />
                   )}
                 </button>
               );
@@ -134,8 +147,9 @@ const AppLayout: React.FC = () => {
             <p className="px-3 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/80 mb-2">
               Catalog & Studio
             </p>
-            {studioNav.map(({ path, label, icon: Icon }) => {
+            {studioNav.map(({ path, label, icon: Icon, tone }) => {
               const active = isNavActive(path);
+              const isGold = tone === 'gold';
               return (
                 <button
                   key={path}
@@ -143,21 +157,34 @@ const AppLayout: React.FC = () => {
                   className={cn(
                     'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all group text-left',
                     active
-                      ? 'bg-primary/10 text-primary font-semibold shadow-sm'
+                      ? isGold
+                        ? 'bg-[#d9a441]/12 text-[#d9a441] font-semibold shadow-sm'
+                        : 'bg-primary/12 text-primary font-semibold shadow-sm'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
                   )}
                 >
                   <Icon
-                    size={17}
+                    size={18}
                     className={cn(
                       'shrink-0 transition-colors',
-                      active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'
+                      active
+                        ? isGold
+                          ? 'text-[#d9a441]'
+                          : 'text-primary'
+                        : isGold
+                          ? 'text-[#d9a441]/70 group-hover:text-[#d9a441]'
+                          : 'text-primary/70 group-hover:text-primary'
                     )}
-                    strokeWidth={active ? 2.5 : 1.75}
+                    strokeWidth={active ? 2.1 : 1.75}
                   />
                   <span className="flex-1 truncate">{label}</span>
                   {active && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 shadow-glow" />
+                    <span
+                      className={cn(
+                        'w-1.5 h-1.5 rounded-full shrink-0',
+                        isGold ? 'bg-[#d9a441]' : 'bg-primary shadow-glow'
+                      )}
+                    />
                   )}
                 </button>
               );
@@ -304,30 +331,41 @@ const AppLayout: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {[
-                  { path: '/outreach', label: 'Outreach', icon: Send },
-                  { path: '/visualizer', label: 'Finish Visualizer', icon: Wand2 },
-                  { path: '/receipts', label: 'Receipts', icon: Receipt },
-                  { path: '/projects', label: 'Projects', icon: FolderKanban },
-                  { path: '/reports/tax', label: 'Tax Summary', icon: PieChart },
-                  { path: '/services', label: 'Price Book', icon: Tag },
-                  { path: '/systems', label: 'Systems Library', icon: Layers },
-                  { path: '/settings', label: 'Settings', icon: SettingsIcon },
-                ].map(({ path, label, icon: Icon }) => (
-                  <button
-                    key={path}
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      navigate(path);
-                    }}
-                    className={cn(
-                      'flex items-center gap-2 p-2.5 rounded-xl border border-border bg-accent/30 text-left transition-colors',
-                      isNavActive(path) ? 'border-primary/40 text-primary font-bold' : 'text-foreground'
-                    )}
-                  >
-                    <Icon size={16} className="text-primary shrink-0" />
-                    <span className="truncate">{label}</span>
-                  </button>
-                ))}
+                  { path: '/outreach', label: 'Outreach', icon: OutreachIcon, tone: 'gold' as NavTone },
+                  { path: '/visualizer', label: 'Finish Visualizer', icon: VisualizerIcon, tone: 'green' as NavTone },
+                  { path: '/receipts', label: 'Receipts', icon: ReceiptsIcon, tone: 'gold' as NavTone },
+                  { path: '/projects', label: 'Projects', icon: ProjectsIcon, tone: 'green' as NavTone },
+                  { path: '/reports/tax', label: 'Tax Summary', icon: TaxSummaryIcon, tone: 'gold' as NavTone },
+                  { path: '/services', label: 'Price Book', icon: PriceBookIcon, tone: 'gold' as NavTone },
+                  { path: '/systems', label: 'Systems Library', icon: SystemsLibraryIcon, tone: 'green' as NavTone },
+                  { path: '/settings', label: 'Settings', icon: SettingsIcon, tone: 'gold' as NavTone },
+                ].map(({ path, label, icon: Icon, tone }) => {
+                  const active = isNavActive(path);
+                  const isGold = tone === 'gold';
+                  return (
+                    <button
+                      key={path}
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        navigate(path);
+                      }}
+                      className={cn(
+                        'flex items-center gap-2 p-2.5 rounded-xl border border-border bg-accent/30 text-left transition-colors',
+                        active
+                          ? isGold
+                            ? 'border-[#d9a441]/50 text-[#d9a441] font-bold'
+                            : 'border-primary/40 text-primary font-bold'
+                          : 'text-foreground'
+                      )}
+                    >
+                      <Icon
+                        size={17}
+                        className={cn('shrink-0', isGold ? 'text-[#d9a441]' : 'text-primary')}
+                      />
+                      <span className="truncate">{label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
