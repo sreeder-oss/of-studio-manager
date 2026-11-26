@@ -60,8 +60,17 @@ function buildMailtoPath(to: string, subject: string, body: string): string {
 }
 
 export function buildGmailWebComposeUrl(to: string, subject: string, body: string): string {
-  const mailto = `mailto:${buildMailtoPath(to, subject, body)}`;
-  return `https://mail.google.com/mail/?extsrc=mailto&url=${encodeURIComponent(mailto)}`;
+  const { text } = trimBodyForUrl(body);
+  const params = new URLSearchParams({
+    view: 'cm',
+    fs: '1',
+    tf: 'cm',
+  });
+  const recipient = formatMailtoRecipients(to);
+  if (recipient) params.set('to', recipient);
+  if (subject.trim()) params.set('su', subject.trim());
+  if (text.trim()) params.set('body', text);
+  return `https://mail.google.com/mail/?${params.toString()}`;
 }
 
 /**

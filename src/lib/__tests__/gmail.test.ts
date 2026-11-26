@@ -31,15 +31,15 @@ describe('Gmail compose URL builders', () => {
   const subject = 'Microcement #1; Specs & Pricing';
   const body = 'Hi John,\n\nView guide: https://docs.google.com/document/d/abc/preview#top';
 
-  it('builds a desktop web compose URL using Google extsrc=mailto handler without hardcoding /u/0/', () => {
+  it('builds a desktop web compose URL using view=cm&fs=1&tf=cm via URLSearchParams without hardcoding /u/0/', () => {
     const url = buildGmailComposeUrl(to, subject, body, DESKTOP_UA);
     expect(url).toBe(buildGmailWebComposeUrl(to, subject, body));
-    expect(url.startsWith('https://mail.google.com/mail/?extsrc=mailto&url=')).toBe(true);
+    expect(url.startsWith('https://mail.google.com/mail/?view=cm&fs=1&tf=cm&')).toBe(true);
     expect(url).not.toContain('/u/0/');
-    const decoded = decodeURIComponent(url.split('&url=')[1] || '');
-    expect(decoded).toContain('mailto:builder@example.com?');
-    expect(decoded).toContain('subject=Microcement%20%231%3B%20Specs%20%26%20Pricing');
-    expect(decoded).toContain('body=Hi%20John%2C%0A%0AView%20guide');
+    const parsed = new URL(url);
+    expect(parsed.searchParams.get('to')).toBe('builder@example.com');
+    expect(parsed.searchParams.get('su')).toBe(subject);
+    expect(parsed.searchParams.get('body')).toBe(body);
   });
 
   it('builds an Android Intent URI targeting com.google.android.gm with mailto payload and web fallback', () => {
@@ -93,7 +93,7 @@ describe('Gmail compose URL builders', () => {
     const longBody = 'A'.repeat(2000);
     const webUrl = buildGmailWebComposeUrl(to, 'Sub', longBody);
     const androidUrl = buildAndroidGmailIntentUrl(to, 'Sub', longBody);
-    expect(decodeURIComponent(decodeURIComponent(webUrl))).toContain('[Full message copied to clipboard');
+    expect(new URL(webUrl).searchParams.get('body')).toContain('[Full message copied to clipboard');
     expect(decodeURIComponent(androidUrl)).toContain('[Full message copied to clipboard');
   });
 });
@@ -130,7 +130,7 @@ describe('getGmailLinkTarget & openGmailCompose', () => {
 
     uaSpy.mockReturnValue(DESKTOP_UA);
     openGmailCompose('lead@example.com', 'Test Subject', 'Hello body');
-    expect(capturedAnchor!.getAttribute('href')).toMatch(/^https:\/\/mail\.google\.com\/mail\/\?extsrc=mailto&url=/);
+    expect(capturedAnchor!.getAttribute('href')).toMatch(/^https:\/\/mail\.google\.com\/mail\/\?view=cm&fs=1&tf=cm&/);
     expect(capturedAnchor!.target).toBe('_blank');
     expect(capturedAnchor!.rel).toBe('noopener noreferrer');
   });

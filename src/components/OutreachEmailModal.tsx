@@ -206,7 +206,8 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
 
   const handleCopy = async () => {
     try {
-      const plain = `Subject: ${subject}\n\n${body}`;
+      const toLine = contact.email?.trim() ? `To: ${contact.email.trim()}\n` : '';
+      const plain = `${toLine}Subject: ${subject}\n\n${body}`;
       const escapeHtml = (s: string) =>
         s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const linkify = (s: string) =>
