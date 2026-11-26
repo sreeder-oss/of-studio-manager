@@ -220,7 +220,7 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
             return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
           },
         );
-      const logoUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://receipt-magic-capture.lovable.app'}/of-email-logo.png`;
+      const logoUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://of-studio-manager.lovable.app'}/of-email-logo.png`;
       const logoHtml = `<div style="margin-top:12px;"><a href="https://organicfinishesllc.org" target="_blank" rel="noopener noreferrer"><img src="${logoUrl}" alt="Organic Finishes — Paint &amp; Plaster" width="200" style="display:block;border-radius:6px;max-width:200px;height:auto;" /></a></div>`;
       const html = `<div>${linkify(body).replace(/\n/g, '<br/>')}${logoHtml}</div>`;
 
@@ -433,7 +433,7 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
                 onClick={() =>
                   copyQuickField(
                     'Logo image URL',
-                    `${typeof window !== 'undefined' ? window.location.origin : 'https://receipt-magic-capture.lovable.app'}/of-email-logo.png`,
+                    `${typeof window !== 'undefined' ? window.location.origin : 'https://of-studio-manager.lovable.app'}/of-email-logo.png`,
                   )
                 }
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-border bg-card hover:bg-accent text-[10px] font-semibold text-foreground shrink-0 transition-colors"

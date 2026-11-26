@@ -237,7 +237,7 @@ export async function generateFinishVisualization(params: {
   const headers = {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
-    'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://of-manager.lovable.app',
+    'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : 'https://of-studio-manager.lovable.app',
     'X-Title': 'OF Studio Manager - Finish Visualizer',
   };
 
