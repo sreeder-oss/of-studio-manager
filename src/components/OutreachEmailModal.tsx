@@ -89,7 +89,7 @@ function buildInstantDraft(contact: DbContact, topicId: OutreachTopic, includeGu
       break;
   }
 
-  const signoff = `\n\nI'd welcome the opportunity to review any upcoming drawings or provide preliminary budget numbers for your team.\n\nBest regards,\nShawn Reeder — Owner & Principal Applicator\nOrganic Finishes LLC\nDirect: (405) 816-0750\nEmail: contact@organicfinishesllc.org\nhttps://organicfinishesllc.org`;
+  const signoff = `\n\nI'd welcome the opportunity to review any upcoming drawings or provide preliminary budget numbers for your team.\n\nBest regards,\nShawn Reeder — Owner & Principal Applicator\nOrganic Finishes LLC\nDirect: (405) 816-0750\nEmail: contact@organicfinishesllc.org\nWebsite: https://organicfinishesllc.org\nInstagram: https://instagram.com/organic.finishes`;
 
   return {
     subject: topic.defaultSubject,
@@ -220,7 +220,9 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
             return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
           },
         );
-      const html = `<div>${linkify(body).replace(/\n/g, '<br/>')}</div>`;
+      const logoUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://receipt-magic-capture.lovable.app'}/of-email-logo.png`;
+      const logoHtml = `<div style="margin-top:12px;"><a href="https://organicfinishesllc.org" target="_blank" rel="noopener noreferrer"><img src="${logoUrl}" alt="Organic Finishes — Paint &amp; Plaster" width="200" style="display:block;border-radius:6px;max-width:200px;height:auto;" /></a></div>`;
+      const html = `<div>${linkify(body).replace(/\n/g, '<br/>')}${logoHtml}</div>`;
 
       if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
         await navigator.clipboard.write([
@@ -412,6 +414,35 @@ export const OutreachEmailModal: React.FC<OutreachEmailModalProps> = ({ contact,
               onChange={(e) => setBody(e.target.value)}
               className="w-full bg-accent border border-border rounded-xl p-3 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary font-mono text-[11px] leading-relaxed resize-y"
             />
+            <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-border bg-accent/50 p-2.5">
+              <div className="flex items-center gap-3 min-w-0">
+                <img
+                  src="/of-email-logo.png"
+                  alt="Organic Finishes — Paint & Plaster"
+                  className="h-10 w-auto rounded-md border border-border/60 shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-foreground">Signature Logo</p>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    Auto-included in <strong>Copy Draft</strong>. For <strong>Open in Gmail</strong>, add it once in Gmail Settings → Signature.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  copyQuickField(
+                    'Logo image URL',
+                    `${typeof window !== 'undefined' ? window.location.origin : 'https://receipt-magic-capture.lovable.app'}/of-email-logo.png`,
+                  )
+                }
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-border bg-card hover:bg-accent text-[10px] font-semibold text-foreground shrink-0 transition-colors"
+                title="Copy hosted logo URL for Gmail Settings → Signature"
+              >
+                <Copy className="h-2.5 w-2.5" />
+                Logo URL
+              </button>
+            </div>
           </div>
         </div>
 

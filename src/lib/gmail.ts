@@ -500,7 +500,7 @@ export async function generateOutreachDraftWithAI(params: {
   const { data: { session } } = await supabase.auth.getSession();
 
   const prompt = [
-    `Draft a concise, commercial-grade outreach email from Shawn Reeder (Owner & Principal Applicator, Organic Finishes LLC — 405-816-0750, contact@organicfinishesllc.org, organicfinishesllc.org; serving OK, TX, AR, KS, MO).`,
+    `Draft a concise, commercial-grade outreach email from Shawn Reeder (Owner & Principal Applicator, Organic Finishes LLC — 405-816-0750, contact@organicfinishesllc.org, https://organicfinishesllc.org, Instagram: https://instagram.com/organic.finishes; serving OK, TX, AR, KS, MO).`,
     `Recipient: ${params.contactName}${params.contactAddress ? ` (${params.contactAddress})` : ''}`,
     params.contactNotes ? `Known context/notes: ${params.contactNotes}` : '',
     `Topic: ${params.topicTitle} — ${params.topicSummary}`,
