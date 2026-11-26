@@ -1,10 +1,8 @@
 # OF Studio Manager
 
-this is a estimate and invoice app I made in AI Studio for my company Organic Finishes, organicfinishesllc.org, I would like to add a page that works with my camera to take images of receipts and store them properly by organizing them into categories and making it all export in format to be used in tax software please. I reached the limit with my open loaded but will be get you my proper logo and branding board. so proceed but there is more.
+Business & studio management suite for **Organic Finishes LLC** ([organicfinishesllc.org](https://organicfinishesllc.org)) — estimates, invoices, projects, camera receipt capture & Schedule C tax exports, Outreach Hub, and AI Finish Visualizer.
 
-This project was built with [Lovable](https://lovable.dev).
-
-**Live app**: https://receipt-magic-capture.lovable.app
+**Live app**: [https://of-studio-manager.lovable.app](https://of-studio-manager.lovable.app)
 
 ## Build with Lovable
 
@@ -19,8 +17,8 @@ Continue developing this project in the [Lovable editor](https://lovable.dev/pro
 Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
+git clone https://github.com/sreeder-oss/of-studio-manager.git
+cd of-studio-manager
 npm i
 npm run dev
 ```
