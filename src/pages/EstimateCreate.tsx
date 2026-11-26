@@ -57,15 +57,24 @@ const EstimateCreate: React.FC = () => {
   const [selectedContactId, setSelectedContactId] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
 
-  // Pre-select contact from URL param (e.g. ?contactId=...)
+  // Pre-select contact or project from URL param (e.g. ?contactId=... or ?projectId=...)
   useEffect(() => {
     if (isEdit) return;
     const cid = searchParams.get('contactId');
+    const pid = searchParams.get('projectId');
     if (cid) {
       setSelectedContactId(cid);
       setStep('create');
     }
-  }, [isEdit, searchParams]);
+    if (pid) {
+      setSelectedProjectId(pid);
+      const matchedProject = projects.find((p) => p.id === pid);
+      if (matchedProject?.contact_id && !cid) {
+        setSelectedContactId(matchedProject.contact_id);
+      }
+      setStep('create');
+    }
+  }, [isEdit, searchParams, projects]);
   const { data: systems = [] } = useSystems();
   const { data: services = [] } = useServices();
   const [areas, setAreas] = useState<Area[]>([emptyArea()]);

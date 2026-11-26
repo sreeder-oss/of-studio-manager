@@ -110,8 +110,8 @@ const ContactDetail: React.FC = () => {
   const confirmDelete = async () => {
     try {
       await deleteContactMut.mutateAsync(contact.id);
-      toast.success('Contact deleted');
-      navigate('/contacts');
+      toast.success(isPotential ? 'Outreach lead deleted' : 'Contact deleted');
+      navigate(isPotential ? '/outreach' : '/contacts');
     } catch {
       // global error toast
     }

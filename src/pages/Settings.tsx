@@ -417,7 +417,7 @@ const Settings: React.FC = () => {
       <section className="bg-card border border-border rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Job Minimums & Fees</p>
-          <span className="text-[9px] text-muted-foreground font-mono">Plaster $850 min | Paint $300 min</span>
+          <span className="text-[9px] text-muted-foreground font-mono">Plaster $950 min | Paint $450–$600 min</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {MONEY_FIELDS.map(([k, label, help]) => (
@@ -429,9 +429,9 @@ const Settings: React.FC = () => {
           ))}
         </div>
         <div className="p-2.5 rounded-lg bg-accent/40 border border-border text-[11px] text-muted-foreground space-y-1">
-          <p className="font-semibold text-foreground">Standard Minimum Guidelines:</p>
-          <p>• <strong>Plaster Minimum</strong>: $850 + materials (plaster is never done in 1 day; accounts for staging, coats & cure cycles).</p>
-          <p>• <strong>Paint / Patch Minimum</strong>: $300 + materials to mobilize on-site.</p>
+          <p className="font-semibold text-foreground">Standard Minimum Guidelines (2026–2027 Master):</p>
+          <p>• <strong>Plaster &amp; Microcement Minimum</strong>: $950 + landed materials (1-day mobilization min; accounts for staging, coats &amp; cure cycles).</p>
+          <p>• <strong>Specialty Painting Minimum</strong>: $450 (½ day) / $600 (full day) + landed materials.</p>
         </div>
       </section>
 

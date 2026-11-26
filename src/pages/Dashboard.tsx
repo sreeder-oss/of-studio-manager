@@ -154,9 +154,9 @@ const Dashboard: React.FC = () => {
     },
     {
       title: 'Contacts',
-      countLabel: `${clientCount} clients`,
-      amountLabel: `${potentialClientCount} potential`,
-      description: 'Clients for bids & invoices, plus potential clients for email outreach.',
+      countLabel: `${clientCount} active clients`,
+      amountLabel: `${potentialClientCount} in Outreach`,
+      description: 'Active clients & trade vendors for bids, projects, and invoicing.',
       icon: Users,
       path: '/contacts',
       color: 'from-primary/20',
@@ -192,7 +192,7 @@ const Dashboard: React.FC = () => {
             <Plus size={14} /> New Estimate
           </button>
           <button
-            onClick={() => navigate('/contacts?tab=Lead')}
+            onClick={() => navigate('/outreach')}
             className="inline-flex items-center gap-1.5 bg-accent border border-border hover:border-warning/50 text-foreground px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-colors"
           >
             <Mail size={14} className="text-warning" /> Outreach

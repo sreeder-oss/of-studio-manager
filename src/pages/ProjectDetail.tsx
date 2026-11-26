@@ -222,7 +222,7 @@ const ProjectDetail: React.FC = () => {
           {estimates.length === 0 ? (
             <div className="text-center py-10 bg-card rounded-xl border border-dashed border-border">
               <p className="text-muted-foreground text-[11px]">No estimates for this project yet.</p>
-              <button onClick={() => navigate('/estimates/new')} className="text-primary text-[10px] mt-2 font-bold uppercase tracking-widest hover:underline">Create Estimate</button>
+              <button onClick={() => navigate(`/estimates/new?projectId=${id}`)} className="text-primary text-[10px] mt-2 font-bold uppercase tracking-widest hover:underline">Create Estimate</button>
             </div>
           ) : estimates.map(e => (
             <div key={e.id} onClick={() => navigate(`/estimates/${e.id}`)}
