@@ -14,6 +14,7 @@ import {
   PriceBookIcon,
   SystemsLibraryIcon,
   SettingsIcon,
+  HandbookIcon,
 } from '@/components/icons/StudioIcons';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +47,7 @@ const studioNav: NavItem[] = [
   { path: '/visualizer', label: 'Finish Visualizer', icon: VisualizerIcon, tone: 'green' },
   { path: '/services', label: 'Price Book', icon: PriceBookIcon, tone: 'gold' },
   { path: '/systems', label: 'Systems Library', icon: SystemsLibraryIcon, tone: 'green' },
+  { path: '/handbook', label: 'Handbook', icon: HandbookIcon, tone: 'green' },
   { path: '/settings', label: 'Settings', icon: SettingsIcon, tone: 'gold' },
 ];
 
@@ -338,6 +340,7 @@ const AppLayout: React.FC = () => {
                   { path: '/reports/tax', label: 'Tax Summary', icon: TaxSummaryIcon, tone: 'gold' as NavTone },
                   { path: '/services', label: 'Price Book', icon: PriceBookIcon, tone: 'gold' as NavTone },
                   { path: '/systems', label: 'Systems Library', icon: SystemsLibraryIcon, tone: 'green' as NavTone },
+                  { path: '/handbook', label: 'Handbook', icon: HandbookIcon, tone: 'green' as NavTone },
                   { path: '/settings', label: 'Settings', icon: SettingsIcon, tone: 'gold' as NavTone },
                 ].map(({ path, label, icon: Icon, tone }) => {
                   const active = isNavActive(path);

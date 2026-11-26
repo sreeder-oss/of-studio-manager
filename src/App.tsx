@@ -36,6 +36,7 @@ const Receipts = lazy(() => import("./pages/Receipts"));
 const Systems = lazy(() => import("./pages/Systems"));
 const Services = lazy(() => import("./pages/Services"));
 const Visualizer = lazy(() => import("./pages/Visualizer"));
+const Handbook = lazy(() => import("./pages/Handbook"));
 const TaxSummary = lazy(() => import("./pages/TaxSummary"));
 const Login = lazy(() => import("./pages/Login"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -131,6 +132,7 @@ const App = () => (
                     <Route path="/services" element={<Services />} />
                     <Route path="/systems" element={<Systems />} />
                     <Route path="/visualizer" element={<Visualizer />} />
+                    <Route path="/handbook" element={<Handbook />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/reports/tax" element={<TaxSummary />} />
                   </Route>

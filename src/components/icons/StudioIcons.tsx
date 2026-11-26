@@ -153,3 +153,15 @@ export const SettingsIcon: React.FC<StudioIconProps> = ({ size = 18, className, 
     <circle cx="12" cy="12" r="6.5" strokeDasharray="3.2 2.2" />
   </svg>
 );
+
+/** 13. Handbook — Open studio manual with bookmark ribbon and chapter index lines */
+export const HandbookIcon: React.FC<StudioIconProps> = ({ size = 18, className, strokeWidth = 1.75 }) => (
+  <svg {...baseProps(size, strokeWidth, className)}>
+    <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v17H6.5A2.5 2.5 0 0 0 4 21V5.5Z" />
+    <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v17h5.5a2.5 2.5 0 0 1 2.5 1V5.5Z" />
+    <path d="M15 3v6l1.5-1.2L18 9V3" />
+    <path d="M7 8h2.5M7 11.5h2.5M7 15h2" />
+    <path d="M14.5 13h3M14.5 16h2.5" />
+  </svg>
+);
+
