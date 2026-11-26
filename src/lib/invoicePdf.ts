@@ -15,12 +15,13 @@ import { parseLocalDate, todayLocal } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable, { type RowInput } from 'jspdf-autotable';
 import { recalcInvoice, type InvoiceDoc } from './invoiceSchema';
+import { OF_BRAND_LOGO_DATA_URL, OF_BRAND_LOGO_ASPECT } from './brandLogo';
 
-// --- Brand tokens ----------------------------------------------------------
-const NAVY: [number, number, number] = [15, 23, 42];
-const NAVY_SOFT: [number, number, number] = [51, 65, 85];
-const GREEN: [number, number, number] = [73, 163, 61];
-const BEIGE: [number, number, number] = [232, 220, 196];
+// --- Brand tokens (Organic Finishes Brand Board — Darkest Navy Blue) -------
+const NAVY: [number, number, number] = [26, 35, 50];          // #1A2332
+const NAVY_SOFT: [number, number, number] = [51, 65, 85];     // #334155
+const GREEN: [number, number, number] = [73, 163, 61];        // #49A33D
+const BEIGE: [number, number, number] = [232, 227, 214];      // #E8E3D6
 const HAIRLINE: [number, number, number] = [210, 200, 180];
 const MUTED: [number, number, number] = [115, 115, 115];
 const PANEL: [number, number, number] = [248, 246, 240];
@@ -59,7 +60,7 @@ const DEFAULT_COMPANY: CompanyInfo = {
   name: 'ORGANIC FINISHES LLC',
   email: 'contact@organicfinishesllc.org',
   city: 'Tulsa, Oklahoma',
-  website: 'organicfinishestulsa.com',
+  website: 'organicfinishesllc.org',
 };
 
 interface RenderCtx {
@@ -76,15 +77,24 @@ function drawHeader(ctx: RenderCtx) {
   doc.setFillColor(...GREEN);
   doc.rect(0, 0, PAGE_W, 4, 'F');
 
+  const logoH = 34;
+  const logoW = logoH * OF_BRAND_LOGO_ASPECT;
+  try {
+    doc.addImage(OF_BRAND_LOGO_DATA_URL, 'JPEG', MARGIN, 12, logoW, logoH);
+  } catch {
+    /* fallback to text-only header */
+  }
+  const textX = MARGIN + logoW + 10;
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...NAVY);
-  doc.text(company.name, MARGIN, 28);
+  doc.text(company.name, textX, 27);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...NAVY_SOFT);
-  doc.text(inv.title || 'Invoice', MARGIN, 42);
+  doc.text(inv.title || 'Invoice', textX, 41);
 
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);

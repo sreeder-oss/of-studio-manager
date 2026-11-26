@@ -81,16 +81,15 @@ const AppLayout: React.FC = () => {
       {/* ============================================================ */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card/60 backdrop-blur-xl h-screen sticky top-0 shrink-0 z-30 select-none">
         {/* Brand Header */}
-        <div className="p-5 border-b border-border/70 flex items-center gap-3">
-          <img src={logoSrc} alt="OF" className="h-9 w-auto" />
-          <div className="flex-1 min-w-0">
-            <h1 className="font-serif text-foreground text-sm font-bold tracking-wide leading-none">
-              OF STUDIO
-            </h1>
-            <p className="text-[9px] text-primary uppercase tracking-[0.2em] font-semibold mt-0.5">
-              Organic Finishes
-            </p>
-          </div>
+        <div className="px-4 py-3.5 border-b border-border/70 flex flex-col items-center gap-1">
+          <img
+            src="/of-email-logo.png"
+            alt="Organic Finishes — Paint & Plaster"
+            className="w-40 h-auto rounded-lg"
+          />
+          <p className="text-[9px] text-primary uppercase tracking-[0.22em] font-semibold">
+            Studio Manager
+          </p>
         </div>
 
         {/* Navigation Sections */}

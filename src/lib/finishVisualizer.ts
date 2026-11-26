@@ -471,16 +471,17 @@ export async function buildConceptCardPng(params: {
       img.src = src;
     });
 
-  const [beforeImg, afterImg] = await Promise.all([
+  const [beforeImg, afterImg, logoImg] = await Promise.all([
     loadImg(params.beforeUrl),
     loadImg(params.afterUrl),
+    loadImg('/of-email-logo.png').catch(() => null),
   ]);
 
   const cardW = 1400;
   const pad = 44;
   const gap = 24;
-  const headerH = 92;
-  const footerH = 68;
+  const headerH = 104;
+  const footerH = 72;
   const panelW = (cardW - pad * 2 - gap) / 2;
   const aspect = beforeImg.height / Math.max(1, beforeImg.width);
   const panelH = Math.min(760, Math.max(420, Math.round(panelW * aspect)));
@@ -492,18 +493,26 @@ export async function buildConceptCardPng(params: {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas unavailable');
 
-  // Dark architectural studio background
-  ctx.fillStyle = '#0D0E10';
+  // Darkest Navy Blue (#1A2332) architectural studio background + Botanical Leaf Green top rule
+  ctx.fillStyle = '#1A2332';
   ctx.fillRect(0, 0, cardW, cardH);
+  ctx.fillStyle = '#49A33D';
+  ctx.fillRect(0, 0, cardW, 5);
 
   // Header
-  ctx.fillStyle = '#C8A97E';
-  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = '#49A33D';
+  ctx.font = 'bold 13px "Open Sans", sans-serif';
   ctx.fillText('ORGANIC FINISHES LLC  •  FINISH CONCEPT PREVIEW', pad, 44);
 
-  ctx.fillStyle = '#F2EFE9';
-  ctx.font = 'bold 26px serif';
-  ctx.fillText(params.title, pad, 78);
+  ctx.fillStyle = '#E8E3D6';
+  ctx.font = 'bold 28px "DM Serif Display", serif';
+  ctx.fillText(params.title, pad, 82);
+
+  if (logoImg) {
+    const lh = 64;
+    const lw = Math.round(lh * (logoImg.width / Math.max(1, logoImg.height)));
+    ctx.drawImage(logoImg, cardW - pad - lw, 22, lw, lh);
+  }
 
   const drawPanel = (img: HTMLImageElement, x: number, y: number, label: string) => {
     const imgRatio = img.width / Math.max(1, img.height);
@@ -522,10 +531,10 @@ export async function buildConceptCardPng(params: {
     ctx.drawImage(img, sx, sy, sw, sh, x, y, panelW, panelH);
 
     // Label pill
-    ctx.fillStyle = 'rgba(13, 14, 16, 0.78)';
+    ctx.fillStyle = 'rgba(26, 35, 50, 0.84)';
     ctx.fillRect(x + 14, y + 14, 96, 28);
-    ctx.fillStyle = '#F2EFE9';
-    ctx.font = 'bold 12px sans-serif';
+    ctx.fillStyle = '#E8E3D6';
+    ctx.font = 'bold 12px "Open Sans", sans-serif';
     ctx.fillText(label, x + 28, y + 33);
   };
 
@@ -533,14 +542,14 @@ export async function buildConceptCardPng(params: {
   drawPanel(afterImg, pad + panelW + gap, headerH, 'AFTER');
 
   // Footer
-  const footerY = headerH + panelH + 38;
-  ctx.fillStyle = '#D8D2C7';
-  ctx.font = '600 15px sans-serif';
+  const footerY = headerH + panelH + 40;
+  ctx.fillStyle = '#E8E3D6';
+  ctx.font = '600 15px "Open Sans", sans-serif';
   ctx.fillText(params.recipeLine, pad, footerY);
 
-  ctx.fillStyle = '#9B968E';
-  ctx.font = '500 13px sans-serif';
-  ctx.fillText('405-816-0750  •  contact@organicfinishesllc.org  •  organicfinishesllc.org', pad, footerY + 24);
+  ctx.fillStyle = '#9BA6B2';
+  ctx.font = '500 13px "IBM Plex Mono", monospace';
+  ctx.fillText('405-816-0750  •  contact@organicfinishesllc.org  •  organicfinishesllc.org  •  @organic.finishes', pad, footerY + 24);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
