@@ -1,6 +1,32 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  getStoredBackupKey,
+  getStoredDeepSeekKey,
+  getStoredVisualizerKey,
+  setStoredBackupKey,
+  setStoredDeepSeekKey,
+  setStoredVisualizerKey,
+  setStoredVisualizerModel,
+} from '@/lib/aiModels';
+
+function hydrateKeysFromUserMetadata(user: User | null | undefined) {
+  const meta = user?.user_metadata as Record<string, unknown> | undefined;
+  if (!meta) return;
+  if (typeof meta.visualizer_api_key === 'string' && meta.visualizer_api_key.trim() && !getStoredVisualizerKey()) {
+    setStoredVisualizerKey(meta.visualizer_api_key);
+  }
+  if (typeof meta.deepseek_api_key === 'string' && meta.deepseek_api_key.trim() && !getStoredDeepSeekKey()) {
+    setStoredDeepSeekKey(meta.deepseek_api_key);
+  }
+  if (typeof meta.gemma_api_key === 'string' && meta.gemma_api_key.trim() && !getStoredBackupKey()) {
+    setStoredBackupKey(meta.gemma_api_key);
+  }
+  if (typeof meta.visualizer_model === 'string' && meta.visualizer_model.trim()) {
+    setStoredVisualizerModel(meta.visualizer_model);
+  }
+}
 
 interface AuthContextType {
   session: Session | null;

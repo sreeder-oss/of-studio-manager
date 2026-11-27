@@ -18,6 +18,8 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { setStoredVisualizerKey } from '@/lib/aiModels';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects } from '@/hooks/useProjects';
 import { getPhotoUrl, uploadProjectPhoto, usePhotos, useSavePhoto } from '@/hooks/usePhotos';
@@ -265,7 +267,12 @@ const Visualizer: React.FC = () => {
     [surfaceTarget, finishSystem, movement, sheen, texture, inspirationUrl, selectedSwatch, refinementNote],
   );
 
-  const hasOpenRouterKey = Boolean(getVisualizerOpenRouterKey());
+  const [hasOpenRouterKey, setHasOpenRouterKey] = useState<boolean>(() => Boolean(getVisualizerOpenRouterKey()));
+  const [inlineApiKey, setInlineApiKey] = useState('');
+
+  useEffect(() => {
+    setHasOpenRouterKey(Boolean(getVisualizerOpenRouterKey()));
+  }, [user]);
 
   const handleRoomFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -521,17 +528,48 @@ const Visualizer: React.FC = () => {
       </header>
 
       {!hasOpenRouterKey && (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex items-center justify-between gap-3 flex-wrap text-xs">
-          <span className="text-amber-200">
-            <strong>OpenRouter key needed for AI renders:</strong> You can still capture &amp; organize site-walk photos into Projects right now; add your <code className="font-mono">sk-or-</code> key in Settings when ready to generate previews.
-          </span>
-          <button
-            type="button"
-            onClick={() => navigate('/settings')}
-            className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-200 font-semibold hover:bg-amber-500/30"
-          >
-            Open Settings
-          </button>
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 space-y-2 text-xs">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-amber-200">
+              <strong>OpenRouter key needed for AI renders:</strong> Paste your <code className="font-mono">sk-or-</code> key once and it will sync to your account across all updates &amp; devices.
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className="px-3 py-1 rounded-lg bg-amber-500/15 border border-amber-500/35 text-amber-200 font-semibold hover:bg-amber-500/25"
+            >
+              Open Settings
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={inlineApiKey}
+              onChange={(e) => setInlineApiKey(e.target.value)}
+              placeholder="Paste sk-or-v1-... key here"
+              className="flex-1 bg-background/80 border border-amber-500/35 rounded-lg px-3 py-1.5 text-xs font-mono text-foreground placeholder:text-muted-foreground/60 outline-none focus:ring-1 focus:ring-primary"
+            />
+            <button
+              type="button"
+              onClick={async () => {
+                const cleaned = inlineApiKey.replace(/^Bearer\s+/i, '').trim();
+                if (!cleaned.startsWith('sk-or-')) {
+                  toast.error('Key must start with sk-or-...');
+                  return;
+                }
+                setStoredVisualizerKey(cleaned);
+                setHasOpenRouterKey(true);
+                setInlineApiKey('');
+                try {
+                  await supabase.auth.updateUser({ data: { visualizer_api_key: cleaned } });
+                } catch { /* non-blocking */ }
+                toast.success('Visualizer key saved & synced to your account!');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-bold text-xs shrink-0"
+            >
+              Save &amp; Sync
+            </button>
+          </div>
         </div>
       )}
 

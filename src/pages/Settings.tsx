@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useSettings, useSaveSettings, DEFAULT_TERMS_TEXT, type Settings as S } from '@/hooks/useSettings';
 import { useAIAssistantOptional } from '@/contexts/AIAssistantContext';
 import {
@@ -360,7 +361,13 @@ const Settings: React.FC = () => {
                 <Key size={12} className="text-primary" />
                 Finish Visualizer API Key (OpenRouter)
               </label>
-              <span className="text-[9px] text-muted-foreground">Optional if reusing primary sk-or- key</span>
+              {savedVisualizerKey ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 text-[9px] font-mono font-semibold">
+                  <Check size={10} /> Saved ({savedVisualizerKey.slice(0, 9)}…{savedVisualizerKey.slice(-4)})
+                </span>
+              ) : (
+                <span className="text-[9px] text-muted-foreground">Optional if reusing primary sk-or- key</span>
+              )}
             </div>
             <div className="flex gap-2">
               <div className="relative flex-1">
