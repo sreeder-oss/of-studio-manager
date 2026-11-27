@@ -271,7 +271,17 @@ const Visualizer: React.FC = () => {
   const [inlineApiKey, setInlineApiKey] = useState('');
 
   useEffect(() => {
-    setHasOpenRouterKey(Boolean(getVisualizerOpenRouterKey()));
+    const hasLocal = Boolean(getVisualizerOpenRouterKey());
+    setHasOpenRouterKey(hasLocal);
+    if (!hasLocal && user) {
+      void supabase.auth.getUser().then(({ data: { user: freshUser } }) => {
+        const meta = freshUser?.user_metadata as Record<string, unknown> | undefined;
+        if (typeof meta?.visualizer_api_key === 'string' && meta.visualizer_api_key.trim()) {
+          setStoredVisualizerKey(meta.visualizer_api_key);
+          setHasOpenRouterKey(true);
+        }
+      });
+    }
   }, [user]);
 
   const handleRoomFiles = async (files: FileList | null) => {

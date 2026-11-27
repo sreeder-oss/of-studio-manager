@@ -82,14 +82,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!mounted) return;
+      hydrateKeysFromUserMetadata(nextSession?.user);
       setSession(nextSession);
       setLoading(false);
     });
 
     void supabase.auth.getSession().then(({ data: { session: restoredSession } }) => {
       if (!mounted) return;
+      hydrateKeysFromUserMetadata(restoredSession?.user);
       setSession(restoredSession);
       setLoading(false);
+      if (restoredSession) {
+        void supabase.auth.getUser().then(({ data: { user: freshUser } }) => {
+          if (mounted && freshUser) {
+            hydrateKeysFromUserMetadata(freshUser);
+          }
+        });
+      }
     });
 
     return () => {
