@@ -26,9 +26,10 @@ const Systems: React.FC = () => {
       { id: 'all', label: 'All Systems', count: systems.length },
       { id: 'surecrete', label: 'SureCrete', count: systems.filter(s => (s.manufacturer || '').toLowerCase().includes('surecrete')).length },
       { id: 'meoded', label: 'Meoded', count: systems.filter(s => (s.manufacturer || '').toLowerCase().includes('meoded')).length },
+      { id: 'romabio', label: 'Romabio', count: systems.filter(s => (s.manufacturer || '').toLowerCase().includes('romabio')).length },
       { id: 'other', label: 'Other', count: systems.filter(s => {
         const m = (s.manufacturer || '').toLowerCase();
-        return !m.includes('surecrete') && !m.includes('meoded');
+        return !m.includes('surecrete') && !m.includes('meoded') && !m.includes('romabio');
       }).length },
     ];
     return list;
@@ -36,11 +37,13 @@ const Systems: React.FC = () => {
 
   const filteredSystems = useMemo(() => {
     return systems.filter(s => {
+      const m = (s.manufacturer || '').toLowerCase();
       const matchCat =
         selectedCategory === 'all' ? true :
-        selectedCategory === 'surecrete' ? (s.manufacturer || '').toLowerCase().includes('surecrete') :
-        selectedCategory === 'meoded' ? (s.manufacturer || '').toLowerCase().includes('meoded') :
-        !(s.manufacturer || '').toLowerCase().includes('surecrete') && !(s.manufacturer || '').toLowerCase().includes('meoded');
+        selectedCategory === 'surecrete' ? m.includes('surecrete') :
+        selectedCategory === 'meoded' ? m.includes('meoded') :
+        selectedCategory === 'romabio' ? m.includes('romabio') :
+        !m.includes('surecrete') && !m.includes('meoded') && !m.includes('romabio');
 
       if (!matchCat) return false;
 
@@ -68,7 +71,7 @@ const Systems: React.FC = () => {
         }
       }
       if (added === 0) {
-        toast.info('All 16 starter systems already exist in your library');
+        toast.info(`All ${SEED_SYSTEMS.length} starter systems already exist in your library`);
       } else {
         toast.success(`Successfully added ${added} manufacturer systems to your library`);
       }

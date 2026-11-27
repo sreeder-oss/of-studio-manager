@@ -56,7 +56,7 @@ export interface HandbookChangelogEntry {
   chaptersUpdated: string[];
 }
 
-export const HANDBOOK_VERSION = 'v1.2';
+export const HANDBOOK_VERSION = 'v1.3';
 export const HANDBOOK_LAST_UPDATED = 'November 27, 2026';
 
 export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
@@ -337,7 +337,7 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
           'Your 2026–2027 regional catalog is pre-aligned across both tables with duplicate seed protection.',
         bullets: [
           'Price Book (/services): 15 unified services covering lime plaster, Venetian plaster, limewash, tadelakt, microcement, specialty prep, and day-rate studio work.',
-          'Systems Library (/systems): 16 manufacturer systems across SureCrete, Meoded, Vasari, and Mineral lines with coverage rates, coat counts, and unit costs.',
+          'Systems Library (/systems): Manufacturer systems across SureCrete, Meoded, Romabio (MicroGrip, Classico Limewash, Lime Slurry, Venetian Glaze, Italian Slaked-Lime Plasters, Mineral Shield, Decorative Topcoat Flat), Vasari, and Mineral lines with coverage rates, coat counts, and unit costs.',
           'Job minimums are synced in Settings (/settings) so small accent walls or fireplace jobs never get underbid.',
         ],
       },
@@ -516,14 +516,22 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
   { term: 'Project Handoff (projectId)', chapterId: 'contacts-projects', sectionId: 'project-workspace', note: 'Created at site walk; auto-links project & client' },
   { term: 'PWA Instant Updates', chapterId: 'quick-reference', sectionId: 'field-troubleshooting', note: 'skipWaiting & clientsClaim service-worker refresh' },
   { term: 'Receipts & Job Costing', chapterId: 'receipts-tax', sectionId: 'capturing-receipts', note: 'Snap & categorize receipts linked to projects' },
+  { term: 'Romabio Systems (7 Lines)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'MicroGrip, Classico, Slurry, Venetian Glaze, Slaked-Lime, Shield & Topcoat' },
   { term: 'Sample Board Presets', chapterId: 'finish-visualizer', sectionId: 'site-walk-capture', note: '4 real Organic Finishes boards built into Visualizer' },
   { term: 'Solo Duration Estimator', chapterId: 'estimates-invoices', sectionId: 'creating-estimates', note: '2.5–3d hoods, 3–5d walls, 7–10d waterproof printed on PDF' },
-  { term: 'Systems Library (16 Systems)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'SureCrete, Meoded, Vasari & Mineral coverage/costs' },
+  { term: 'Systems Library', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'SureCrete, Meoded, Romabio, Vasari & Mineral coverage/costs' },
   { term: 'Tax Summary (/reports/tax)', chapterId: 'receipts-tax', sectionId: 'tax-summary-report', note: 'Annual revenue vs. deductible expenses report' },
   { term: 'Travel Policy (1.5 hr Radius)', chapterId: 'studio-overview', sectionId: 'brand-and-settings', note: 'Sand Springs / Tulsa base; hotel + food beyond 1.5 hrs' },
 ];
 
 export const HANDBOOK_CHANGELOG: HandbookChangelogEntry[] = [
+  {
+    date: '2026-11-27',
+    version: 'v1.3',
+    summary:
+      'Added 7 Romabio systems (MicroGrip Primer, Classico Limewash, Lime Slurry, Venetian Glaze, Italian Slaked-Lime Plasters, Mineral Shield, Decorative Topcoat Flat) to Systems Library with a dedicated Romabio filter tab.',
+    chaptersUpdated: ['05'],
+  },
   {
     date: '2026-11-27',
     version: 'v1.2',
