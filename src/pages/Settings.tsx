@@ -48,6 +48,7 @@ const Settings: React.FC = () => {
   const [showBackupKey, setShowBackupKey] = useState(false);
   const [visualizerModel, setVisualizerModel] = useState<string>(() => getStoredVisualizerModel());
   const [visualizerKey, setVisualizerKey] = useState<string>(() => getStoredVisualizerKey());
+  const [savedVisualizerKey, setSavedVisualizerKey] = useState<string>(() => getStoredVisualizerKey());
   const [showVisualizerKey, setShowVisualizerKey] = useState(false);
 
   useEffect(() => {
@@ -55,6 +56,34 @@ const Settings: React.FC = () => {
       setCurrentModel(aiCtx.modelId);
     }
   }, [aiCtx?.modelId]);
+
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      const meta = user?.user_metadata as Record<string, unknown> | undefined;
+      if (!meta) return;
+      if (typeof meta.visualizer_api_key === 'string' && meta.visualizer_api_key.trim() && !getStoredVisualizerKey()) {
+        setStoredVisualizerKey(meta.visualizer_api_key);
+        setVisualizerKey(meta.visualizer_api_key);
+        setSavedVisualizerKey(meta.visualizer_api_key);
+      }
+      if (typeof meta.deepseek_api_key === 'string' && meta.deepseek_api_key.trim() && !getStoredDeepSeekKey()) {
+        setStoredDeepSeekKey(meta.deepseek_api_key);
+        setApiKey(meta.deepseek_api_key);
+      }
+      if (typeof meta.gemma_api_key === 'string' && meta.gemma_api_key.trim() && !getStoredBackupKey()) {
+        setStoredBackupKey(meta.gemma_api_key);
+        setBackupApiKey(meta.gemma_api_key);
+      }
+    });
+  }, []);
+
+  const syncKeysToAccount = async (patch: Record<string, string | null>) => {
+    try {
+      await supabase.auth.updateUser({ data: patch });
+    } catch {
+      // non-blocking; localStorage copy is already saved
+    }
+  };
 
   const handleModelChange = (id: string) => {
     setCurrentModel(id);
@@ -66,19 +95,21 @@ const Settings: React.FC = () => {
     toast.success(`Active AI engine switched to ${label}`);
   };
 
-  const handleSaveApiKey = () => {
+  const handleSaveApiKey = async () => {
     setStoredDeepSeekKey(apiKey);
+    await syncKeysToAccount({ deepseek_api_key: apiKey.trim() || null });
     if (apiKey.trim()) {
-      toast.success('Primary API key saved');
+      toast.success('Primary API key saved & synced to your account');
     } else {
       toast.info('Primary API key cleared');
     }
   };
 
-  const handleSaveBackupKey = () => {
+  const handleSaveBackupKey = async () => {
     setStoredBackupKey(backupApiKey);
+    await syncKeysToAccount({ gemma_api_key: backupApiKey.trim() || null });
     if (backupApiKey.trim()) {
-      toast.success('Backup Gemma OpenRouter key saved');
+      toast.success('Backup Gemma OpenRouter key saved & synced to your account');
     } else {
       toast.info('Backup Gemma key cleared (will reuse primary OpenRouter key)');
     }
@@ -87,11 +118,12 @@ const Settings: React.FC = () => {
   const handleVisualizerModelChange = (id: string) => {
     setVisualizerModel(id);
     setStoredVisualizerModel(id);
+    void syncKeysToAccount({ visualizer_model: id });
     const label = VISUALIZER_MODELS.find((m) => m.id === id)?.label ?? 'Visualizer model';
     toast.success(`Finish Visualizer model set to ${label}`);
   };
 
-  const handleSaveVisualizerKey = () => {
+  const handleSaveVisualizerKey = async () => {
     const cleaned = visualizerKey.replace(/^Bearer\s+/i, '').trim();
     if (cleaned && !cleaned.startsWith('sk-or-')) {
       toast.error('OpenRouter keys must start with sk-or-... (copy the full key from openrouter.ai/keys)');
@@ -99,8 +131,10 @@ const Settings: React.FC = () => {
     }
     setVisualizerKey(cleaned);
     setStoredVisualizerKey(cleaned);
+    setSavedVisualizerKey(cleaned);
+    await syncKeysToAccount({ visualizer_api_key: cleaned || null });
     if (cleaned) {
-      toast.success('Finish Visualizer OpenRouter key saved');
+      toast.success('Finish Visualizer OpenRouter key saved & synced across updates');
     } else {
       toast.info('Visualizer key cleared (will reuse primary OpenRouter key)');
     }
@@ -143,6 +177,13 @@ const Settings: React.FC = () => {
     setStoredDeepSeekKey(apiKey);
     setStoredBackupKey(backupApiKey);
     setStoredVisualizerKey(cleanedVisKey);
+    setSavedVisualizerKey(cleanedVisKey);
+    await syncKeysToAccount({
+      deepseek_api_key: apiKey.trim() || null,
+      gemma_api_key: backupApiKey.trim() || null,
+      visualizer_api_key: cleanedVisKey || null,
+      visualizer_model: visualizerModel,
+    });
     try {
       await save.mutateAsync({
         ...(out as S),
