@@ -56,8 +56,8 @@ export interface HandbookChangelogEntry {
   chaptersUpdated: string[];
 }
 
-export const HANDBOOK_VERSION = 'v1.0';
-export const HANDBOOK_LAST_UPDATED = 'November 26, 2026';
+export const HANDBOOK_VERSION = 'v1.1';
+export const HANDBOOK_LAST_UPDATED = 'November 27, 2026';
 
 export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
   {
@@ -109,9 +109,9 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
           'On mobile PWA, use the bottom bar for Home, Estimates, Invoices, and Contacts, and tap More for Outreach, Finish Visualizer, Projects, Receipts, Price Book, Systems Library, Handbook, and Settings.',
         ],
         callout: {
-          tone: 'tip',
-          title: 'Install as a Home-Screen App (PWA)',
-          body: 'Open https://of-studio-manager.lovable.app on your phone and tap "Add to Home Screen". Updates activate immediately thanks to automatic service-worker refresh.',
+          tone: 'field',
+          title: 'Home Base & Travel Policy (Sand Springs / Tulsa, OK)',
+          body: 'Day-commute radius is up to 1.5 hours from Sand Springs / Tulsa (profitable for short 1–2 day runs, up to ~5 days max). Jobs beyond 1.5 hours require hotel + food allowance in the estimate.',
         },
       },
     ],
@@ -201,23 +201,24 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
     sections: [
       {
         id: 'contacts-directory',
-        heading: 'Contacts Directory (Clients & Vendors)',
+        heading: 'Contacts Directory (Clients, Middlemen & Vendors)',
         body:
-          'Contacts (/contacts) focuses strictly on people you actively work with — homeowners, designers, general contractors, and plaster/paint suppliers.',
+          'Contacts (/contacts) focuses on people you actively work with — Homeowners, Interior Designers, Builders/GCs, Commercial accounts, and suppliers.',
         bullets: [
+          'Bill-To vs. Middleman: On residential jobs, both the Homeowner and the Designer/Builder are your clients, but the Homeowner is usually the paying Bill-To client while the Designer/Builder acts as the middleman/specifier. Commercial jobs run differently since they draw from budgeted company funds.',
           'Click any contact to open Contact Detail (/contacts/:id) with their linked Projects, Estimates, Invoices, and quick Outreach route if applicable.',
           'When creating an Estimate, the client picker defaults to Active Clients only — flip the "Include Outreach Leads (N)" toggle if you want to quote a warm lead directly.',
         ],
       },
       {
         id: 'project-workspace',
-        heading: 'Project Workspace & Seamless Handoffs',
+        heading: 'Site-Walk Project Creation & Handoffs',
         body:
-          'Each Project (/projects/:id) acts as the single source of truth for a jobsite.',
+          'A Project (/projects/:id) is created the moment you are sent to look at a space for an estimate. If the job does not move forward, simply delete the Project while keeping the Contact on file.',
         steps: [
           'Launch Finish Visualizer directly from a Project so raw site-walk photos and generated concepts save automatically to that job.',
           'Click Create Estimate inside a Project to hand off the projectId and client automatically to /estimates/new.',
-          'Log mid-job scope additions under the Change Orders tab so extras never get forgotten at final billing.',
+          'Log mid-job scope additions under the Change Orders tab so they merge cleanly into the final Invoice.',
         ],
       },
     ],
@@ -381,9 +382,9 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
       },
       {
         id: 'converting-to-invoices',
-        heading: 'Converting Approved Estimates to Invoices',
+        heading: 'Converting Approved Estimates & Change Orders to Invoices',
         body:
-          'Once a client approves an estimate, convert it into an Invoice (/invoices) in one click so line items, client info, and project links carry over intact.',
+          'Once a client approves an estimate, convert it into an Invoice (/invoices) in one click so line items, client info, and project links carry over intact. Approved Change Orders merge into the final Invoice rather than creating separate bills.',
         bullets: [
           'Track invoice status (Draft, Sent, Paid, Overdue) from /invoices and the main Dashboard KPI cards.',
           'Download matching branded Invoice PDFs from Invoice Detail (/invoices/:id).',
@@ -497,7 +498,8 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
   { term: 'Before / After Slider', chapterId: 'finish-visualizer', sectionId: 'presenting-concepts', note: 'Interactive client presentation & PNG export' },
   { term: 'Biolime / Venetian / Tadelakt', chapterId: 'finish-visualizer', sectionId: 'site-walk-capture', note: 'Craftsmanship finish system presets in Visualizer' },
   { term: 'Brand Board (#1a2332)', chapterId: 'studio-overview', sectionId: 'brand-and-settings', note: 'Darkest Navy Blue across PDFs, cards, and UI' },
-  { term: 'Change Orders', chapterId: 'contacts-projects', sectionId: 'project-workspace', note: 'Track mid-job scope additions inside a Project' },
+  { term: 'Bill-To vs. Middleman', chapterId: 'contacts-projects', sectionId: 'contacts-directory', note: 'Homeowner pays; Designer/Builder acts as specifier/middleman' },
+  { term: 'Change Orders', chapterId: 'contacts-projects', sectionId: 'project-workspace', note: 'Track mid-job additions; merge into final Invoice' },
   { term: 'Contacts vs. Outreach Leads', chapterId: 'contacts-projects', sectionId: 'contacts-directory', note: 'Active clients live in /contacts; cold leads in /outreach' },
   { term: 'Copy To / Copy Subject', chapterId: 'outreach-hub', sectionId: 'gmail-handoff', note: '1-tap clipboard helpers in Outreach email modal' },
   { term: 'Deterministic Pricing (pricing.ts)', chapterId: 'pricing-and-systems', sectionId: 'deterministic-rule', note: 'Client-side labor + pass-through materials math' },
@@ -509,15 +511,23 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
   { term: 'Living Documentation Rule', chapterId: 'quick-reference', sectionId: 'living-handbook-rule', note: 'Handbook updates in the same PR as every feature' },
   { term: 'Minimums (2026–2027)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'Synced job minimums in Settings & Price Book' },
   { term: 'Price Book (15 Services)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'Flat per-SF and day-rate services in /services' },
-  { term: 'Project Handoff (projectId)', chapterId: 'contacts-projects', sectionId: 'project-workspace', note: 'Auto-links project & client when creating an estimate' },
+  { term: 'Project Handoff (projectId)', chapterId: 'contacts-projects', sectionId: 'project-workspace', note: 'Created at site walk; auto-links project & client' },
   { term: 'PWA Instant Updates', chapterId: 'quick-reference', sectionId: 'field-troubleshooting', note: 'skipWaiting & clientsClaim service-worker refresh' },
   { term: 'Receipts & Job Costing', chapterId: 'receipts-tax', sectionId: 'capturing-receipts', note: 'Snap & categorize receipts linked to projects' },
   { term: 'Sample Board Presets', chapterId: 'finish-visualizer', sectionId: 'site-walk-capture', note: '4 real Organic Finishes boards built into Visualizer' },
   { term: 'Systems Library (16 Systems)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'SureCrete, Meoded, Vasari & Mineral coverage/costs' },
   { term: 'Tax Summary (/reports/tax)', chapterId: 'receipts-tax', sectionId: 'tax-summary-report', note: 'Annual revenue vs. deductible expenses report' },
+  { term: 'Travel Policy (1.5 hr Radius)', chapterId: 'studio-overview', sectionId: 'brand-and-settings', note: 'Sand Springs / Tulsa base; hotel + food beyond 1.5 hrs' },
 ];
 
 export const HANDBOOK_CHANGELOG: HandbookChangelogEntry[] = [
+  {
+    date: '2026-11-27',
+    version: 'v1.1',
+    summary:
+      'Codified Organic Finishes LLC operating rules: Sand Springs/Tulsa home base & 1.5-hour travel/hotel policy, Site-Walk Project creation, Bill-To Homeowner vs. Designer/Builder middleman, Commercial vs. Residential, and Change Orders merging into the final Invoice.',
+    chaptersUpdated: ['01', '03', '06'],
+  },
   {
     date: '2026-11-26',
     version: 'v1.0',
