@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { Sparkles, FileText, CheckCheck, Loader2 } from 'lucide-react';
+import { Sparkles, FileText, CheckCheck, Loader2, Wand2 } from 'lucide-react';
 import type { ChatMessage as Msg } from '@/contexts/AIAssistantContext';
 import { parseEstimateFromText } from '@/lib/estimateSchema';
 import { parseInvoiceFromText } from '@/lib/invoiceSchema';
@@ -17,7 +18,8 @@ interface Props {
 }
 
 export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenInvoice }) => {
-  const { markActionApplied } = useAIAssistant();
+  const navigate = useNavigate();
+  const { markActionApplied, setOpen } = useAIAssistant();
   const { run } = useAIActions();
   const [applyingAll, setApplyingAll] = useState(false);
 
@@ -77,7 +79,34 @@ export const ChatMessage: React.FC<Props> = ({ message, onOpenEstimate, onOpenIn
         )}
         {display ? (
           <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0">
-            <ReactMarkdown>{display}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                a: ({ href, children }) => {
+                  if (href && href.startsWith('/visualizer')) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpen(false);
+                          navigate(href);
+                        }}
+                        className="mt-1.5 mb-1 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#d9a441]/15 hover:bg-[#d9a441]/25 border border-[#d9a441]/45 text-[#d9a441] text-[10.5px] font-bold uppercase tracking-wider transition-all not-prose"
+                      >
+                        <Wand2 size={12} />
+                        <span>{children}</span>
+                      </button>
+                    );
+                  }
+                  return (
+                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                      {children}
+                    </a>
+                  );
+                },
+              }}
+            >
+              {display}
+            </ReactMarkdown>
           </div>
         ) : (
           message.streaming && actions.length === 0 ? <span className="inline-block w-2 h-3 bg-current animate-pulse" /> : null

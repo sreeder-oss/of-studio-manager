@@ -44,11 +44,17 @@ import {
   type TrowelMovement,
 } from '@/lib/finishVisualizer';
 import {
+  ALL_COLOR_SWATCHES,
   getManufacturersForVisualizerSystem,
   getSwatchesForVisualizerSystem,
   type ColorSwatch,
 } from '@/data/colorCatalog';
-import { Palette } from 'lucide-react';
+import {
+  findClosestStockSwatches,
+  searchDesignerPaints,
+  type DesignerPaintColor,
+} from '@/lib/paintMatcher';
+import { Palette, Search } from 'lucide-react';
 
 interface WalkThroughShot {
   id: string;
@@ -143,6 +149,8 @@ const Visualizer: React.FC = () => {
   const [texture, setTexture] = useState<TextureDepth>('Light Trowel');
   const [selectedSwatch, setSelectedSwatch] = useState<ColorSwatch | null>(null);
   const [swatchBrandFilter, setSwatchBrandFilter] = useState<string>('All');
+  const [paintSearchQuery, setPaintSearchQuery] = useState('');
+  const [activePaintRef, setActivePaintRef] = useState<DesignerPaintColor | null>(null);
   const [refinementNote, setRefinementNote] = useState('');
 
   const availableBrands = useMemo(
@@ -161,6 +169,22 @@ const Visualizer: React.FC = () => {
     () => getSwatchesForVisualizerSystem(finishSystem, 'All'),
     [finishSystem],
   );
+
+  const paintSuggestions = useMemo(
+    () => searchDesignerPaints(paintSearchQuery).slice(0, 4),
+    [paintSearchQuery],
+  );
+
+  const paintClosestMatches = useMemo(() => {
+    if (!activePaintRef) return [];
+    return findClosestStockSwatches({
+      targetHex: activePaintRef.hex,
+      targetLrv: activePaintRef.lrv,
+      system: finishSystem,
+      manufacturer: effectiveBrandFilter,
+      limit: 2,
+    });
+  }, [activePaintRef, finishSystem, effectiveBrandFilter]);
 
   // Clear swatch automatically if user switches to a finish system that doesn't support it
   useEffect(() => {
@@ -183,9 +207,37 @@ const Visualizer: React.FC = () => {
   const inspCameraRef = useRef<HTMLInputElement>(null);
   const inspUploadRef = useRef<HTMLInputElement>(null);
 
+  // Hydrate from URL params (including 1-tap AI Chat -> Visualizer handoff)
   useEffect(() => {
     const pid = searchParams.get('projectId') || '';
     if (pid) setSelectedProjectId(pid);
+
+    const urlSurface = searchParams.get('surface');
+    if (urlSurface && (SURFACE_TARGETS as readonly string[]).includes(urlSurface)) {
+      setSurfaceTarget(urlSurface as SurfaceTarget);
+      if (urlSurface === 'Range Hood') setActiveShotId('sample-hood');
+      else if (urlSurface === 'Fireplace') setActiveShotId('sample-fireplace');
+    }
+
+    const urlSystem = searchParams.get('system');
+    if (urlSystem && FINISH_SYSTEMS.some((s) => s.id === urlSystem)) {
+      setFinishSystem(urlSystem as FinishSystem);
+    }
+
+    const urlBrand = searchParams.get('brand');
+    if (urlBrand) setSwatchBrandFilter(urlBrand);
+
+    const urlSwatch = searchParams.get('swatch');
+    if (urlSwatch) {
+      const found = ALL_COLOR_SWATCHES.find(
+        (s) => s.id.toLowerCase() === urlSwatch.toLowerCase() || s.code.toLowerCase() === urlSwatch.toLowerCase(),
+      );
+      if (found) {
+        setSelectedSwatch(found);
+        setSwatchBrandFilter(found.manufacturer);
+        toast.success(`Loaded ${found.manufacturer} ${found.code} ${found.name} — snap a photo or render on the sample below!`);
+      }
+    }
   }, [searchParams]);
 
   const activeShot = useMemo(
@@ -841,6 +893,101 @@ const Visualizer: React.FC = () => {
                     })}
                   </div>
                 )}
+
+                {/* Instant Designer Paint Cross-Reference (Works Offline On-Site) */}
+                <div className="space-y-1.5 pt-0.5">
+                  <div className="relative">
+                    <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <input
+                      type="text"
+                      value={paintSearchQuery}
+                      onChange={(e) => {
+                        setPaintSearchQuery(e.target.value);
+                        if (!e.target.value.trim()) setActivePaintRef(null);
+                      }}
+                      placeholder='Match paint name (e.g. "Shoji White", "Swiss Coffee")...'
+                      className="w-full bg-card/80 border border-border rounded-lg pl-7 pr-6 py-1.5 text-[10.5px] text-foreground placeholder:text-muted-foreground/65 outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    {(paintSearchQuery || activePaintRef) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaintSearchQuery('');
+                          setActivePaintRef(null);
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground hover:text-foreground"
+                        aria-label="Clear paint match"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {paintSearchQuery.trim() && !activePaintRef && paintSuggestions.length > 0 && (
+                    <div className="rounded-lg border border-border bg-card/95 divide-y divide-border/60 overflow-hidden">
+                      {paintSuggestions.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setActivePaintRef(p);
+                            setPaintSearchQuery(`${p.brand} ${p.code} ${p.name}`);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-accent/70 transition-colors"
+                        >
+                          <span className="h-4 w-4 rounded border border-black/25 shrink-0" style={{ backgroundColor: p.hex }} />
+                          <span className="text-[10px] font-semibold text-foreground truncate">
+                            {p.name} <span className="text-muted-foreground font-normal">({p.brand} {p.code})</span>
+                          </span>
+                          <span className="ml-auto text-[9px] font-mono text-muted-foreground shrink-0">LRV {p.lrv}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {activePaintRef && (
+                    <div className="rounded-lg border border-[#d9a441]/40 bg-[#d9a441]/10 p-2 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="h-5 w-5 rounded border border-black/25 shrink-0" style={{ backgroundColor: activePaintRef.hex }} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold text-foreground truncate">
+                            {activePaintRef.brand} {activePaintRef.code} · {activePaintRef.name} (LRV {activePaintRef.lrv})
+                          </p>
+                          <p className="text-[9px] text-muted-foreground leading-snug">{activePaintRef.undertone} — {activePaintRef.fieldNote}</p>
+                        </div>
+                      </div>
+                      {paintClosestMatches.length > 0 && (
+                        <div className="space-y-1 pt-0.5">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-[#d9a441]">
+                            Closest {effectiveBrandFilter === 'All' ? 'Stock' : effectiveBrandFilter} Offerings:
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                            {paintClosestMatches.map(({ swatch, comparisonNote }, idx) => (
+                              <button
+                                key={swatch.id}
+                                type="button"
+                                onClick={() => setSelectedSwatch(swatch)}
+                                className={`flex items-center gap-2 p-1.5 rounded-md border text-left transition-all ${
+                                  selectedSwatch?.id === swatch.id
+                                    ? 'bg-primary/15 border-primary/60'
+                                    : 'bg-card/90 border-border hover:border-primary/40'
+                                }`}
+                              >
+                                <span className="h-5 w-5 rounded border border-black/25 shrink-0" style={{ backgroundColor: swatch.hex }} />
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-semibold text-foreground truncate">
+                                    #{idx + 1} {swatch.manufacturer} {swatch.code} {swatch.name}
+                                  </p>
+                                  <p className="text-[8.5px] text-muted-foreground truncate">{comparisonNote}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-52 overflow-y-auto pr-0.5">
                   {availableSwatches.map((sw) => {

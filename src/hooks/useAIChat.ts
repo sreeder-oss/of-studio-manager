@@ -4,8 +4,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAIAssistant, type ChatAttachment, type ChatMessage } from '@/contexts/AIAssistantContext';
 import { useAIPageContextValue } from '@/contexts/AIContextProvider';
 import { getStoredDeepSeekKey, getStoredBackupKey } from '@/lib/aiModels';
+import { buildColorMatcherPromptContext } from '@/lib/paintMatcher';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+
+const COLOR_QUERY_RE =
+  /\b(colou?r|swatch|shade|undertone|lrv|palette|visualizer|match|closest|shoji|swiss\s*coffee|alabaster|white\s*dove|chantilly|agreeable|accessible\s*beige|pale\s*oak|revere|edgecomb|shiitake|urbane|iron\s*ore|tricorn|sherwin|benjamin\s*moore|spectrum|behr|farrow|meoded|romabio|vasari|surecrete|mc-\d+|rb-|sc-)\b/i;
 
 interface SendOptions {
   text: string;
@@ -23,7 +27,17 @@ export const useAIChat = () => {
   const send = useCallback(
     async ({ text, attachments, currentPage, currentRecord: overrideRecord }: SendOptions) => {
       if (!text.trim() && (!attachments || attachments.length === 0)) return;
-      const recordForRequest = overrideRecord ?? currentRecord ?? undefined;
+      const baseRecord = overrideRecord ?? currentRecord ?? undefined;
+      const wantsColorCatalog =
+        COLOR_QUERY_RE.test(text) ||
+        currentPage === '/visualizer' ||
+        messages.slice(-4).some((m) => COLOR_QUERY_RE.test(m.content));
+      const recordForRequest = wantsColorCatalog
+        ? {
+            ...(baseRecord && typeof baseRecord === 'object' ? (baseRecord as Record<string, unknown>) : { activeRecord: baseRecord ?? null }),
+            studioColorCatalogAndPaintMatcher: buildColorMatcherPromptContext(),
+          }
+        : baseRecord;
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),

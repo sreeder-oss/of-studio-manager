@@ -56,7 +56,7 @@ export interface HandbookChangelogEntry {
   chaptersUpdated: string[];
 }
 
-export const HANDBOOK_VERSION = 'v1.5';
+export const HANDBOOK_VERSION = 'v1.6';
 export const HANDBOOK_LAST_UPDATED = 'November 27, 2026';
 
 export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
@@ -262,7 +262,8 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
         steps: [
           'Snap a photo with your rear camera or upload an existing room image. Tap Save Raw Photo to store the original in the project photo library.',
           'Choose one of the 4 real Organic Finishes sample/work presets (Limestone Plaster Fireplace, Charcoal Venetian Range Hood, Slaked Limewash Board, Metallic Copper-Bronze Board) or upload a Client Inspiration photo.',
-          'Tap the craftsmanship finish pills (Biolime, Venetian Marmorino, Limewash, Tadelakt, Microcement, Roman Clay, Travertino) — then pick from 46 factory-approved swatches across Romabio, Meoded (MC-Series), Vasari (2026 A-Series), and SureCrete (SC Color Packs), filtered automatically by system, brand & tint-base limit.',
+          'Tap the craftsmanship finish pills (Biolime, Venetian Marmorino, Limewash, Tadelakt, Microcement, Roman Clay, Travertino) — then pick from 46 factory-approved swatches across Romabio, Meoded, Vasari, and SureCrete.',
+          'Designer names a paint color on-site (e.g. "Shoji White" or "Swiss Coffee")? Either ask the AI Assistant for the closest 1–2 stock offerings and tap its Gold Visualize button, or type the paint name right into the Visualizer "Match paint name" box for instant CIELAB undertone & LRV matching.',
           'Use the 1-line Refine box to dial in sheen, warmth, mottling, or color depth without starting over.',
         ],
       },
@@ -514,6 +515,7 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
   { term: 'Manufacturer Color Catalog (46 Swatches)', chapterId: 'finish-visualizer', sectionId: 'site-walk-capture', note: 'Romabio, Meoded MC-Series, Vasari A-Series & SureCrete SC Color Packs' },
   { term: 'Material Handling (10%)', chapterId: 'pricing-and-systems', sectionId: 'deterministic-rule', note: 'Fair procurement fee on materials (Settings & EstimateCreate)' },
   { term: 'Minimums (2026–2027)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'Synced job minimums in Settings & Price Book' },
+  { term: 'Paint Fan-Deck Matcher (Shoji / Swiss Coffee)', chapterId: 'finish-visualizer', sectionId: 'site-walk-capture', note: 'Undertone + LRV cross-reference & 1-tap AI → Visualizer handoff' },
   { term: 'Price Book (15 Services)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'Flat per-SF and day-rate services in /services' },
   { term: 'Project Handoff (projectId)', chapterId: 'contacts-projects', sectionId: 'project-workspace', note: 'Created at site walk; auto-links project & client' },
   { term: 'PWA Instant Updates', chapterId: 'quick-reference', sectionId: 'field-troubleshooting', note: 'skipWaiting & clientsClaim service-worker refresh' },
@@ -527,6 +529,13 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
 ];
 
 export const HANDBOOK_CHANGELOG: HandbookChangelogEntry[] = [
+  {
+    date: '2026-11-27',
+    version: 'v1.6',
+    summary:
+      'Added Designer Paint Fan-Deck Cross-Reference (31 popular SW/BM/Behr/DE/F&B colors including Swiss Coffee multi-brand trap & Shoji White) with CIELAB perceptual Delta-E matching in Finish Visualizer, plus AI Assistant color consultation with 1-tap Gold "Visualize on Surface" handoff buttons.',
+    chaptersUpdated: ['04'],
+  },
   {
     date: '2026-11-27',
     version: 'v1.5',

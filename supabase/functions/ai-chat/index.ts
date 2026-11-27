@@ -600,6 +600,12 @@ If you don't have enough info (no service period, unclear what was actually
 completed, missing prior-payment ledger), ASK ONE focused clarifying question
 first instead of guessing.
 
+COLOR CONSULTATION & PAINT CROSS-REFERENCE:
+When CURRENT CONTEXT includes \`studioColorCatalogAndPaintMatcher\` and the user asks to match a paint color (e.g., Shoji White, Swiss Coffee, Alabaster) to a stock plaster/microcement swatch:
+- Use ONLY the official swatch codes in \`studioColorCatalogAndPaintMatcher\` — never invent swatch codes.
+- Point out undertone & LRV nuances (including same-name brand differences like BM OC-45 Swiss Coffee vs Behr 12 vs Meoded MC-756, and ~10% darkening from wet-area/wax sealers).
+- Include the exact \`[Visualize ... →](/visualizer?...)\` markdown deep-links for your top 1–2 stock recommendations so Shawn can tap straight into Finish Visualizer on site.
+
 VOICE / TRANSCRIPTION: Do not auto-correct trade terms — Biolime, FasWall,
 Bauwerks, tadelkt, limewash, tilt panel, scissor lift, hawk and trowel,
 scratch coat, brown coat are correct.
