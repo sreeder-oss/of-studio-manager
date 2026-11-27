@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   default_deposit_pct: 0.5,
   minimum_charge: 850,
   default_waste_factor: 0.12,
-  sundries_pct: 0,
+  sundries_pct: 0.1,
   mobilization_fee: 0,
   terms_text: DEFAULT_TERMS_TEXT,
   company_name: COMPANY_INFO.name,

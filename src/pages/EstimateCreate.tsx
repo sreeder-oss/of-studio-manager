@@ -1,7 +1,7 @@
 import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, Search, Trash2, Shield, UserPlus } from 'lucide-react';
+import { ChevronLeft, Search, Trash2, Shield, UserPlus, Clock } from 'lucide-react';
 import { QuickContactDialog, QuickProjectDialog } from '@/components/QuickCreateDialogs';
 
 const NEW_PROJECT = '__new_project__';
@@ -10,7 +10,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { useSaveEstimate, useEstimate } from '@/hooks/useEstimates';
 import { useSystems } from '@/hooks/useSystems';
 import { useServices } from '@/hooks/useServices';
-import { priceLines, materialUnits, materialCost, r2, type EstimateLine } from '@/lib/pricing';
+import { priceLines, materialUnits, materialCost, materialHandling, r2, type EstimateLine } from '@/lib/pricing';
 import { filterEstimateClientCandidates } from '@/lib/contactFilters';
 import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSettings';
 import { toast } from 'sonner';
@@ -82,6 +82,8 @@ const EstimateCreate: React.FC = () => {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [otherLines, setOtherLines] = useState<OtherLine[]>([]);
   const [notes, setNotes] = useState('');
+  const [durationEstimate, setDurationEstimate] = useState('');
+  const [handlingRate, setHandlingRate] = useState(10);
   const [taxRate, setTaxRate] = useState(0);
   const [showTaxInput, setShowTaxInput] = useState(false);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
@@ -89,6 +91,8 @@ const EstimateCreate: React.FC = () => {
   useEffect(() => {
     if (isEdit || defaultsApplied || !settingsLoaded) return;
     setTaxRate(+(Number(settings.default_tax_rate) * 100).toFixed(4));
+    const configuredHandling = Number(settings.sundries_pct ?? 0.1);
+    setHandlingRate(+(configuredHandling * 100).toFixed(2));
     setNotes(`${pctLabel(settings.default_deposit_pct)}% deposit required to schedule.`);
     setDefaultsApplied(true);
   }, [isEdit, defaultsApplied, settingsLoaded, settings]);
@@ -103,11 +107,21 @@ const EstimateCreate: React.FC = () => {
     setSelectedContactId(existing.contact_id || '');
     setSelectedProjectId(existing.project_id || '');
     const items = Array.isArray(existing.line_items) ? (existing.line_items as any[]) : [];
+    const savedDuration = items.find((li: any) => li?.duration_estimate)?.duration_estimate;
+    if (savedDuration) setDurationEstimate(String(savedDuration));
+    const handlingItem = items.find((li: any) => li?.id === 'material-handling');
+    if (handlingItem) {
+      const pctMatch = String(handlingItem.description || '').match(/(\d+(?:\.\d+)?)%/);
+      setHandlingRate(pctMatch ? parseFloat(pctMatch[1]) : 10);
+    } else {
+      setHandlingRate(0);
+    }
     const isNew = items.some((li: any) => li && (li.kind === 'service' || li.kind === 'materials' || li.kind === 'other'));
     if (isNew) {
       const byArea = new Map<string, Area>();
       const others: OtherLine[] = [];
       for (const li of items) {
+        if (li.id === 'material-handling') continue;
         if (li.kind === 'other') { others.push({ id: String(li.id ?? newId()), description: li.description ?? '', amount: Number(li.amount ?? 0) }); continue; }
         const aid = String(li.area_id ?? li.id ?? newId());
         const a = byArea.get(aid) ?? { ...emptyArea(), id: aid, name: li.area_name ?? '' };
@@ -195,10 +209,21 @@ const EstimateCreate: React.FC = () => {
     setOtherLines(prev => prev.map(l => (l.id === id ? { ...l, ...patch } : l)));
 
   const taxFraction = (Number(taxRate) || 0) / 100;
+  const handlingFraction = Math.max(0, Number(handlingRate) || 0) / 100;
+
+  const hasWaterproofScope = useMemo(() => {
+    const wpRegex = /tadelakt|microcement|shower|waterproof/i;
+    return areas.some((a) => {
+      const svc = services.find((s) => s.id === a.service_id);
+      const sys = systems.find((s) => s.id === a.system_id);
+      return wpRegex.test(svc?.name || '') || wpRegex.test(sys?.name || '') || wpRegex.test(a.name || '');
+    });
+  }, [areas, services, systems]);
 
   /** Flatten areas + other lines into priced estimate lines. */
   const rawLines = useMemo<EstimateLine[]>(() => {
     const out: EstimateLine[] = [];
+    let rawMaterialsTotal = 0;
     for (const a of areas) {
       const svc = services.find(s => s.id === a.service_id);
       if (!svc) continue;
@@ -214,20 +239,39 @@ const EstimateCreate: React.FC = () => {
         const sf = unit === 'SF' ? Number(a.qty) || 0 : Number(a.materials_sf) || 0;
         const units = materialUnits(sys as any, sf, settings.default_waste_factor);
         const calc = materialCost(sys as any, sf, settings.default_waste_factor);
+        const matAmt = a.materials_amount != null ? a.materials_amount : calc;
+        rawMaterialsTotal = r2(rawMaterialsTotal + Number(matAmt || 0));
         out.push({
           id: `${a.id}-mat`, kind: 'materials', service_id: null, system_id: a.system_id,
           description: `Materials at cost${sys ? ` — ${sys.name}` : ''}`,
           qty: units, unit: 'lot', rate: Number(sys?.cost_per_unit) || 0,
-          amount: a.materials_amount != null ? a.materials_amount : calc, note: null,
+          amount: matAmt, note: null,
           area_id: a.id, area_name: a.name, ...(unit === 'day' ? { materials_sf: sf } : {}),
         } as EstimateLine);
+      }
+    }
+    if (rawMaterialsTotal > 0 && handlingFraction > 0) {
+      const handlingAmt = materialHandling(rawMaterialsTotal, handlingFraction);
+      if (handlingAmt > 0) {
+        out.push({
+          id: 'material-handling',
+          kind: 'other',
+          service_id: null,
+          system_id: null,
+          description: `Material Handling & Procurement (${+(handlingFraction * 100).toFixed(2)}%)`,
+          qty: 1,
+          unit: 'lot',
+          rate: handlingAmt,
+          amount: handlingAmt,
+          note: null,
+        });
       }
     }
     for (const l of otherLines) {
       out.push({ id: l.id, kind: 'other', service_id: null, system_id: null, description: l.description, qty: 1, unit: 'lot', rate: Number(l.amount) || 0, amount: Number(l.amount) || 0, note: null });
     }
     return out;
-  }, [areas, otherLines, services, systems, settings.default_waste_factor]);
+  }, [areas, otherLines, services, systems, settings.default_waste_factor, handlingFraction]);
 
   const pricing = useMemo(
     () => priceLines(rawLines, services.map(s => ({ id: s.id, minimum_charge: Number(s.minimum_charge) })), taxFraction),
@@ -242,11 +286,15 @@ const EstimateCreate: React.FC = () => {
       toast.error('Select a client first');
       return;
     }
-    const items = pricing.lines.filter(l => l.amount !== 0 || (l.kind === 'service' && l.qty > 0));
-    if (!items.length) {
+    const filteredItems = pricing.lines.filter(l => l.amount !== 0 || (l.kind === 'service' && l.qty > 0));
+    if (!filteredItems.length) {
       toast.error('Add an area with a service, or a line item');
       return;
     }
+    const cleanDuration = durationEstimate.trim();
+    const items = filteredItems.map((item, idx) =>
+      idx === 0 && cleanDuration ? { ...item, duration_estimate: cleanDuration } : item
+    );
     try {
       const sfTotal = r2(items.filter(l => l.kind === 'service' && l.unit === 'SF').reduce((s, l) => s + l.qty, 0));
       const firstSystem = items.find(l => l.kind === 'materials')?.system_id ?? null;
@@ -505,6 +553,23 @@ const EstimateCreate: React.FC = () => {
       </div>
 
       <div className="bg-card p-4 rounded-xl space-y-2.5 border border-border">
+        {pricing.materials_total > 0 && (
+          <div className="flex justify-between items-center text-[11px]">
+            <div>
+              <span className="text-muted-foreground font-bold uppercase tracking-widest">Material Handling (%)</span>
+              <p className="text-[9px] text-muted-foreground/80">Fair procurement/handling fee on ${pricing.materials_total.toLocaleString(undefined, { minimumFractionDigits: 2 })} materials</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="number" inputMode="decimal" min="0" max="50" step="0.5"
+                className="bg-accent border border-border rounded px-2 py-1 text-right w-16 text-xs text-foreground outline-none"
+                value={handlingRate}
+                onChange={e => setHandlingRate(e.target.value === '' ? 0 : Math.max(0, parseFloat(e.target.value)))} />
+              <span className="text-[10px] font-mono text-primary w-16 text-right">
+                +${materialHandling(pricing.materials_total, handlingFraction).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        )}
         {showTaxInput || taxRate > 0 ? (
           <div className="flex justify-between items-center text-[11px]">
             <span className="text-muted-foreground font-bold uppercase tracking-widest">Sales Tax (%)</span>
@@ -546,6 +611,51 @@ const EstimateCreate: React.FC = () => {
           <span>{pctLabel(settings.default_deposit_pct)}% Deposit</span>
           <span>${deposit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
         </div>
+      </div>
+
+      {/* Solo Craftsman Duration Estimator */}
+      <div className="bg-card p-4 rounded-xl border border-border space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <Clock size={13} className="text-[#d9a441]" />
+            <label className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
+              Estimated Duration (Solo Craftsman)
+            </label>
+          </div>
+          <span className="text-[9px] text-muted-foreground/75">Printed on Estimate PDF</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { label: '2.5–3 days · Vent Hood / Fireplace', value: '2.5–3 days (solo)' },
+            { label: '3–5 days · Feature Wall / Room', value: '3–5 days (solo)' },
+            { label: '7–10 days · Waterproof Finish', value: '7–10 days (solo, multi-coat & cure)' },
+          ].map((preset) => (
+            <button
+              key={preset.value}
+              type="button"
+              onClick={() => setDurationEstimate(preset.value)}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+                durationEstimate === preset.value
+                  ? 'bg-[#d9a441]/15 text-[#d9a441] border-[#d9a441]/40'
+                  : 'bg-accent/60 text-muted-foreground border-border hover:text-foreground'
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={durationEstimate}
+          onChange={(e) => setDurationEstimate(e.target.value)}
+          placeholder="e.g. 2.5–3 days, or 7–10 days for waterproof cure..."
+          className="w-full bg-accent border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none focus:ring-1 focus:ring-primary"
+        />
+        {hasWaterproofScope && !/7|8|9|10/i.test(durationEstimate) && (
+          <p className="text-[10px] text-[#d9a441]">
+            Waterproof finish detected — solo jobs typically run 7–10 days including cure stages.
+          </p>
+        )}
       </div>
 
       <div>

@@ -18,13 +18,14 @@ import {
 import { Check, Brain, Key, Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
-type PctKey = 'default_tax_rate' | 'default_deposit_pct' | 'default_waste_factor';
+type PctKey = 'default_tax_rate' | 'default_deposit_pct' | 'default_waste_factor' | 'sundries_pct';
 type MoneyKey = 'minimum_charge' | 'mobilization_fee';
 
 const PCT_FIELDS: [PctKey, string, string][] = [
   ['default_tax_rate', 'Sales Tax %', 'Default is 0%. Hidden on estimates & invoices until set > 0.'],
   ['default_deposit_pct', 'Deposit Requested %', 'Standard upfront deposit required to schedule work.'],
   ['default_waste_factor', 'Material Waste Factor %', 'Standard 12% allowance for cuts, mixing loss, and surface prep.'],
+  ['sundries_pct', 'Material Handling %', 'Fair handling & procurement fee on materials (default 10%, below standard 20–30%).'],
 ];
 const MONEY_FIELDS: [MoneyKey, string, string][] = [
   ['minimum_charge', 'Plaster Minimum Charge ($)', 'Minimum charge for plaster work (multi-day staging/cure process) + materials.'],
@@ -146,7 +147,6 @@ const Settings: React.FC = () => {
         ...(out as S),
         default_overhead_pct: 0,
         default_profit_pct: 0,
-        sundries_pct: 0,
         company_name: f.company_name.trim(),
         company_address: f.company_address?.trim() || null,
         license_number: f.license_number?.trim() || null,

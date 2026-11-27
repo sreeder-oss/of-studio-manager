@@ -68,6 +68,11 @@ export function materialCost(system: PricingSystem | null, area_sf: number, defa
   return r2(units * num(system?.cost_per_unit));
 }
 
+/** Fair material handling / procurement fee (e.g. 10% = 0.10). */
+export function materialHandling(materialsCost: number, handling_pct = 0): number {
+  return r2(Math.max(0, num(materialsCost)) * Math.max(0, num(handling_pct)));
+}
+
 /* ------------------------------------------------------------------ */
 /* Price-book line pricing                                              */
 /* ------------------------------------------------------------------ */
@@ -90,6 +95,8 @@ export interface EstimateLine {
   area_id?: string | null;
   area_name?: string | null;
   materials_included?: boolean;
+  /** Optional solo-craftsman duration estimate stored on the primary line item. */
+  duration_estimate?: string | null;
 }
 
 export interface PriceBookService {

@@ -206,6 +206,23 @@ const Outreach: React.FC = () => {
     }
   };
 
+  const handleConvertToClient = async (e: React.MouseEvent, contact: DbContact) => {
+    e.stopPropagation();
+    try {
+      await saveContact.mutateAsync({
+        ...contact,
+        type: 'Client',
+        status: 'Active',
+        notes: contact.notes
+          ? `${contact.notes}\n[Converted from Outreach on ${new Date().toLocaleDateString()}]`
+          : `[Converted from Outreach on ${new Date().toLocaleDateString()}]`,
+      });
+      toast.success(`${contact.name} converted to Active Client (moved to Contacts)`);
+    } catch {
+      toast.error('Failed to convert lead');
+    }
+  };
+
   const handlePromoteToClient = async (e: React.MouseEvent, contact: DbContact) => {
     e.stopPropagation();
     try {
@@ -723,6 +740,16 @@ const Outreach: React.FC = () => {
                   >
                     <Mail size={13} />
                     <span>{sentInfo.sent ? 'Follow Up' : 'Email Info'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleConvertToClient(e, contact)}
+                    className="px-2.5 py-1.5 rounded-lg bg-[#d9a441]/12 hover:bg-[#d9a441]/22 text-[#d9a441] border border-[#d9a441]/30 text-xs font-semibold flex items-center gap-1.5 transition-all"
+                    title="Convert to Active Client (keeps email history & moves to Contacts)"
+                  >
+                    <UserCheck size={13} />
+                    <span>To Client</span>
                   </button>
 
                   <button

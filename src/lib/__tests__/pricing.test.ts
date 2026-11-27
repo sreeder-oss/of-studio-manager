@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { priceLines, materialCost, materialUnits, type EstimateLine } from '@/lib/pricing';
+import { priceLines, materialCost, materialUnits, materialHandling, type EstimateLine } from '@/lib/pricing';
 
 const line = (p: Partial<EstimateLine>): EstimateLine => ({
   id: 'x', kind: 'service', service_id: null, system_id: null, description: '', qty: 0, unit: 'SF', rate: 0, amount: 0, note: null, ...p,
@@ -32,6 +32,11 @@ describe('priceLines', () => {
     const p = priceLines([line({ kind: 'materials', amount: 336, unit: 'lot' })], services, 0);
     expect(p.materials_total).toBe(336);
     expect(p.subtotal).toBe(336);
+  });
+  it('materialHandling computes fair 10% procurement fee', () => {
+    expect(materialHandling(336, 0.1)).toBe(33.6);
+    expect(materialHandling(0, 0.1)).toBe(0);
+    expect(materialHandling(500, 0)).toBe(0);
   });
   it("'other' line at face value", () => {
     const p = priceLines([line({ kind: 'other', amount: 123.45, unit: 'lot' })], services, 0);

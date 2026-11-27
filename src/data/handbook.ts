@@ -56,7 +56,7 @@ export interface HandbookChangelogEntry {
   chaptersUpdated: string[];
 }
 
-export const HANDBOOK_VERSION = 'v1.1';
+export const HANDBOOK_VERSION = 'v1.2';
 export const HANDBOOK_LAST_UPDATED = 'November 27, 2026';
 
 export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
@@ -165,7 +165,7 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
         bullets: [
           'Android uses native Gmail intent targeting com.google.android.gm; iOS uses googlegmail:///co; Desktop opens standard Gmail web compose (view=cm&fs=1&tf=cm).',
           'Use the 1-tap Copy To and Copy Subject buttons if you prefer composing manually or if a long email body approaches URL length limits.',
-          'Once a lead replies and becomes a real opportunity, promote them straight into a new Estimate or active Client.',
+          'Once a lead replies, tap To Client to convert them in-place (preserving email history and moving them to /contacts), or tap Promote → Estimate to convert and jump straight into a new quote.',
         ],
         callout: {
           tone: 'field',
@@ -322,7 +322,7 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
         bullets: [
           'AI Assistant (ai-chat) runs at temperature 0 and only extracts structured scope (rooms, square footage, services) via the emit_scope tool.',
           'All pricing math runs client-side in src/lib/pricing.ts using your live Price Book and Systems Library.',
-          'Labor is a flat rate per SF or per day from Services (profit is built into that rate). Materials pass through at cost using Coverage × Coats × (1 + Waste Factor) with no hidden markup.',
+          'Labor is a flat rate per SF or per day from Services (profit is built into that rate). Materials pass through using Coverage × Coats × (1 + Waste Factor), plus a fair configurable Material Handling % (default 10%, below standard 20–30%).',
         ],
         callout: {
           tone: 'rule',
@@ -376,7 +376,8 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
           'Start from /estimates/new, from a Project (auto-links projectId), or by describing the room to the Floating AI Assistant.',
         steps: [
           'Select the Client (and optional Project). Active Clients appear by default; toggle Include Outreach Leads if quoting a prospect.',
-          'Add Service lines from your Price Book and pair Material Systems as needed — totals, waste, minimums, and tax calculate live.',
+          'Add Service lines from your Price Book and pair Material Systems as needed — totals, waste, 10% Material Handling, minimums, and tax calculate live.',
+          'Pick a Solo Craftsman Duration preset (2.5–3 days for Vent Hoods, 3–5 days for Feature Walls, 7–10 days for Waterproof Finishes) or type a custom timeline — it prints right on the Estimate PDF.',
           'Review the Estimate Detail (/estimates/:id) and export the Darkest Navy Blue (#1a2332) branded PDF to send to the client.',
         ],
       },
@@ -509,18 +510,27 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
   { term: 'Instagram Email Signature', chapterId: 'outreach-hub', sectionId: 'gmail-handoff', note: 'Organic Finishes logo & Instagram link in outreach emails' },
   { term: 'Lead Scout Playbooks', chapterId: 'outreach-hub', sectionId: 'lead-scout-and-verifier', note: 'Onboard AI lead discovery with dedupe & junk guard' },
   { term: 'Living Documentation Rule', chapterId: 'quick-reference', sectionId: 'living-handbook-rule', note: 'Handbook updates in the same PR as every feature' },
+  { term: 'Material Handling (10%)', chapterId: 'pricing-and-systems', sectionId: 'deterministic-rule', note: 'Fair procurement fee on materials (Settings & EstimateCreate)' },
   { term: 'Minimums (2026–2027)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'Synced job minimums in Settings & Price Book' },
   { term: 'Price Book (15 Services)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'Flat per-SF and day-rate services in /services' },
   { term: 'Project Handoff (projectId)', chapterId: 'contacts-projects', sectionId: 'project-workspace', note: 'Created at site walk; auto-links project & client' },
   { term: 'PWA Instant Updates', chapterId: 'quick-reference', sectionId: 'field-troubleshooting', note: 'skipWaiting & clientsClaim service-worker refresh' },
   { term: 'Receipts & Job Costing', chapterId: 'receipts-tax', sectionId: 'capturing-receipts', note: 'Snap & categorize receipts linked to projects' },
   { term: 'Sample Board Presets', chapterId: 'finish-visualizer', sectionId: 'site-walk-capture', note: '4 real Organic Finishes boards built into Visualizer' },
+  { term: 'Solo Duration Estimator', chapterId: 'estimates-invoices', sectionId: 'creating-estimates', note: '2.5–3d hoods, 3–5d walls, 7–10d waterproof printed on PDF' },
   { term: 'Systems Library (16 Systems)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'SureCrete, Meoded, Vasari & Mineral coverage/costs' },
   { term: 'Tax Summary (/reports/tax)', chapterId: 'receipts-tax', sectionId: 'tax-summary-report', note: 'Annual revenue vs. deductible expenses report' },
   { term: 'Travel Policy (1.5 hr Radius)', chapterId: 'studio-overview', sectionId: 'brand-and-settings', note: 'Sand Springs / Tulsa base; hotel + food beyond 1.5 hrs' },
 ];
 
 export const HANDBOOK_CHANGELOG: HandbookChangelogEntry[] = [
+  {
+    date: '2026-11-27',
+    version: 'v1.2',
+    summary:
+      'Shipped Solo Craftsman Duration Estimator (2.5–3d, 3–5d, 7–10d presets printed on PDF), configurable Fair Material Handling % (default 10% in Settings & EstimateCreate), and 1-click To Client in-place conversion in Outreach.',
+    chaptersUpdated: ['02', '05', '06'],
+  },
   {
     date: '2026-11-27',
     version: 'v1.1',
