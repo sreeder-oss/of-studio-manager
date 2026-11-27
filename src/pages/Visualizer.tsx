@@ -43,6 +43,8 @@ import {
   type TextureDepth,
   type TrowelMovement,
 } from '@/lib/finishVisualizer';
+import { getSwatchesForVisualizerSystem, type ColorSwatch } from '@/data/colorCatalog';
+import { Palette } from 'lucide-react';
 
 interface WalkThroughShot {
   id: string;
@@ -60,6 +62,7 @@ interface RenderIteration {
   sheen: SurfaceSheen;
   movement: TrowelMovement;
   texture: TextureDepth;
+  swatchLabel?: string | null;
   modelUsed: string;
   createdAt: string;
 }
@@ -134,7 +137,20 @@ const Visualizer: React.FC = () => {
   const [movement, setMovement] = useState<TrowelMovement>('Medium');
   const [sheen, setSheen] = useState<SurfaceSheen>('Dead Flat Matte');
   const [texture, setTexture] = useState<TextureDepth>('Light Trowel');
+  const [selectedSwatch, setSelectedSwatch] = useState<ColorSwatch | null>(null);
   const [refinementNote, setRefinementNote] = useState('');
+
+  const availableSwatches = useMemo(
+    () => getSwatchesForVisualizerSystem(finishSystem),
+    [finishSystem],
+  );
+
+  // Clear swatch automatically if user switches to a finish system that doesn't support it
+  useEffect(() => {
+    if (selectedSwatch && !availableSwatches.some((s) => s.id === selectedSwatch.id)) {
+      setSelectedSwatch(null);
+    }
+  }, [availableSwatches, selectedSwatch]);
 
   // Generation & saving state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -174,9 +190,10 @@ const Visualizer: React.FC = () => {
         sheen,
         texture,
         hasInspirationImage: Boolean(inspirationUrl),
+        swatch: selectedSwatch,
         refinementNote,
       }),
-    [surfaceTarget, finishSystem, movement, sheen, texture, inspirationUrl, refinementNote],
+    [surfaceTarget, finishSystem, movement, sheen, texture, inspirationUrl, selectedSwatch, refinementNote],
   );
 
   const hasOpenRouterKey = Boolean(getVisualizerOpenRouterKey());
@@ -306,6 +323,7 @@ const Visualizer: React.FC = () => {
         sheen,
         movement,
         texture,
+        swatchLabel: selectedSwatch ? `${selectedSwatch.manufacturer} ${selectedSwatch.code} ${selectedSwatch.name}` : null,
         modelUsed,
         createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
@@ -369,7 +387,13 @@ const Visualizer: React.FC = () => {
         beforeUrl: activeIteration.beforeUrl,
         afterUrl: activeIteration.afterUrl,
         title: proj ? `${proj.name} — ${activeIteration.surfaceTarget}` : `${activeIteration.surfaceTarget} Finish Concept`,
-        recipeLine: `${activeIteration.system}  •  ${activeIteration.sheen}  •  ${activeIteration.movement} Movement  •  ${activeIteration.texture}`,
+        recipeLine: [
+          activeIteration.swatchLabel,
+          activeIteration.system,
+          activeIteration.sheen,
+          `${activeIteration.movement} Movement`,
+          activeIteration.texture,
+        ].filter(Boolean).join('  •  '),
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -760,6 +784,66 @@ const Visualizer: React.FC = () => {
                 ))}
               </div>
             </div>
+
+            {/* System-filtered Manufacturer Stock Palette (Romabio) */}
+            {availableSwatches.length > 0 && (
+              <div className="space-y-2 rounded-xl border border-border bg-background/60 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#d9a441] flex items-center gap-1.5">
+                    <Palette size={12} /> Romabio Factory Swatches ({availableSwatches.length})
+                  </span>
+                  {selectedSwatch && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSwatch(null)}
+                      className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                    >
+                      Clear swatch
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {availableSwatches.map((sw) => {
+                    const active = selectedSwatch?.id === sw.id;
+                    return (
+                      <button
+                        key={sw.id}
+                        type="button"
+                        onClick={() => setSelectedSwatch(active ? null : sw)}
+                        title={`${sw.code} · ${sw.undertone} · LRV ${sw.lrvApprox} — ${sw.sheenBehavior}`}
+                        className={`flex items-center gap-2 p-1.5 rounded-lg border text-left transition-all ${
+                          active
+                            ? 'bg-[#d9a441]/15 border-[#d9a441]/60 ring-1 ring-[#d9a441]/40'
+                            : 'bg-card/70 border-border hover:border-primary/40'
+                        }`}
+                      >
+                        <span
+                          className="h-6 w-6 rounded-md border border-black/25 shrink-0 shadow-inner"
+                          style={{ backgroundColor: sw.hex }}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold text-foreground truncate">{sw.name}</p>
+                          <p className="text-[8.5px] font-mono text-muted-foreground truncate">{sw.code}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedSwatch && (
+                  <div className="text-[10px] text-muted-foreground bg-card/80 border border-border/70 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-foreground">
+                        {selectedSwatch.code} · {selectedSwatch.name} ({selectedSwatch.undertone})
+                      </span>
+                      <span className="font-mono text-[9px] text-[#d9a441] shrink-0">
+                        LRV ~{selectedSwatch.lrvApprox} · {selectedSwatch.tintBaseLimit === 'light-to-medium' ? 'Light–Med Base' : 'Full Spectrum'}
+                      </span>
+                    </div>
+                    <p className="text-[9.5px] leading-snug">{selectedSwatch.sheenBehavior}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <PillRow<TrowelMovement>
               label="Trowel Movement"

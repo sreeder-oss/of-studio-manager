@@ -144,6 +144,15 @@ export const OF_SAMPLE_PRESETS: OfsSamplePreset[] = [
   },
 ];
 
+export interface VisualizerSwatchRef {
+  manufacturer: string;
+  code: string;
+  name: string;
+  hex: string;
+  undertone: string;
+  sheenBehavior: string;
+}
+
 export interface CompilePromptInput {
   surfaceTarget: SurfaceTarget;
   finishSystem: FinishSystem;
@@ -151,6 +160,7 @@ export interface CompilePromptInput {
   sheen: SurfaceSheen;
   texture: TextureDepth;
   hasInspirationImage: boolean;
+  swatch?: VisualizerSwatchRef | null;
   refinementNote?: string;
 }
 
@@ -170,14 +180,20 @@ const SURFACE_PRESERVATION: Record<SurfaceTarget, string> = {
 export function compileFinishPrompt(input: CompilePromptInput): string {
   const sysMeta = FINISH_SYSTEMS.find((s) => s.id === input.finishSystem);
   const movementLabel = sysMeta?.isBrushApplied ? 'Brush clouding / movement' : 'Movement / variation';
+  const swatchInstruction = input.swatch
+    ? `Factory-formulated color target: ${input.swatch.manufacturer} ${input.swatch.code} "${input.swatch.name}" (base hex ${input.swatch.hex}, undertone: ${input.swatch.undertone}). Light & texture behavior: ${input.swatch.sheenBehavior}`
+    : '';
   const parts = [
     `Edit Photo 1 (the real jobsite space) to show an authentic ${input.finishSystem} finish applied to the ${input.surfaceTarget}.`,
     sysMeta ? `Material & application physics: ${sysMeta.physicsPrompt}` : '',
     SURFACE_PRESERVATION[input.surfaceTarget],
     `Finish parameters: ${movementLabel} = ${input.movement}; Surface sheen = ${input.sheen}; Surface profile = ${input.texture}.`,
+    swatchInstruction,
     input.hasInspirationImage
       ? `Use Photo 2 (the Client Inspiration / Sample Board reference) for color tone, mineral depth, and surface character — adapt it realistically to Photo 1's exact architectural scale, perspective, and ambient daylight.`
-      : `Use a refined, natural architectural mineral tone suited to the room's existing lighting.`,
+      : input.swatch
+        ? `Match the specified ${input.swatch.manufacturer} ${input.swatch.name} mineral color realistically to Photo 1's existing ambient daylight and shadows.`
+        : `Use a refined, natural architectural mineral tone suited to the room's existing lighting.`,
     `Photorealism rules: Render genuine architectural surface micro-detail and realistic light falloff. Do NOT make it look like flat latex paint, CGI, or plastic 3D rendering. Preserve the exact camera angle, lens geometry, and room proportions of Photo 1.`,
   ].filter(Boolean);
 

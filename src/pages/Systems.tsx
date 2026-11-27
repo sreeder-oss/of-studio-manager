@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, X, Sparkles, Search, FileText, Info, Layers, Check } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Sparkles, Search, FileText, Info, Layers, Check, Palette } from 'lucide-react';
 import { useSystems, useSaveSystem, useDeleteSystem, SEED_SYSTEMS, type DbSystem } from '@/hooks/useSystems';
+import { getSwatchesForSystem } from '@/data/colorCatalog';
 import { toast } from 'sonner';
 
 const empty: Partial<DbSystem> = {
@@ -309,6 +310,38 @@ const Systems: React.FC = () => {
               <div>Sundries: <span className="font-bold text-foreground">{((viewingTds.sundries_pct ?? 0.05) * 100).toFixed(0)}%</span></div>
               <div>Min Charge: <span className="font-bold text-foreground">${viewingTds.min_charge ?? 'None'}</span></div>
             </div>
+
+            {(() => {
+              const swatches = getSwatchesForSystem(viewingTds.manufacturer, viewingTds.name);
+              if (swatches.length === 0) return null;
+              const lightMedOnly = viewingTds.name.toLowerCase().includes('lime slurry');
+              return (
+                <div className="rounded-xl border border-border bg-card/70 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#d9a441] flex items-center gap-1.5">
+                      <Palette size={12} /> Factory Stock Palette ({swatches.length})
+                    </span>
+                    <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-background border border-border text-muted-foreground">
+                      {lightMedOnly ? 'Light-to-Medium Bases Only' : 'Native Mineral Swatches'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {swatches.map((sw) => (
+                      <div key={sw.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-background/70 border border-border/70">
+                        <span
+                          className="h-6 w-6 rounded-md border border-black/20 shrink-0"
+                          style={{ backgroundColor: sw.hex }}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold text-foreground truncate">{sw.name}</p>
+                          <p className="text-[9px] font-mono text-muted-foreground truncate">{sw.code} · LRV {sw.lrvApprox}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="pt-2 flex justify-end gap-2">
               <button

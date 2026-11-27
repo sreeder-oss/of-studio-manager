@@ -1,7 +1,7 @@
 import { parseLocalDate, todayLocal, daysFromTodayLocal } from '@/lib/utils';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, Search, Trash2, Shield, UserPlus, Clock } from 'lucide-react';
+import { ChevronLeft, Search, Trash2, Shield, UserPlus, Clock, Palette } from 'lucide-react';
 import { QuickContactDialog, QuickProjectDialog } from '@/components/QuickCreateDialogs';
 
 const NEW_PROJECT = '__new_project__';
@@ -11,6 +11,7 @@ import { useSaveEstimate, useEstimate } from '@/hooks/useEstimates';
 import { useSystems } from '@/hooks/useSystems';
 import { useServices } from '@/hooks/useServices';
 import { priceLines, materialUnits, materialCost, materialHandling, r2, type EstimateLine } from '@/lib/pricing';
+import { CUSTOM_MATCH_DISCLAIMER, CUSTOM_MATCH_FEE, CUSTOM_MATCH_LINE_ID } from '@/data/colorCatalog';
 import { filterEstimateClientCandidates } from '@/lib/contactFilters';
 import { useSettings, renderTerms, depositAmount, pctLabel } from '@/hooks/useSettings';
 import { toast } from 'sonner';
@@ -84,6 +85,7 @@ const EstimateCreate: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [durationEstimate, setDurationEstimate] = useState('');
   const [handlingRate, setHandlingRate] = useState(10);
+  const [customMatch, setCustomMatch] = useState(false);
   const [taxRate, setTaxRate] = useState(0);
   const [showTaxInput, setShowTaxInput] = useState(false);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
@@ -116,12 +118,13 @@ const EstimateCreate: React.FC = () => {
     } else {
       setHandlingRate(0);
     }
+    setCustomMatch(items.some((li: any) => li?.id === CUSTOM_MATCH_LINE_ID));
     const isNew = items.some((li: any) => li && (li.kind === 'service' || li.kind === 'materials' || li.kind === 'other'));
     if (isNew) {
       const byArea = new Map<string, Area>();
       const others: OtherLine[] = [];
       for (const li of items) {
-        if (li.id === 'material-handling') continue;
+        if (li.id === 'material-handling' || li.id === CUSTOM_MATCH_LINE_ID) continue;
         if (li.kind === 'other') { others.push({ id: String(li.id ?? newId()), description: li.description ?? '', amount: Number(li.amount ?? 0) }); continue; }
         const aid = String(li.area_id ?? li.id ?? newId());
         const a = byArea.get(aid) ?? { ...emptyArea(), id: aid, name: li.area_name ?? '' };
@@ -267,11 +270,25 @@ const EstimateCreate: React.FC = () => {
         });
       }
     }
+    if (customMatch) {
+      out.push({
+        id: CUSTOM_MATCH_LINE_ID,
+        kind: 'other',
+        service_id: null,
+        system_id: null,
+        description: 'Custom Paint Match Lab Fee (SW/BM Drawdown +7–10 Days)',
+        qty: 1,
+        unit: 'lot',
+        rate: CUSTOM_MATCH_FEE,
+        amount: CUSTOM_MATCH_FEE,
+        note: null,
+      });
+    }
     for (const l of otherLines) {
       out.push({ id: l.id, kind: 'other', service_id: null, system_id: null, description: l.description, qty: 1, unit: 'lot', rate: Number(l.amount) || 0, amount: Number(l.amount) || 0, note: null });
     }
     return out;
-  }, [areas, otherLines, services, systems, settings.default_waste_factor, handlingFraction]);
+  }, [areas, otherLines, services, systems, settings.default_waste_factor, handlingFraction, customMatch]);
 
   const pricing = useMemo(
     () => priceLines(rawLines, services.map(s => ({ id: s.id, minimum_charge: Number(s.minimum_charge) })), taxFraction),
@@ -588,6 +605,38 @@ const EstimateCreate: React.FC = () => {
             </button>
           </div>
         )}
+        <div className="flex justify-between items-center text-[11px] pt-1">
+          <div className="flex items-center gap-1.5">
+            <Palette size={13} className="text-[#d9a441]" />
+            <div>
+              <span className="text-muted-foreground font-bold uppercase tracking-widest">Custom Paint Match (SW/BM)</span>
+              <p className="text-[9px] text-muted-foreground/80">+$150 lab fee · +7–10 days drawdown &amp; signed board approval</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !customMatch;
+              setCustomMatch(next);
+              if (next) {
+                setNotes((prev) =>
+                  prev.includes('Custom Paint Match Policy')
+                    ? prev
+                    : [prev.trim(), CUSTOM_MATCH_DISCLAIMER].filter(Boolean).join('\n\n')
+                );
+              } else {
+                setNotes((prev) => prev.replace(CUSTOM_MATCH_DISCLAIMER, '').replace(/\n{3,}/g, '\n\n').trim());
+              }
+            }}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all ${
+              customMatch
+                ? 'bg-[#d9a441]/18 text-[#d9a441] border-[#d9a441]/50'
+                : 'bg-accent text-muted-foreground border-border hover:text-foreground'
+            }`}
+          >
+            {customMatch ? 'Added (+$150)' : '+ Add $150'}
+          </button>
+        </div>
         <div className="flex justify-between items-center text-[11px]">
           <span className="text-muted-foreground font-bold uppercase tracking-widest">Valid Until</span>
           <input type="date" className="bg-accent border border-border rounded px-2 py-1 text-xs text-foreground outline-none"

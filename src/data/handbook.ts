@@ -56,7 +56,7 @@ export interface HandbookChangelogEntry {
   chaptersUpdated: string[];
 }
 
-export const HANDBOOK_VERSION = 'v1.3';
+export const HANDBOOK_VERSION = 'v1.4';
 export const HANDBOOK_LAST_UPDATED = 'November 27, 2026';
 
 export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
@@ -262,7 +262,7 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
         steps: [
           'Snap a photo with your rear camera or upload an existing room image. Tap Save Raw Photo to store the original in the project photo library.',
           'Choose one of the 4 real Organic Finishes sample/work presets (Limestone Plaster Fireplace, Charcoal Venetian Range Hood, Slaked Limewash Board, Metallic Copper-Bronze Board) or upload a Client Inspiration photo.',
-          'Tap the craftsmanship finish pills (Biolime, Venetian Marmorino, Limewash, Tadelakt, Microcement, Roman Clay, Travertino) and generate.',
+          'Tap the craftsmanship finish pills (Biolime, Venetian Marmorino, Limewash, Tadelakt, Microcement, Roman Clay, Travertino) — then pick a factory-approved Romabio swatch (e.g. RB-AVO Avorio White) filtered automatically by system & tint-base limit.',
           'Use the 1-line Refine box to dial in sheen, warmth, mottling, or color depth without starting over.',
         ],
       },
@@ -376,7 +376,7 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
           'Start from /estimates/new, from a Project (auto-links projectId), or by describing the room to the Floating AI Assistant.',
         steps: [
           'Select the Client (and optional Project). Active Clients appear by default; toggle Include Outreach Leads if quoting a prospect.',
-          'Add Service lines from your Price Book and pair Material Systems as needed — totals, waste, 10% Material Handling, minimums, and tax calculate live.',
+          'Add Service lines from your Price Book and pair Material Systems as needed — totals, waste, 10% Material Handling, minimums, and tax calculate live. If a designer insists on a custom SW/BM paint chip, tap Custom Paint Match (+$150) to add the lab fee, +7–10 day drawdown lead time, and signed Sample Board Approval disclaimer.',
           'Pick a Solo Craftsman Duration preset (2.5–3 days for Vent Hoods, 3–5 days for Feature Walls, 7–10 days for Waterproof Finishes) or type a custom timeline — it prints right on the Estimate PDF.',
           'Review the Estimate Detail (/estimates/:id) and export the Darkest Navy Blue (#1a2332) branded PDF to send to the client.',
         ],
@@ -503,6 +503,7 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
   { term: 'Change Orders', chapterId: 'contacts-projects', sectionId: 'project-workspace', note: 'Track mid-job additions; merge into final Invoice' },
   { term: 'Contacts vs. Outreach Leads', chapterId: 'contacts-projects', sectionId: 'contacts-directory', note: 'Active clients live in /contacts; cold leads in /outreach' },
   { term: 'Copy To / Copy Subject', chapterId: 'outreach-hub', sectionId: 'gmail-handoff', note: '1-tap clipboard helpers in Outreach email modal' },
+  { term: 'Custom Paint Match ($150)', chapterId: 'estimates-invoices', sectionId: 'creating-estimates', note: '1-tap lab fee + 7–10 day drawdown & signed board disclaimer' },
   { term: 'Deterministic Pricing (pricing.ts)', chapterId: 'pricing-and-systems', sectionId: 'deterministic-rule', note: 'Client-side labor + pass-through materials math' },
   { term: 'DNS MX Verification', chapterId: 'outreach-hub', sectionId: 'lead-scout-and-verifier', note: 'Live Google DNS MX checks in Verify Leads' },
   { term: 'Estimates → Invoices', chapterId: 'estimates-invoices', sectionId: 'converting-to-invoices', note: '1-click conversion from approved estimate to invoice' },
@@ -525,6 +526,13 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
 ];
 
 export const HANDBOOK_CHANGELOG: HandbookChangelogEntry[] = [
+  {
+    date: '2026-11-27',
+    version: 'v1.4',
+    summary:
+      'Launched the Manufacturer Color & Finish Catalog starting with Romabio (12 stock mineral swatches with undertone, LRV, sheen behavior & tint-base limits) in Finish Visualizer & Systems Library, plus the 1-tap $150 Custom Paint Match (SW/BM) guardrail in Estimates.',
+    chaptersUpdated: ['04', '05', '06'],
+  },
   {
     date: '2026-11-27',
     version: 'v1.3',
