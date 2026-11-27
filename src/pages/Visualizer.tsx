@@ -43,7 +43,11 @@ import {
   type TextureDepth,
   type TrowelMovement,
 } from '@/lib/finishVisualizer';
-import { getSwatchesForVisualizerSystem, type ColorSwatch } from '@/data/colorCatalog';
+import {
+  getManufacturersForVisualizerSystem,
+  getSwatchesForVisualizerSystem,
+  type ColorSwatch,
+} from '@/data/colorCatalog';
 import { Palette } from 'lucide-react';
 
 interface WalkThroughShot {
@@ -138,19 +142,32 @@ const Visualizer: React.FC = () => {
   const [sheen, setSheen] = useState<SurfaceSheen>('Dead Flat Matte');
   const [texture, setTexture] = useState<TextureDepth>('Light Trowel');
   const [selectedSwatch, setSelectedSwatch] = useState<ColorSwatch | null>(null);
+  const [swatchBrandFilter, setSwatchBrandFilter] = useState<string>('All');
   const [refinementNote, setRefinementNote] = useState('');
 
+  const availableBrands = useMemo(
+    () => getManufacturersForVisualizerSystem(finishSystem),
+    [finishSystem],
+  );
+
+  const effectiveBrandFilter = availableBrands.includes(swatchBrandFilter) ? swatchBrandFilter : 'All';
+
   const availableSwatches = useMemo(
-    () => getSwatchesForVisualizerSystem(finishSystem),
+    () => getSwatchesForVisualizerSystem(finishSystem, effectiveBrandFilter),
+    [finishSystem, effectiveBrandFilter],
+  );
+
+  const allCompatibleSwatches = useMemo(
+    () => getSwatchesForVisualizerSystem(finishSystem, 'All'),
     [finishSystem],
   );
 
   // Clear swatch automatically if user switches to a finish system that doesn't support it
   useEffect(() => {
-    if (selectedSwatch && !availableSwatches.some((s) => s.id === selectedSwatch.id)) {
+    if (selectedSwatch && !allCompatibleSwatches.some((s) => s.id === selectedSwatch.id)) {
       setSelectedSwatch(null);
     }
-  }, [availableSwatches, selectedSwatch]);
+  }, [allCompatibleSwatches, selectedSwatch]);
 
   // Generation & saving state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -785,12 +802,12 @@ const Visualizer: React.FC = () => {
               </div>
             </div>
 
-            {/* System-filtered Manufacturer Stock Palette (Romabio) */}
-            {availableSwatches.length > 0 && (
+            {/* System-filtered Manufacturer Stock Palette (Romabio, Meoded, Vasari, SureCrete) */}
+            {allCompatibleSwatches.length > 0 && (
               <div className="space-y-2 rounded-xl border border-border bg-background/60 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[#d9a441] flex items-center gap-1.5">
-                    <Palette size={12} /> Romabio Factory Swatches ({availableSwatches.length})
+                    <Palette size={12} /> Factory Stock Swatches ({availableSwatches.length})
                   </span>
                   {selectedSwatch && (
                     <button
@@ -802,7 +819,30 @@ const Visualizer: React.FC = () => {
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+
+                {availableBrands.length > 1 && (
+                  <div className="flex flex-wrap gap-1">
+                    {['All', ...availableBrands].map((brand) => {
+                      const activeBrand = effectiveBrandFilter === brand;
+                      return (
+                        <button
+                          key={brand}
+                          type="button"
+                          onClick={() => setSwatchBrandFilter(brand)}
+                          className={`px-2 py-0.5 rounded-full text-[9.5px] font-semibold border transition-all ${
+                            activeBrand
+                              ? 'bg-primary/15 text-primary border-primary/40'
+                              : 'bg-card/60 text-muted-foreground border-border hover:text-foreground'
+                          }`}
+                        >
+                          {brand}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-52 overflow-y-auto pr-0.5">
                   {availableSwatches.map((sw) => {
                     const active = selectedSwatch?.id === sw.id;
                     return (
@@ -810,7 +850,7 @@ const Visualizer: React.FC = () => {
                         key={sw.id}
                         type="button"
                         onClick={() => setSelectedSwatch(active ? null : sw)}
-                        title={`${sw.code} · ${sw.undertone} · LRV ${sw.lrvApprox} — ${sw.sheenBehavior}`}
+                        title={`${sw.manufacturer} ${sw.code} · ${sw.undertone} · LRV ${sw.lrvApprox} — ${sw.sheenBehavior}`}
                         className={`flex items-center gap-2 p-1.5 rounded-lg border text-left transition-all ${
                           active
                             ? 'bg-[#d9a441]/15 border-[#d9a441]/60 ring-1 ring-[#d9a441]/40'
@@ -823,7 +863,9 @@ const Visualizer: React.FC = () => {
                         />
                         <div className="min-w-0">
                           <p className="text-[10px] font-semibold text-foreground truncate">{sw.name}</p>
-                          <p className="text-[8.5px] font-mono text-muted-foreground truncate">{sw.code}</p>
+                          <p className="text-[8.5px] font-mono text-muted-foreground truncate">
+                            {effectiveBrandFilter === 'All' ? `${sw.manufacturer} · ${sw.code}` : sw.code}
+                          </p>
                         </div>
                       </button>
                     );
@@ -833,7 +875,7 @@ const Visualizer: React.FC = () => {
                   <div className="text-[10px] text-muted-foreground bg-card/80 border border-border/70 rounded-lg px-2.5 py-1.5 space-y-0.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-foreground">
-                        {selectedSwatch.code} · {selectedSwatch.name} ({selectedSwatch.undertone})
+                        {selectedSwatch.manufacturer} {selectedSwatch.code} · {selectedSwatch.name} ({selectedSwatch.undertone})
                       </span>
                       <span className="font-mono text-[9px] text-[#d9a441] shrink-0">
                         LRV ~{selectedSwatch.lrvApprox} · {selectedSwatch.tintBaseLimit === 'light-to-medium' ? 'Light–Med Base' : 'Full Spectrum'}

@@ -56,7 +56,7 @@ export interface HandbookChangelogEntry {
   chaptersUpdated: string[];
 }
 
-export const HANDBOOK_VERSION = 'v1.4';
+export const HANDBOOK_VERSION = 'v1.5';
 export const HANDBOOK_LAST_UPDATED = 'November 27, 2026';
 
 export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
@@ -262,7 +262,7 @@ export const HANDBOOK_CHAPTERS: HandbookChapter[] = [
         steps: [
           'Snap a photo with your rear camera or upload an existing room image. Tap Save Raw Photo to store the original in the project photo library.',
           'Choose one of the 4 real Organic Finishes sample/work presets (Limestone Plaster Fireplace, Charcoal Venetian Range Hood, Slaked Limewash Board, Metallic Copper-Bronze Board) or upload a Client Inspiration photo.',
-          'Tap the craftsmanship finish pills (Biolime, Venetian Marmorino, Limewash, Tadelakt, Microcement, Roman Clay, Travertino) — then pick a factory-approved Romabio swatch (e.g. RB-AVO Avorio White) filtered automatically by system & tint-base limit.',
+          'Tap the craftsmanship finish pills (Biolime, Venetian Marmorino, Limewash, Tadelakt, Microcement, Roman Clay, Travertino) — then pick from 46 factory-approved swatches across Romabio, Meoded (MC-Series), Vasari (2026 A-Series), and SureCrete (SC Color Packs), filtered automatically by system, brand & tint-base limit.',
           'Use the 1-line Refine box to dial in sheen, warmth, mottling, or color depth without starting over.',
         ],
       },
@@ -511,6 +511,7 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
   { term: 'Instagram Email Signature', chapterId: 'outreach-hub', sectionId: 'gmail-handoff', note: 'Organic Finishes logo & Instagram link in outreach emails' },
   { term: 'Lead Scout Playbooks', chapterId: 'outreach-hub', sectionId: 'lead-scout-and-verifier', note: 'Onboard AI lead discovery with dedupe & junk guard' },
   { term: 'Living Documentation Rule', chapterId: 'quick-reference', sectionId: 'living-handbook-rule', note: 'Handbook updates in the same PR as every feature' },
+  { term: 'Manufacturer Color Catalog (46 Swatches)', chapterId: 'finish-visualizer', sectionId: 'site-walk-capture', note: 'Romabio, Meoded MC-Series, Vasari A-Series & SureCrete SC Color Packs' },
   { term: 'Material Handling (10%)', chapterId: 'pricing-and-systems', sectionId: 'deterministic-rule', note: 'Fair procurement fee on materials (Settings & EstimateCreate)' },
   { term: 'Minimums (2026–2027)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'Synced job minimums in Settings & Price Book' },
   { term: 'Price Book (15 Services)', chapterId: 'pricing-and-systems', sectionId: 'catalog-structure', note: 'Flat per-SF and day-rate services in /services' },
@@ -526,6 +527,13 @@ export const HANDBOOK_INDEX_TERMS: HandbookIndexEntry[] = [
 ];
 
 export const HANDBOOK_CHANGELOG: HandbookChangelogEntry[] = [
+  {
+    date: '2026-11-27',
+    version: 'v1.5',
+    summary:
+      'Expanded Manufacturer Color Catalog to 46 official swatches across all 4 core brands — Meoded (MC-Series), Vasari (2026 A-Series), SureCrete (SC Color Packs), and Romabio — with brand filter pills in Finish Visualizer and automatic TDS palette previews in Systems Library.',
+    chaptersUpdated: ['04', '05'],
+  },
   {
     date: '2026-11-27',
     version: 'v1.4',
